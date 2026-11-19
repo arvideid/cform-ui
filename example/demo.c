@@ -1,7 +1,7 @@
 /*
  * cform-ui demo - padding vs margin, the simple way.
  *
- * A single column of nested boxes. Every box fills its parent, so the only
+ * A single column of nested frames. Every frame fills its parent, so the only
  * thing you see is the space each level creates:
  *
  *   - padding  = space *inside* a frame, between its edge and its content

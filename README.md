@@ -7,9 +7,9 @@ A small, declarative layout UI library in C. You describe a tree of frames —
 sizes, direction, padding, margin, gap and colors — and `cform-ui` resolves the
 layout and renders it through SDL3.
 
-> **Status:** early development (v0.1.0). The layout core and SDL3 renderer
-> work, but the public API is not stable yet. Text, buttons and interaction are
-> on the roadmap, not implemented.
+> **Status:** early development. The layout core and SDL3 renderer work and the
+> example runs, but the public API is experimental and may change between
+> releases. Text, buttons and interaction are on the roadmap, not implemented.
 
 ## Features
 
@@ -81,7 +81,7 @@ ui_render(ctx, root);
 ui_destroy(ctx);
 ```
 
-A minimal, commented example - nested boxes that make padding and margin
+A minimal, commented example - nested frames that make padding and margin
 visible - lives in [`example/demo.c`](example/demo.c).
 
 ## Layout
@@ -91,45 +91,29 @@ include/cform/   Public header (the API surface)
 src/core/        Context, frame and layout logic (no SDL)
 src/renderer/    SDL3 backend: window, draw loop
 example/         Runnable demo programs
+tests/           Headless unit tests (CTest)
+docs/            Contributor guides
 ```
 
-## Editor & developer experience
+## Development
 
-The project is configured so any editor behaves the same, with **CMake as the
-single source of truth** for the compiler, standard, includes and warnings.
-Shared config committed to the repo:
-
-- `.editorconfig` - indentation, LF endings, trailing-whitespace (every editor).
-- `.clang-format` / `.clang-tidy` / `.clangd` - formatting, linting and the
-  language server, all reading the same flags CMake uses.
-- `CMakePresets.json` - the named `dev` / `release` configurations.
-- `.vscode/tasks.json` + `.vscode/extensions.json` - one-click build/run.
-
-### VS Code / VSCodium
-
-1. When prompted, install the recommended extensions. The essential one is
-   **clangd** (CMake Tools + EditorConfig are also handy). clangd can fetch its
-   own server binary on first launch.
-2. Run the **CMake: Configure (dev)** task, or click *Configure* in the CMake
-   Tools status bar. This generates `build/dev/compile_commands.json`.
-3. clangd reads that database via `.clangd`, so the **Outline**, go-to-definition
-   and inline warnings now match the real build. (We disable the cpptools
-   IntelliSense engine so it does not fight clangd.)
-
-Build without ever touching the editor:
+Shared formatting, compiler and editor configuration is committed so every
+machine behaves the same, and a small headless test suite runs under CTest.
 
 ```sh
-cmake --preset dev && cmake --build --preset dev
-./build/dev/bin/cform_demo      # .exe on Windows
+cmake --build --preset dev   # library, example and tests
+ctest --preset dev           # run the test suite
 ```
 
-Or use the command palette: **Tasks: Run Build Task** (`Ctrl+Shift+B`) builds
-the default `dev` preset; **Run: demo (dev)** builds and launches the example.
+See [Development Setup](docs/development-setup.md) for the VS Code / VSCodium,
+clangd, CMake presets and Conventional Commits details.
 
 ## Contributing
 
-Pull requests are welcome — open an issue first for anything substantial. Keep
-the build warning-free (it compiles with `-Wall -Wextra -Wpedantic` / `/W4`).
+Pull requests are welcome; open an issue first for anything substantial. Use
+[Conventional Commits](https://www.conventionalcommits.org/), keep the build
+warning-free, and make `ctest` pass - CI enforces all of it. A PR template is
+provided.
 
 ## License
 
