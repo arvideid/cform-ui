@@ -4,6 +4,19 @@ static float clamp_non_negative(float value) {
     return value < 0.0f ? 0.0f : value;
 }
 
+/* min wins when min > max so a misconfigured constraint still resolves. */
+static float clamp_size(float value, float min, float max) {
+    if (min > 0.0f && value < min) {
+        value = min;
+    }
+
+    if (max > 0.0f && value > max) {
+        value = max;
+    }
+
+    return value;
+}
+
 /* The child's sizing axis that runs along the parent's layout direction. */
 static UI_Size main_axis_size(const UI_FrameConfig *c, UI_Direction direction) {
     return direction == UI_HORIZONTAL ? c->width : c->height;
@@ -12,6 +25,22 @@ static UI_Size main_axis_size(const UI_FrameConfig *c, UI_Direction direction) {
 /* The child's sizing axis perpendicular to the parent's layout direction. */
 static UI_Size cross_axis_size(const UI_FrameConfig *c, UI_Direction direction) {
     return direction == UI_HORIZONTAL ? c->height : c->width;
+}
+
+static float main_axis_min(const UI_FrameConfig *c, UI_Direction direction) {
+    return direction == UI_HORIZONTAL ? c->min_width : c->min_height;
+}
+
+static float main_axis_max(const UI_FrameConfig *c, UI_Direction direction) {
+    return direction == UI_HORIZONTAL ? c->max_width : c->max_height;
+}
+
+static float cross_axis_min(const UI_FrameConfig *c, UI_Direction direction) {
+    return direction == UI_HORIZONTAL ? c->min_height : c->min_width;
+}
+
+static float cross_axis_max(const UI_FrameConfig *c, UI_Direction direction) {
+    return direction == UI_HORIZONTAL ? c->max_height : c->max_width;
 }
 
 static float main_margin(const UI_FrameConfig *c, UI_Direction direction) {
@@ -72,7 +101,9 @@ void ui_layout_frame(
         UI_Size size = main_axis_size(child, direction);
 
         if (size.type == UI_SIZE_FIXED) {
-            fixed_total += size.value;
+            fixed_total += clamp_size(size.value,
+                main_axis_min(child, direction),
+                main_axis_max(child, direction));
         } else {
             fill_count++;
         }
@@ -92,13 +123,19 @@ void ui_layout_frame(
 
         UI_Size main = main_axis_size(child_config, direction);
         float main_value = main.type == UI_SIZE_FIXED ? main.value : fill_size;
+        main_value = clamp_size(main_value,
+            main_axis_min(child_config, direction),
+            main_axis_max(child_config, direction));
 
         UI_Size cross = cross_axis_size(child_config, direction);
+        float cross_extent = horizontal ? content_height : content_width;
         float cross_value = cross.type == UI_SIZE_FIXED
             ? cross.value
-            : clamp_non_negative(
-                  (horizontal ? content_height : content_width)
+            : clamp_non_negative(cross_extent
                   - cross_margin(child_config, direction));
+        cross_value = clamp_size(cross_value,
+            cross_axis_min(child_config, direction),
+            cross_axis_max(child_config, direction));
 
         float leading_main = horizontal
             ? child_config->margin.left

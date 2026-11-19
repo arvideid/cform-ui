@@ -40,6 +40,13 @@ typedef struct {
     UI_Size width;
     UI_Size height;
 
+    /* Size clamps applied after flex distribution.
+     * A min of 0 leaves that side unbounded; a max of 0 means "no maximum". */
+    float min_width;
+    float max_width;
+    float min_height;
+    float max_height;
+
     UI_Edges padding;
     UI_Edges margin;
 
