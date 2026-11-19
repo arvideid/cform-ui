@@ -500,6 +500,127 @@ static void layout_overlay_clamps_child_size(void) {
     ui_destroy(ctx);
 }
 
+static void layout_percent_main_axis_resolves_against_track(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(25), .height = UI_FIXED(50) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(50), .height = UI_FIXED(50) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 50.0f);
+
+    CF_NEAR(a->width, 50);
+    CF_NEAR(a->x, 0);
+    CF_NEAR(b->width, 100);
+    CF_NEAR(b->x, 50);
+
+    ui_destroy(ctx);
+}
+
+static void layout_percent_mixed_with_fill_claims_share_first(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(30), .height = UI_FIXED(40) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(40) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 40.0f);
+
+    CF_NEAR(a->width, 30);
+    CF_NEAR(b->width, 70);
+    CF_NEAR(b->x, 30);
+
+    ui_destroy(ctx);
+}
+
+static void layout_percent_on_cross_axis_resolves_against_extent(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(40), .height = UI_PERCENT(40) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 200.0f);
+
+    CF_NEAR(a->height, 80);
+
+    ui_destroy(ctx);
+}
+
+static void layout_percent_vertical_main_axis_is_height(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(50), .height = UI_PERCENT(20) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(50), .height = UI_PERCENT(30) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 50.0f, 400.0f);
+
+    CF_NEAR(a->height, 80);
+    CF_NEAR(a->y, 0);
+    CF_NEAR(b->height, 120);
+    CF_NEAR(b->y, 80);
+
+    ui_destroy(ctx);
+}
+
+static void layout_percent_clamps_to_min_and_max(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL });
+    UI_Frame *too_small = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(5), .height = UI_FIXED(50), .min_width = 30.0f });
+    UI_Frame *too_large = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(90), .height = UI_FIXED(50), .max_width = 60.0f });
+    ui_add(root, too_small);
+    ui_add(root, too_large);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 50.0f);
+
+    CF_NEAR(too_small->width, 30);
+    CF_NEAR(too_large->width, 60);
+
+    ui_destroy(ctx);
+}
+
+static void layout_percent_in_overlay_resolves_against_content(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY, .padding = UI_ALL(10) });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_PERCENT(50), .height = UI_PERCENT(25) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 200.0f);
+
+    /* Content box is 180x180 after padding, so 50% width and 25% height. */
+    CF_NEAR(a->width, 90);
+    CF_NEAR(a->height, 45);
+    CF_NEAR(a->x, 10);
+    CF_NEAR(a->y, 10);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -529,5 +650,11 @@ int main(void) {
     CF_RUN(layout_overlay_child_margin_offsets_from_origin);
     CF_RUN(layout_overlay_fill_child_expands_to_parent_content);
     CF_RUN(layout_overlay_clamps_child_size);
+    CF_RUN(layout_percent_main_axis_resolves_against_track);
+    CF_RUN(layout_percent_mixed_with_fill_claims_share_first);
+    CF_RUN(layout_percent_on_cross_axis_resolves_against_extent);
+    CF_RUN(layout_percent_vertical_main_axis_is_height);
+    CF_RUN(layout_percent_clamps_to_min_and_max);
+    CF_RUN(layout_percent_in_overlay_resolves_against_content);
     return CF_REPORT();
 }

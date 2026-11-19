@@ -49,6 +49,23 @@ static float main_margin(const UI_FrameConfig *c, UI_Direction direction) {
         : c->margin.top + c->margin.bottom;
 }
 
+/* FIXED and PERCENT describe a size the child brings to the parent; FILL
+ * competes for whatever is left over. reference is the axis length the
+ * percent resolves against. Returns false for FILL. */
+static bool resolve_intrinsic(UI_Size size, float reference, float *out) {
+    if (size.type == UI_SIZE_FIXED) {
+        *out = size.value;
+        return true;
+    }
+
+    if (size.type == UI_SIZE_PERCENT) {
+        *out = reference * size.value / 100.0f;
+        return true;
+    }
+
+    return false;
+}
+
 typedef struct {
     float before;
     float between;
@@ -124,14 +141,16 @@ void ui_layout_frame(
             UI_Frame *child = frame->children[i];
             const UI_FrameConfig *cc = &child->config;
 
-            float child_w = cc->width.type == UI_SIZE_FIXED
-                ? cc->width.value
-                : clamp_non_negative(content_width
-                      - cc->margin.left - cc->margin.right);
-            float child_h = cc->height.type == UI_SIZE_FIXED
-                ? cc->height.value
-                : clamp_non_negative(content_height
-                      - cc->margin.top - cc->margin.bottom);
+            float child_w;
+            if (!resolve_intrinsic(cc->width, content_width, &child_w)) {
+                child_w = clamp_non_negative(content_width
+                    - cc->margin.left - cc->margin.right);
+            }
+            float child_h;
+            if (!resolve_intrinsic(cc->height, content_height, &child_h)) {
+                child_h = clamp_non_negative(content_height
+                    - cc->margin.top - cc->margin.bottom);
+            }
             child_w = clamp_size(child_w, cc->min_width, cc->max_width);
             child_h = clamp_size(child_h, cc->min_height, cc->max_height);
 
@@ -158,9 +177,10 @@ void ui_layout_frame(
         available -= main_margin(child, direction);
 
         UI_Size size = main_axis_size(child, direction);
+        float intrinsic;
 
-        if (size.type == UI_SIZE_FIXED) {
-            fixed_total += clamp_size(size.value,
+        if (resolve_intrinsic(size, track_size, &intrinsic)) {
+            fixed_total += clamp_size(intrinsic,
                 main_axis_min(child, direction),
                 main_axis_max(child, direction));
         } else {
@@ -181,7 +201,9 @@ void ui_layout_frame(
     for (int i = 0; i < count; i++) {
         const UI_FrameConfig *child = &frame->children[i]->config;
         UI_Size size = main_axis_size(child, direction);
-        float raw = size.type == UI_SIZE_FIXED ? size.value : fill_size;
+        float intrinsic;
+        float raw = resolve_intrinsic(size, track_size, &intrinsic)
+            ? intrinsic : fill_size;
         used += clamp_size(raw,
             main_axis_min(child, direction),
             main_axis_max(child, direction))
@@ -198,7 +220,9 @@ void ui_layout_frame(
         const UI_FrameConfig *child_config = &child->config;
 
         UI_Size main = main_axis_size(child_config, direction);
-        float main_value = main.type == UI_SIZE_FIXED ? main.value : fill_size;
+        float intrinsic_main;
+        float main_value = resolve_intrinsic(main, track_size, &intrinsic_main)
+            ? intrinsic_main : fill_size;
         main_value = clamp_size(main_value,
             main_axis_min(child_config, direction),
             main_axis_max(child_config, direction));
@@ -214,9 +238,12 @@ void ui_layout_frame(
         float cross_room = clamp_non_negative(
             cross_extent - leading_cross - trailing_cross);
 
-        bool fills_cross = cross.type != UI_SIZE_FIXED
+        float intrinsic_cross;
+        bool has_intrinsic_cross = resolve_intrinsic(cross, cross_extent,
+            &intrinsic_cross);
+        bool fills_cross = !has_intrinsic_cross
             || config->align_items == UI_ALIGN_STRETCH;
-        float cross_value = clamp_size(fills_cross ? cross_room : cross.value,
+        float cross_value = clamp_size(fills_cross ? cross_room : intrinsic_cross,
             cross_axis_min(child_config, direction),
             cross_axis_max(child_config, direction));
 

@@ -9,7 +9,8 @@ typedef struct UI_Frame UI_Frame;
 
 typedef enum {
     UI_SIZE_FIXED,
-    UI_SIZE_FILL
+    UI_SIZE_FILL,
+    UI_SIZE_PERCENT
 } UI_SizeType;
 
 typedef struct {
@@ -132,6 +133,10 @@ bool ui_is_pressed(const UI_Frame *frame);
 
 #define UI_FILL \
     ((UI_Size){ UI_SIZE_FILL, 0 })
+
+/* Fraction of the parent's resolved extent on that axis. value is 0..100. */
+#define UI_PERCENT(value) \
+    ((UI_Size){ UI_SIZE_PERCENT, (float)(value) })
 
 #define UI_ALL(value) \
     ((UI_Edges){value, value, value, value})
