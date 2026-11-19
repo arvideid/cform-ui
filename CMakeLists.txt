@@ -6,9 +6,6 @@ project(cform-ui
     LANGUAGES C
 )
 
-# ---------------------------------------------------------------------------
-# Language defaults
-# ---------------------------------------------------------------------------
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_C_STANDARD 99)
     set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -20,13 +17,11 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
-# ---------------------------------------------------------------------------
-# Dependencies: SDL3
-#
-# Use a locally installed / toolchain-provided SDL3 when available; otherwise
-# fetch a pinned release so the project builds out of the box for everyone.
-# ---------------------------------------------------------------------------
-find_package(SDL3 CONFIG QUIET)
+# Prefer a locally installed SDL3 for native builds; the web target always
+# fetches, because a native SDL3 cannot link into a WebAssembly binary.
+if(NOT EMSCRIPTEN)
+    find_package(SDL3 CONFIG QUIET)
+endif()
 
 if(NOT SDL3_FOUND)
     message(STATUS "SDL3 not found locally - fetching a pinned release with FetchContent")
@@ -35,8 +30,15 @@ if(NOT SDL3_FOUND)
 
     set(SDL_TESTS OFF CACHE BOOL "" FORCE)
     set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(SDL_SHARED ON CACHE BOOL "" FORCE)
-    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+
+    if(EMSCRIPTEN)
+        # The browser has no DLLs to load, so SDL must be linked statically.
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    else()
+        set(SDL_SHARED ON CACHE BOOL "" FORCE)
+        set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    endif()
 
     FetchContent_Declare(
         SDL3
@@ -47,13 +49,8 @@ if(NOT SDL3_FOUND)
     FetchContent_MakeAvailable(SDL3)
 endif()
 
-# ---------------------------------------------------------------------------
-# Library
-#
-# Split into a renderer-agnostic core (`cform_core`) and an SDL3 backend
-# (`cform`). Keeping the layout math free of SDL means it can be unit-tested
-# headlessly - no window, no display, no SDL on the runtime path.
-# ---------------------------------------------------------------------------
+# A renderer-agnostic core (`cform_core`) plus an SDL3 backend (`cform`) so the
+# layout math can be unit-tested headlessly - no window, no display, no SDL.
 add_library(cform_core STATIC
     src/core/context.c
     src/core/frame.c
@@ -93,19 +90,28 @@ if(CFORM_WARNINGS)
     target_compile_options(cform PRIVATE ${CFORM_WARNINGS})
 endif()
 
-# ---------------------------------------------------------------------------
-# Examples
-# ---------------------------------------------------------------------------
 option(CFORM_BUILD_EXAMPLES "Build cform-ui example programs" ON)
 
 if(CFORM_BUILD_EXAMPLES)
     add_executable(cform_demo example/demo.c)
     target_link_libraries(cform_demo PRIVATE cform)
+
+    # WebAssembly: compile the SAME demo.c and layout into a browser-runnable
+    # .html/.js/.wasm. ASYNCIFY lets the existing blocking ui_render() loop
+    # yield to the browser instead of freezing the JS main thread.
+    if(EMSCRIPTEN)
+        target_link_options(cform_demo PRIVATE
+            "-sUSE_WEBGL2=1"
+            "-sASYNCIFY=1"
+            "-sALLOW_MEMORY_GROWTH=1"
+            "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/example/web/index.html"
+        )
+        # --shell-file requires the linker output to end in .html; emcc then
+        # emits cform_demo.{html,js,wasm} side-by-side.
+        set_target_properties(cform_demo PROPERTIES SUFFIX ".html")
+    endif()
 endif()
 
-# ---------------------------------------------------------------------------
-# Tests (opt-in, and only when cform-ui is the top-level project)
-# ---------------------------------------------------------------------------
 option(CFORM_BUILD_TESTS "Build the cform-ui test suite" OFF)
 
 if(CFORM_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)

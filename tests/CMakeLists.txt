@@ -1,17 +1,11 @@
-# -----------------------------------------------------------------------------
-# cform-ui test suite
-#
-# Linked against `cform_core` only (never the SDL renderer), so every test runs
-# headlessly - no window, no display, no SDL needed at runtime. CTest is the
-# runner; enabled from the root project with -DCFORM_BUILD_TESTS=ON.
-# -----------------------------------------------------------------------------
+# Tests link `cform_core` (never the SDL renderer) so they run headlessly in CI.
 
 function(cform_add_test name)
     add_executable(${name} ${name}.c)
 
     target_include_directories(${name} PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}   # for cform_test.h
-        ${CMAKE_SOURCE_DIR}/src       # for internal.h
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/src
     )
 
     target_link_libraries(${name} PRIVATE cform_core)

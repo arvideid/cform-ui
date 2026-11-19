@@ -38,7 +38,7 @@ void ui_layout_frame(
     frame->width = width;
     frame->height = height;
 
-    UI_FrameConfig *config = &frame->config;
+    const UI_FrameConfig *config = &frame->config;
 
     float content_x = x + config->padding.left;
     float content_y = y + config->padding.top;
@@ -55,7 +55,7 @@ void ui_layout_frame(
     }
 
     UI_Direction direction = config->direction;
-    int horizontal = direction == UI_HORIZONTAL;
+    bool horizontal = direction == UI_HORIZONTAL;
     float track_size = horizontal ? content_width : content_height;
 
     /* Space left on the main axis once gaps and every child's margins are
@@ -65,7 +65,7 @@ void ui_layout_frame(
     int fill_count = 0;
 
     for (int i = 0; i < count; i++) {
-        UI_FrameConfig *child = &frame->children[i]->config;
+        const UI_FrameConfig *child = &frame->children[i]->config;
 
         available -= main_margin(child, direction);
 
@@ -84,12 +84,11 @@ void ui_layout_frame(
         ? clamp_non_negative((available - fixed_total) / (float)fill_count)
         : 0.0f;
 
-    /* Arrange children sequentially along the main axis. */
     float cursor = 0.0f;
 
     for (int i = 0; i < count; i++) {
         UI_Frame *child = frame->children[i];
-        UI_FrameConfig *child_config = &child->config;
+        const UI_FrameConfig *child_config = &child->config;
 
         UI_Size main = main_axis_size(child_config, direction);
         float main_value = main.type == UI_SIZE_FIXED ? main.value : fill_size;

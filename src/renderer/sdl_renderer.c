@@ -36,25 +36,25 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
 
-    if (!SDL_CreateWindowAndRenderer(
+    if (SDL_CreateWindowAndRenderer(
             "cform-ui",
             ctx->window_width,
             ctx->window_height,
             0,
             &window,
-            &renderer)) {
+            &renderer) == false) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
         return;
     }
 
-    int running = 1;
+    bool running = true;
 
     while (running) {
         SDL_Event event;
 
-        while (SDL_PollEvent(&event)) {
+        while (SDL_PollEvent(&event) != 0) {
             if (event.type == SDL_EVENT_QUIT) {
-                running = 0;
+                running = false;
             }
         }
 

@@ -4,18 +4,14 @@
 #include "cform/cform.h"
 
 struct UI_Frame {
-    const char *name;
-
     UI_FrameConfig config;
 
-    /* Tree relationships */
     struct UI_Frame *parent;
     struct UI_Frame **children;
 
     int child_count;
     int child_capacity;
 
-    /* Computed layout */
     float x;
     float y;
     float width;

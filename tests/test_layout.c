@@ -1,16 +1,9 @@
-/*
- * Layout tests - the heart of the library, exercised headlessly.
- *
- * ui_layout_frame() resolves a frame tree against a given rect, so each test
- * builds a small tree, lays it out at a known size and asserts on the computed
- * x / y / width / height of the children.
- */
 #include "cform_test.h"
 
 #include <cform/cform.h>
 #include "internal.h"
 
-static void test_fixed_horizontal(void) {
+static void layout_fixed_children_pack_left_to_right(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -33,7 +26,7 @@ static void test_fixed_horizontal(void) {
     ui_destroy(ctx);
 }
 
-static void test_gap_adds_space(void) {
+static void layout_gap_adds_space_between_children(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -48,12 +41,12 @@ static void test_gap_adds_space(void) {
     ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 50.0f);
 
     CF_NEAR(a->x, 0);
-    CF_NEAR(b->x, 40); /* 30 + gap */
+    CF_NEAR(b->x, 40);
 
     ui_destroy(ctx);
 }
 
-static void test_fill_shares_remaining_space(void) {
+static void layout_fill_splits_remaining_space(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -68,12 +61,12 @@ static void test_fill_shares_remaining_space(void) {
     ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 50.0f);
 
     CF_NEAR(b->x, 30);
-    CF_NEAR(b->width, 70); /* the whole remainder */
+    CF_NEAR(b->width, 70);
 
     ui_destroy(ctx);
 }
 
-static void test_padding_insets_content(void) {
+static void layout_padding_insets_content(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -86,13 +79,13 @@ static void test_padding_insets_content(void) {
 
     CF_NEAR(a->x, 20);
     CF_NEAR(a->y, 20);
-    CF_NEAR(a->width, 60);  /* 100 - 20 - 20 */
+    CF_NEAR(a->width, 60);
     CF_NEAR(a->height, 60);
 
     ui_destroy(ctx);
 }
 
-static void test_margin_insets_child(void) {
+static void layout_margin_insets_child(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -105,13 +98,13 @@ static void test_margin_insets_child(void) {
 
     CF_NEAR(a->x, 10);
     CF_NEAR(a->y, 10);
-    CF_NEAR(a->width, 80);  /* 100 - 10 - 10 */
+    CF_NEAR(a->width, 80);
     CF_NEAR(a->height, 80);
 
     ui_destroy(ctx);
 }
 
-static void test_vertical_stacking(void) {
+static void layout_vertical_children_stack_top_to_bottom(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
@@ -126,16 +119,15 @@ static void test_vertical_stacking(void) {
     ui_layout_frame(root, 0.0f, 0.0f, 50.0f, 100.0f);
 
     CF_NEAR(a->y, 0);
-    CF_NEAR(b->y, 40); /* 30 + gap */
+    CF_NEAR(b->y, 40);
     CF_NEAR(b->height, 40);
 
     ui_destroy(ctx);
 }
 
-static void test_nested_tree(void) {
+static void layout_nested_tree_resolves_recursively(void) {
     UI_Context *ctx = ui_create();
 
-    /* root(H) -> [ fixed 40 sidebar , fill main ]  at 200x100 */
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
         .direction = UI_HORIZONTAL, .gap = 0.0f });
     UI_Frame *side = ui_frame(ctx, (UI_FrameConfig){
@@ -158,10 +150,9 @@ static void test_nested_tree(void) {
     CF_NEAR(main->x, 40);
     CF_NEAR(main->width, 160);
 
-    /* inner lives inside main's 10px padding */
     CF_NEAR(inner->x, 50);
     CF_NEAR(inner->y, 10);
-    CF_NEAR(inner->width, 140); /* 160 - 10 - 10 */
+    CF_NEAR(inner->width, 140);
     CF_NEAR(inner->height, 20);
 
     ui_destroy(ctx);
@@ -169,12 +160,12 @@ static void test_nested_tree(void) {
 
 int main(void) {
     printf("test_layout\n");
-    CF_RUN(test_fixed_horizontal);
-    CF_RUN(test_gap_adds_space);
-    CF_RUN(test_fill_shares_remaining_space);
-    CF_RUN(test_padding_insets_content);
-    CF_RUN(test_margin_insets_child);
-    CF_RUN(test_vertical_stacking);
-    CF_RUN(test_nested_tree);
+    CF_RUN(layout_fixed_children_pack_left_to_right);
+    CF_RUN(layout_gap_adds_space_between_children);
+    CF_RUN(layout_fill_splits_remaining_space);
+    CF_RUN(layout_padding_insets_content);
+    CF_RUN(layout_margin_insets_child);
+    CF_RUN(layout_vertical_children_stack_top_to_bottom);
+    CF_RUN(layout_nested_tree_resolves_recursively);
     return CF_REPORT();
 }

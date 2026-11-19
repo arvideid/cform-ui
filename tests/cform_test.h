@@ -1,15 +1,7 @@
 /*
- * cform_test.h - a minimal, dependency-free assertion harness.
- *
- * Each test executable includes this header, defines `static void` test cases
- * and runs them from `main` with CF_RUN. CF_REPORT returns a non-zero exit
- * code if any assertion failed, which is exactly how CTest decides pass/fail.
- *
- * Assertions are always live (they never compile out with NDEBUG, unlike
- * <assert.h>), so Release test runs still check the layout math.
- *
- * Deliberately small: if the suite grows, this file is the only thing to swap
- * for Unity or CMocka - the CF_RUN/CTest wiring stays identical.
+ * Assertions stay live in Release builds (unlike <assert.h> under NDEBUG) so
+ * CI keeps checking the layout math. If the suite grows, swap this file for
+ * Unity or CMocka; the CF_RUN / CTest wiring is unchanged.
  */
 #ifndef CFORM_TEST_H
 #define CFORM_TEST_H
@@ -18,7 +10,6 @@
 
 static int cf_failures = 0;
 
-/* Generic condition check. */
 #define CF_CHECK(cond, msg)                                             \
     do {                                                                \
         if (!(cond)) {                                                  \
@@ -27,7 +18,7 @@ static int cf_failures = 0;
         }                                                               \
     } while (0)
 
-/* Floating-point equality within a small tolerance (layout uses floats). */
+/* Layout math is float; exact equality is unreliable. */
 #define CF_NEAR(actual, expected)                                       \
     do {                                                                \
         double cf_a_ = (double)(actual);                                \
@@ -41,7 +32,6 @@ static int cf_failures = 0;
         }                                                               \
     } while (0)
 
-/* Run one test case and label the output. */
 #define CF_RUN(test_fn)                                                 \
     do {                                                                \
         int cf_before_ = cf_failures;                                    \
@@ -51,7 +41,6 @@ static int cf_failures = 0;
                cf_failures == cf_before_ ? "ok" : "FAILED");            \
     } while (0)
 
-/* Print a summary and return the process exit code (0 = all passed). */
 #define CF_REPORT()                                                     \
     (cf_failures == 0                                                   \
         ? (printf("  all assertions passed\n"), 0)                       \

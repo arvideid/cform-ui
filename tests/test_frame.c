@@ -1,13 +1,9 @@
-/*
- * Frame and context tests - object lifecycle, config copying and tree wiring.
- * No layout math here; just that frames are created, linked and registered.
- */
 #include "cform_test.h"
 
 #include <cform/cform.h>
 #include "internal.h"
 
-static void test_create_has_defaults(void) {
+static void context_create_returns_valid_defaults(void) {
     UI_Context *ctx = ui_create();
 
     CF_CHECK(ctx != NULL, "ui_create returns a context");
@@ -17,7 +13,7 @@ static void test_create_has_defaults(void) {
     ui_destroy(ctx);
 }
 
-static void test_frame_copies_config(void) {
+static void frame_copies_config_by_value(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *f = ui_frame(ctx, (UI_FrameConfig){
@@ -33,7 +29,7 @@ static void test_frame_copies_config(void) {
     ui_destroy(ctx);
 }
 
-static void test_add_links_tree(void) {
+static void add_links_child_to_parent(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){0});
@@ -52,7 +48,7 @@ static void test_add_links_tree(void) {
     ui_destroy(ctx);
 }
 
-static void test_children_array_grows(void) {
+static void children_array_grows_by_doubling(void) {
     UI_Context *ctx = ui_create();
 
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){0});
@@ -67,20 +63,19 @@ static void test_children_array_grows(void) {
     ui_destroy(ctx);
 }
 
-static void test_frames_registered_in_context(void) {
+static void context_registers_every_frame(void) {
     UI_Context *ctx = ui_create();
 
     for (int i = 0; i < 20; i++) {
         ui_frame(ctx, (UI_FrameConfig){0});
     }
 
-    /* Context keeps every frame so ui_destroy can free them in one pass. */
     CF_NEAR(ctx->frame_count, 20);
 
     ui_destroy(ctx);
 }
 
-static void test_null_inputs_are_safe(void) {
+static void null_inputs_are_silent_no_ops(void) {
     CF_CHECK(ui_frame(NULL, (UI_FrameConfig){0}) == NULL,
              "ui_frame with NULL context returns NULL");
 
@@ -88,7 +83,7 @@ static void test_null_inputs_are_safe(void) {
     UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){0});
 
     ui_add(NULL, NULL);          /* no crash */
-    ui_add(root, NULL);          /* ignored */
+    ui_add(root, NULL);
     CF_NEAR(root->child_count, 0);
 
     ui_destroy(ctx);
@@ -97,11 +92,11 @@ static void test_null_inputs_are_safe(void) {
 
 int main(void) {
     printf("test_frame\n");
-    CF_RUN(test_create_has_defaults);
-    CF_RUN(test_frame_copies_config);
-    CF_RUN(test_add_links_tree);
-    CF_RUN(test_children_array_grows);
-    CF_RUN(test_frames_registered_in_context);
-    CF_RUN(test_null_inputs_are_safe);
+    CF_RUN(context_create_returns_valid_defaults);
+    CF_RUN(frame_copies_config_by_value);
+    CF_RUN(add_links_child_to_parent);
+    CF_RUN(children_array_grows_by_doubling);
+    CF_RUN(context_registers_every_frame);
+    CF_RUN(null_inputs_are_silent_no_ops);
     return CF_REPORT();
 }

@@ -13,7 +13,6 @@ UI_Frame *ui_frame(UI_Context *ctx, UI_FrameConfig config) {
         return NULL;
     }
 
-    frame->name = config.name;
     frame->config = config;
 
     /* Register the frame with the context so it is freed on ui_destroy(). */
