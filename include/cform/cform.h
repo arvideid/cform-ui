@@ -26,7 +26,8 @@ typedef struct {
 
 typedef enum {
     UI_HORIZONTAL,
-    UI_VERTICAL
+    UI_VERTICAL,
+    UI_OVERLAY
 } UI_Direction;
 
 typedef enum {

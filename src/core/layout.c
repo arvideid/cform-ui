@@ -115,6 +115,34 @@ void ui_layout_frame(
     }
 
     UI_Direction direction = config->direction;
+
+    /* Overlay stacks every child on the parent's content origin. Gaps,
+     * justify and align do not apply; the renderer paints in tree order,
+     * so later siblings land on top. */
+    if (direction == UI_OVERLAY) {
+        for (int i = 0; i < count; i++) {
+            UI_Frame *child = frame->children[i];
+            const UI_FrameConfig *cc = &child->config;
+
+            float child_w = cc->width.type == UI_SIZE_FIXED
+                ? cc->width.value
+                : clamp_non_negative(content_width
+                      - cc->margin.left - cc->margin.right);
+            float child_h = cc->height.type == UI_SIZE_FIXED
+                ? cc->height.value
+                : clamp_non_negative(content_height
+                      - cc->margin.top - cc->margin.bottom);
+            child_w = clamp_size(child_w, cc->min_width, cc->max_width);
+            child_h = clamp_size(child_h, cc->min_height, cc->max_height);
+
+            ui_layout_frame(child,
+                content_x + cc->margin.left,
+                content_y + cc->margin.top,
+                child_w, child_h);
+        }
+        return;
+    }
+
     bool horizontal = direction == UI_HORIZONTAL;
     float track_size = horizontal ? content_width : content_height;
 

@@ -419,6 +419,87 @@ static void layout_justify_space_between_single_child_behaves_like_start(void) {
     ui_destroy(ctx);
 }
 
+static void layout_overlay_stacks_children_at_parent_origin(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY });
+    UI_Frame *base = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(100), .height = UI_FIXED(100) });
+    UI_Frame *badge = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(20), .height = UI_FIXED(20) });
+    ui_add(root, base);
+    ui_add(root, badge);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(base->x, 0);
+    CF_NEAR(base->y, 0);
+    CF_NEAR(badge->x, 0);
+    CF_NEAR(badge->y, 0);
+    CF_NEAR(badge->width, 20);
+    CF_NEAR(badge->height, 20);
+
+    ui_destroy(ctx);
+}
+
+static void layout_overlay_child_margin_offsets_from_origin(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY, .padding = UI_ALL(5.0f) });
+    UI_Frame *badge = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(20), .height = UI_FIXED(20),
+        .margin = UI_EDGES(3.0f, 0.0f, 0.0f, 8.0f) });
+    ui_add(root, badge);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    /* Content origin is (padding.left, padding.top) = (5, 5); child slides to
+     * (5 + margin.left, 5 + margin.top) = (13, 8). */
+    CF_NEAR(badge->x, 13);
+    CF_NEAR(badge->y, 8);
+
+    ui_destroy(ctx);
+}
+
+static void layout_overlay_fill_child_expands_to_parent_content(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY, .padding = UI_ALL(10.0f) });
+    UI_Frame *sheet = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FILL });
+    ui_add(root, sheet);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 100.0f);
+
+    CF_NEAR(sheet->x, 10);
+    CF_NEAR(sheet->y, 10);
+    CF_NEAR(sheet->width, 180);
+    CF_NEAR(sheet->height, 80);
+
+    ui_destroy(ctx);
+}
+
+static void layout_overlay_clamps_child_size(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(100), .height = UI_FIXED(100),
+        .max_width = 40.0f, .min_height = 60.0f });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 200.0f);
+
+    CF_NEAR(a->width, 40);
+    CF_NEAR(a->height, 100);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -444,5 +525,9 @@ int main(void) {
     CF_RUN(layout_justify_space_evenly_adds_full_gaps_at_edges);
     CF_RUN(layout_justify_with_fill_child_leaves_no_extra_space);
     CF_RUN(layout_justify_space_between_single_child_behaves_like_start);
+    CF_RUN(layout_overlay_stacks_children_at_parent_origin);
+    CF_RUN(layout_overlay_child_margin_offsets_from_origin);
+    CF_RUN(layout_overlay_fill_child_expands_to_parent_content);
+    CF_RUN(layout_overlay_clamps_child_size);
     return CF_REPORT();
 }
