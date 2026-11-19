@@ -22,8 +22,8 @@ static UI_Frame *hit_test(UI_Frame *frame, float x, float y) {
     return frame;
 }
 
-static UI_Frame *hit_root(UI_Context *ctx, float x, float y) {
-    if (ctx->root == NULL) {
+UI_Frame *ui_hit_test(UI_Context *ctx, float x, float y) {
+    if (ctx == NULL || ctx->root == NULL) {
         return NULL;
     }
 
@@ -54,7 +54,7 @@ static void clear_pressed(UI_Context *ctx) {
 }
 
 void ui_pointer_move(UI_Context *ctx, float x, float y) {
-    set_hovered(ctx, hit_root(ctx, x, y));
+    set_hovered(ctx, ui_hit_test(ctx, x, y));
 }
 
 void ui_pointer_leave(UI_Context *ctx) {
@@ -63,7 +63,7 @@ void ui_pointer_leave(UI_Context *ctx) {
 }
 
 void ui_pointer_down(UI_Context *ctx, float x, float y) {
-    UI_Frame *hit = hit_root(ctx, x, y);
+    UI_Frame *hit = ui_hit_test(ctx, x, y);
 
     if (hit == NULL || hit->config.on_click == NULL) {
         return;
@@ -84,7 +84,7 @@ void ui_pointer_up(UI_Context *ctx, float x, float y) {
     pressed->pressed = false;
     ctx->pressed_frame = NULL;
 
-    if (hit_root(ctx, x, y) == pressed) {
+    if (ui_hit_test(ctx, x, y) == pressed) {
         pressed->config.on_click(pressed, pressed->config.user_data);
     }
 }

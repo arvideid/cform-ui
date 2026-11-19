@@ -103,6 +103,24 @@ UI_Frame *ui_frame(
 
 void ui_add(UI_Frame *parent, UI_Frame *child);
 
+/* Insert at index, shifting later siblings right. Out-of-range indices clamp
+ * to [0, child_count], so 0 prepends and any large value appends. */
+void ui_insert(UI_Frame *parent, int index, UI_Frame *child);
+
+/* Detach without freeing. The frame stays registered on the context and is
+ * still released by ui_destroy. Safe to call for a child that is not a
+ * member of parent (silent no-op). */
+void ui_remove(UI_Frame *parent, UI_Frame *child);
+
+/* Replace a frame's config in place. Layout recomputes on the next pass;
+ * children and tree position are untouched. */
+void ui_update(UI_Frame *frame, UI_FrameConfig config);
+
+/* Deepest, topmost frame whose rect contains (x, y), using the layout
+ * produced by the most recent ui_layout or ui_render pass. Returns NULL
+ * before the first layout or when the point misses the root. */
+UI_Frame *ui_hit_test(UI_Context *ctx, float x, float y);
+
 void ui_render(UI_Context *ctx, UI_Frame *root);
 
 /* Pointer interaction state, refreshed by ui_render's event loop. */

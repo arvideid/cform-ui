@@ -204,6 +204,52 @@ static void getters_accept_null_safely(void) {
     CF_CHECK(!ui_is_pressed(NULL), "ui_is_pressed(NULL) returns false");
 }
 
+static void hit_test_returns_deepest_frame_containing_point(void) {
+    UI_Frame *root;
+    UI_Frame *child;
+    UI_Context *ctx = make_simple_tree(&root, &child);
+
+    CF_CHECK(ui_hit_test(ctx, 15.0f, 15.0f) == child, "inside child");
+    CF_CHECK(ui_hit_test(ctx, 90.0f, 90.0f) == root, "padding lands on root");
+    CF_CHECK(ui_hit_test(ctx, 500.0f, 500.0f) == NULL, "outside root misses");
+
+    ui_destroy(ctx);
+}
+
+static void hit_test_topmost_sibling_wins(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_OVERLAY });
+    UI_Frame *bottom = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(100), .height = UI_FIXED(100) });
+    UI_Frame *top = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(50), .height = UI_FIXED(50) });
+    ui_add(root, bottom);
+    ui_add(root, top);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+    ctx->root = root;
+
+    CF_CHECK(ui_hit_test(ctx, 20.0f, 20.0f) == top,
+             "later sibling overlaps earlier one");
+    CF_CHECK(ui_hit_test(ctx, 80.0f, 80.0f) == bottom,
+             "point outside top falls through to bottom");
+
+    ui_destroy(ctx);
+}
+
+static void hit_test_null_before_layout(void) {
+    UI_Context *ctx = ui_create();
+
+    CF_CHECK(ui_hit_test(ctx, 0.0f, 0.0f) == NULL,
+             "no root registered yet returns NULL");
+    CF_CHECK(ui_hit_test(NULL, 0.0f, 0.0f) == NULL,
+             "NULL context is a safe no-op");
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_input\n");
     CF_RUN(pointer_move_sets_hover_on_deepest_frame);
@@ -216,5 +262,8 @@ int main(void) {
     CF_RUN(pointer_leave_cancels_pending_press);
     CF_RUN(hover_transition_clears_previous_frame);
     CF_RUN(getters_accept_null_safely);
+    CF_RUN(hit_test_returns_deepest_frame_containing_point);
+    CF_RUN(hit_test_topmost_sibling_wins);
+    CF_RUN(hit_test_null_before_layout);
     return CF_REPORT();
 }
