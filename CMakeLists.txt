@@ -9,7 +9,16 @@ project(cform-ui
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(CMAKE_C_STANDARD 99)
     set(CMAKE_C_STANDARD_REQUIRED ON)
-    set(CMAKE_C_EXTENSIONS OFF)
+
+    # Emscripten's EM_ASM macros used inside SDL3 rely on GCC statement
+    # expressions, so strict ISO C99 (-std=c99) cannot compile them. Native
+    # builds keep the strict dialect to catch portability mistakes.
+    if(EMSCRIPTEN)
+        set(CMAKE_C_EXTENSIONS ON)
+    else()
+        set(CMAKE_C_EXTENSIONS OFF)
+    endif()
+
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
     # CMake is the single source of truth for compiler flags: clangd, the IDE
