@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include <cform/cform.h>
 
 #define GREY_0 UI_COLOR(18, 20, 24)
@@ -6,6 +8,15 @@
 #define GREY_3 UI_COLOR(74, 79, 88)
 #define GREY_4 UI_COLOR(100, 106, 116)
 #define ACCENT UI_COLOR(96, 165, 250)
+
+static int click_count;
+
+static void on_core_click(UI_Frame *frame, void *user_data) {
+    (void)frame;
+    const char *label = (const char *)user_data;
+    click_count++;
+    printf("%s clicked: %d\n", label, click_count);
+}
 
 int main(void) {
     UI_Context *ctx = ui_create();
@@ -61,6 +72,10 @@ int main(void) {
         .height        = UI_FILL,
         .background    = GREY_4,
         .corner_radius = 4.0f,
+        .border_color  = UI_COLOR(200, 220, 255),
+        .border_width  = 1.0f,
+        .on_click      = on_core_click,
+        .user_data     = (void *)"inner card",
     });
 
     ui_add(root, a);

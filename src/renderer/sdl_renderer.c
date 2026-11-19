@@ -132,14 +132,36 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
         return;
     }
 
+    ctx->root = root;
+
     bool running = true;
 
     while (running) {
         SDL_Event event;
 
         while (SDL_PollEvent(&event) != 0) {
-            if (event.type == SDL_EVENT_QUIT) {
+            switch (event.type) {
+            case SDL_EVENT_QUIT:
                 running = false;
+                break;
+            case SDL_EVENT_MOUSE_MOTION:
+                ui_pointer_move(ctx, event.motion.x, event.motion.y);
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    ui_pointer_down(ctx, event.button.x, event.button.y);
+                }
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    ui_pointer_up(ctx, event.button.x, event.button.y);
+                }
+                break;
+            case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+                ui_pointer_leave(ctx);
+                break;
+            default:
+                break;
             }
         }
 
@@ -156,6 +178,9 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
 
         SDL_Delay(16);
     }
+
+    ui_pointer_leave(ctx);
+    ctx->root = NULL;
 
     SDL_DestroyWindow(window);
     SDL_Quit();
