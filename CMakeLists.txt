@@ -49,37 +49,48 @@ endif()
 
 # ---------------------------------------------------------------------------
 # Library
+#
+# Split into a renderer-agnostic core (`cform_core`) and an SDL3 backend
+# (`cform`). Keeping the layout math free of SDL means it can be unit-tested
+# headlessly - no window, no display, no SDL on the runtime path.
 # ---------------------------------------------------------------------------
-add_library(cform STATIC
+add_library(cform_core STATIC
     src/core/context.c
     src/core/frame.c
     src/core/layout.c
-    src/renderer/sdl_renderer.c
 )
 
-target_include_directories(cform
+target_include_directories(cform_core
     PUBLIC  include
     PRIVATE src
 )
 
-target_link_libraries(cform
-    PUBLIC SDL3::SDL3
+add_library(cform STATIC
+    src/renderer/sdl_renderer.c
 )
 
-# Warning policy for the library itself. Applied per-target so it never leaks
+target_include_directories(cform
+    PRIVATE src
+)
+
+# Consumers that link `cform` get the core and SDL3 transitively.
+target_link_libraries(cform
+    PUBLIC cform_core SDL3::SDL3
+)
+
+# Warning policy for our own targets, applied per-target so it never leaks
 # into SDL3 or other dependencies. Examples and tests opt in separately.
+set(CFORM_WARNINGS "")
 if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(cform PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-        -Wshadow
-        -Wconversion
-        -Wstrict-prototypes
-        -Wmissing-prototypes
-    )
+    set(CFORM_WARNINGS -Wall -Wextra -Wpedantic -Wshadow -Wconversion
+        -Wstrict-prototypes -Wmissing-prototypes)
 elseif(MSVC)
-    target_compile_options(cform PRIVATE /W4)
+    set(CFORM_WARNINGS /W4)
+endif()
+
+if(CFORM_WARNINGS)
+    target_compile_options(cform_core PRIVATE ${CFORM_WARNINGS})
+    target_compile_options(cform PRIVATE ${CFORM_WARNINGS})
 endif()
 
 # ---------------------------------------------------------------------------
@@ -90,4 +101,14 @@ option(CFORM_BUILD_EXAMPLES "Build cform-ui example programs" ON)
 if(CFORM_BUILD_EXAMPLES)
     add_executable(cform_demo example/demo.c)
     target_link_libraries(cform_demo PRIVATE cform)
+endif()
+
+# ---------------------------------------------------------------------------
+# Tests (opt-in, and only when cform-ui is the top-level project)
+# ---------------------------------------------------------------------------
+option(CFORM_BUILD_TESTS "Build the cform-ui test suite" OFF)
+
+if(CFORM_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    enable_testing()
+    add_subdirectory(tests)
 endif()

@@ -37,7 +37,10 @@ jobs:
             mesa-common-dev libgl1-mesa-dev libudev-dev
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }} -DCFORM_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build --config ${{ matrix.type }} --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure
