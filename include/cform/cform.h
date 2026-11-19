@@ -55,6 +55,12 @@ typedef struct {
     UI_Direction direction;
 
     UI_Color background;
+
+    /* Decorative stroke drawn inside the frame's rect; does not affect layout.
+     * A width of 0 hides the border; a radius of 0 keeps sharp corners. */
+    UI_Color border_color;
+    float border_width;
+    float corner_radius;
 } UI_FrameConfig;
 
 UI_Context *ui_create(void);
