@@ -1,0 +1,93 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(cform-ui
+    VERSION 0.1.0
+    DESCRIPTION "A small declarative layout UI library for C, rendered with SDL3."
+    LANGUAGES C
+)
+
+# ---------------------------------------------------------------------------
+# Language defaults
+# ---------------------------------------------------------------------------
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(CMAKE_C_STANDARD 99)
+    set(CMAKE_C_STANDARD_REQUIRED ON)
+    set(CMAKE_C_EXTENSIONS OFF)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+    # CMake is the single source of truth for compiler flags: clangd, the IDE
+    # and CI all read the same compile_commands.json this produces.
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
+# ---------------------------------------------------------------------------
+# Dependencies: SDL3
+#
+# Use a locally installed / toolchain-provided SDL3 when available; otherwise
+# fetch a pinned release so the project builds out of the box for everyone.
+# ---------------------------------------------------------------------------
+find_package(SDL3 CONFIG QUIET)
+
+if(NOT SDL3_FOUND)
+    message(STATUS "SDL3 not found locally - fetching a pinned release with FetchContent")
+
+    include(FetchContent)
+
+    set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        SDL3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG        release-3.2.20
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(SDL3)
+endif()
+
+# ---------------------------------------------------------------------------
+# Library
+# ---------------------------------------------------------------------------
+add_library(cform STATIC
+    src/core/context.c
+    src/core/frame.c
+    src/core/layout.c
+    src/renderer/sdl_renderer.c
+)
+
+target_include_directories(cform
+    PUBLIC  include
+    PRIVATE src
+)
+
+target_link_libraries(cform
+    PUBLIC SDL3::SDL3
+)
+
+# Warning policy for the library itself. Applied per-target so it never leaks
+# into SDL3 or other dependencies. Examples and tests opt in separately.
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(cform PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+        -Wshadow
+        -Wconversion
+        -Wstrict-prototypes
+        -Wmissing-prototypes
+    )
+elseif(MSVC)
+    target_compile_options(cform PRIVATE /W4)
+endif()
+
+# ---------------------------------------------------------------------------
+# Examples
+# ---------------------------------------------------------------------------
+option(CFORM_BUILD_EXAMPLES "Build cform-ui example programs" ON)
+
+if(CFORM_BUILD_EXAMPLES)
+    add_executable(cform_demo example/demo.c)
+    target_link_libraries(cform_demo PRIVATE cform)
+endif()

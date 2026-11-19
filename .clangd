@@ -1,0 +1,13 @@
+# clangd reads the *exact* flags CMake used by consuming the generated
+# compile database. CMake writes it into the active build directory
+# (CMAKE_EXPORT_COMPILE_COMMANDS is enabled in CMakeLists.txt / presets),
+# and clangd does not search nested build/dev automatically, so point at it.
+#
+# If you configure into a different directory, update this path or just let
+# clangd auto-discover build/compile_commands.json.
+CompileFlags:
+  CompilationDatabase: build/dev
+
+Diagnostics:
+  # Silence warnings clangd raises purely from unused/extra flags.
+  UnusedIncludes: None

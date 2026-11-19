@@ -1,0 +1,60 @@
+# --- CMake build trees ---
+build/
+build-*/
+out/
+cmake-build-*/
+
+# --- Generated compilation database / tool caches ---
+compile_commands.json
+.cache/
+
+# --- Fetched dependencies (SDL3 via FetchContent) ---
+_deps/
+
+# --- CMake generated files ---
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+Testing/
+*.cmake
+!cmake/
+
+# --- Compiled objects and libraries ---
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# --- Packaging output ---
+_install/
+*.tar.gz
+*.zip
+
+# --- Editor temporary files ---
+*.swp
+*.swo
+*~
+
+# --- Personal IDE / machine-specific state ---
+.vscode/launch.json
+CMakeUserPresets.json
+.idea/
+.qoder/
+.vs/
+*.user
+*.suo
+
+# --- Operating system noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Logs ---
+*.log

@@ -1,2 +1,27 @@
-# Auto detect text files and perform LF normalization
+# Normalize line endings across platforms.
 * text=auto
+
+# C / CMake / Markdown source
+*.c    text eol=lf
+*.h    text eol=lf
+*.txt  text eol=lf
+*.cmake text eol=lf
+*.md   text eol=lf
+
+# JSON / YAML
+*.json text eol=lf
+*.yml  text eol=lf
+
+# Windows binaries
+*.exe  binary
+*.dll  binary
+*.lib  binary
+*.a    binary
+*.obj  binary
+
+# Exclude repository-only files from release / git-archive exports
+.gitattributes    export-ignore
+.gitignore        export-ignore
+.github/          export-ignore
+CMakePresets.json export-ignore
+example/          export-ignore
