@@ -23,6 +23,7 @@
                 "--preset",
                 "dev"
             ],
+            "dependsOn": "CMake: Configure (dev)",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -76,6 +77,7 @@
                 "--preset",
                 "web"
             ],
+            "dependsOn": "CMake: Configure (web)",
             "group": "build",
             "problemMatcher": [
                 "$gcc"
