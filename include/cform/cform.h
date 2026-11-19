@@ -47,6 +47,22 @@ typedef enum {
     UI_JUSTIFY_SPACE_EVENLY
 } UI_Justify;
 
+typedef enum {
+    UI_FONT_NORMAL,
+    UI_FONT_BOLD,
+    UI_FONT_ITALIC,
+    UI_FONT_BOLD_ITALIC
+} UI_FontStyle;
+
+typedef enum {
+    /* Scale to the largest size that fits the content box, keeping aspect. */
+    UI_IMAGE_FIT,
+    /* Stretch to fill the content box, ignoring aspect. */
+    UI_IMAGE_FILL,
+    /* Draw at native pixel size, centred; overflow is clipped. */
+    UI_IMAGE_CENTER
+} UI_ImageFit;
+
 typedef struct {
     unsigned char r;
     unsigned char g;
@@ -92,6 +108,32 @@ typedef struct {
      * handler makes the frame non-clickable but it still tracks hover. */
     UI_ClickHandler on_click;
     void *user_data;
+
+    /* Background picked while the frame is hovered or pressed. A zero alpha
+     * falls back to `background`; pressed wins over hover. */
+    UI_Color hover_background;
+    UI_Color pressed_background;
+
+    /* Label drawn centered in the content box. NULL hides it. `font_size` is
+     * in pixels; 0 selects the renderer default. `text_color` with a zero
+     * alpha falls back to a renderer-chosen foreground. */
+    const char *text;
+    UI_Color text_color;
+    float font_size;
+    UI_FontStyle font_style;
+
+    /* Raster image drawn in the content box. A filesystem path or an
+     * http(s) URL; NULL hides it. Loading failures are silent. */
+    const char *image_src;
+    UI_ImageFit image_fit;
+
+    /* Opened in the default browser when the frame is clicked, in addition
+     * to on_click. A NULL value makes the frame non-linking. */
+    const char *link_url;
+
+    /* When true the frame clips its overflowing children and scrolls in
+     * response to wheel input on whichever axis its direction runs. */
+    bool scrollable;
 } UI_FrameConfig;
 
 UI_Context *ui_create(void);

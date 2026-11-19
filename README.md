@@ -9,24 +9,30 @@ layout and renders it through SDL3, either in a native window or in a browser.
 
 > **Status:** early development. The layout core, the SDL3 renderer and the
 > WebAssembly port all build and run, but the public API is experimental and
-> may change between releases. Text, buttons and interaction are on the
-> roadmap, not implemented.
+> may change between releases. Keyboard focus, images and scrolling are on
+> the roadmap, not implemented.
 
 ## Features
 
 - Declarative, tree-based frame layout (`UI_FrameConfig`).
-- Horizontal and vertical directions with nested containers.
-- Fixed (`UI_FIXED`) and fill (`UI_FILL`) sizing on both axes.
-- Box model: padding, margin and gap.
+- Horizontal, vertical and overlay directions with nested containers.
+- Fixed (`UI_FIXED`), fill (`UI_FILL`) and percent (`UI_PERCENT`) sizing.
+- Box model: padding, margin, gap, min/max clamps, borders, corner radius.
+- Cross-axis alignment and main-axis justification.
+- Pointer interaction: hit-testing, hover/pressed background swaps, click
+  handlers.
+- Text labels rendered through SDL3_ttf with a system font.
 - One layout implementation, two backends: native SDL3 and WebAssembly.
 - Renderer-agnostic core, verified by a headless test suite.
-- Zero setup: SDL3 is fetched automatically when it is not already installed.
+- Zero setup: SDL3 and SDL3_ttf are fetched automatically when they are not
+  already installed.
 
 ## Requirements
 
 - CMake **3.25**+ and a C99 compiler (GCC, Clang or MSVC)
 - [Ninja](https://ninja-build.org/) - used by the presets
-- SDL3, resolved from your system or downloaded via `FetchContent`
+- SDL3 and SDL3_ttf, resolved from your system or downloaded via
+  `FetchContent` (SDL3_ttf vendors FreeType and HarfBuzz when fetched)
 - For the web build only: [Emscripten](https://emscripten.org/) (`emsdk`)
 
 ## Build and run - native

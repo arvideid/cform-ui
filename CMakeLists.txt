@@ -30,6 +30,7 @@ endif()
 # fetches, because a native SDL3 cannot link into a WebAssembly binary.
 if(NOT EMSCRIPTEN)
     find_package(SDL3 CONFIG QUIET)
+    find_package(SDL3_ttf CONFIG QUIET)
 endif()
 
 if(NOT SDL3_FOUND)
@@ -58,6 +59,30 @@ if(NOT SDL3_FOUND)
     FetchContent_MakeAvailable(SDL3)
 endif()
 
+if(NOT SDL3_ttf_FOUND)
+    message(STATUS "SDL3_ttf not found locally - fetching a pinned release with FetchContent")
+
+    include(FetchContent)
+
+    # Vendored build pulls freetype and harfbuzz from SDL_ttf's git submodules,
+    # so the demo works on machines that do not ship a system freetype.
+    set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+    set(SDLTTF_SAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
+    set(SDLTTF_PLUTOSVG OFF CACHE BOOL "" FORCE)
+    set(SDLTTF_TESTS OFF CACHE BOOL "" FORCE)
+    set(SDLTTF_SHARED ON CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        SDL3_ttf
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+        GIT_TAG        release-3.2.2
+        GIT_SHALLOW    TRUE
+        GIT_SUBMODULES "external/freetype;external/harfbuzz"
+    )
+    FetchContent_MakeAvailable(SDL3_ttf)
+endif()
+
 # A renderer-agnostic core (`cform_core`) plus an SDL3 backend (`cform`) so the
 # layout math can be unit-tested headlessly - no window, no display, no SDL.
 add_library(cform_core STATIC
@@ -80,9 +105,9 @@ target_include_directories(cform
     PRIVATE src
 )
 
-# Consumers that link `cform` get the core and SDL3 transitively.
+# Consumers that link `cform` get the core, SDL3 and SDL3_ttf transitively.
 target_link_libraries(cform
-    PUBLIC cform_core SDL3::SDL3
+    PUBLIC cform_core SDL3::SDL3 SDL3_ttf::SDL3_ttf
 )
 
 # Warning policy for our own targets, applied per-target so it never leaks

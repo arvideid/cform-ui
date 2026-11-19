@@ -34,7 +34,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libx11-dev libxcursor-dev libxrandr-dev libxss-dev \
             libxtst-dev libxxf86vm-dev libasound2-dev \
-            mesa-common-dev libgl1-mesa-dev libudev-dev
+            mesa-common-dev libgl1-mesa-dev libudev-dev \
+            libfreetype-dev libharfbuzz-dev
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }} -DCFORM_BUILD_TESTS=ON
