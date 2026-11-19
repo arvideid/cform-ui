@@ -25,6 +25,10 @@ layout and renders it through SDL3, either in a native window or in a browser.
 - Images through SDL3_image: local paths and remote `http(s)` URLs, with
   scaling modes and background downloading that never blocks the frame loop.
 - Scrollable containers that clip overflowing children.
+- Per-frame alpha (`UI_RGBA`) and inherited `opacity`, composited by the
+  renderer.
+- Window control through `UI_WindowConfig`: size, title, fullscreen (F11
+  toggles at runtime) and a resizable window the layout follows.
 - One layout implementation, two backends: native SDL3 and WebAssembly.
 - Renderer-agnostic core, verified by a headless test suite.
 - Zero setup: SDL3 and SDL3_ttf are fetched automatically when they are not
@@ -132,7 +136,8 @@ UI_Frame *sidebar = ui_frame(ctx, (UI_FrameConfig){
 });
 
 ui_add(root, sidebar);
-ui_render(ctx, root);
+ui_render(ctx, root, NULL);   /* or a UI_WindowConfig for size, title,
+                               * fullscreen - NULL takes the defaults */
 ui_destroy(ctx);
 ```
 

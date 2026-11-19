@@ -31,9 +31,6 @@ struct UI_Frame {
 };
 
 struct UI_Context {
-    int window_width;
-    int window_height;
-
     /* Ownership of every frame created through ui_frame(), so that
      * ui_destroy() can release them in one place. */
     UI_Frame **frames;
@@ -85,5 +82,10 @@ void ui_clear_focus(UI_Context *ctx);
  * ui_scroll_extreme jumps to the start (end false) or the end (end true). */
 void ui_scroll_by(UI_Context *ctx, float dx, float dy);
 void ui_scroll_extreme(UI_Context *ctx, bool end);
+
+/* Applies a frame's own opacity and every ancestor's to a color's alpha.
+ * Pure so the renderer stays a thin draw pass and the math stays testable
+ * without a window. */
+UI_Color ui_color_scale_alpha(UI_Color color, float opacity);
 
 #endif

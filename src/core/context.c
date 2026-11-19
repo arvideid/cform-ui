@@ -9,11 +9,6 @@ UI_Context *ui_create(void) {
         return NULL;
     }
 
-    /* The public API does not carry window geometry yet, so the context
-     * starts with a sensible default that the renderer opens a window for. */
-    ctx->window_width = 1280;
-    ctx->window_height = 800;
-
     return ctx;
 }
 

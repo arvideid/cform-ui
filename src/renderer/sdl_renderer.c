@@ -13,6 +13,12 @@
 #define FONT_CACHE_CAPACITY 16
 #define IMAGE_CACHE_CAPACITY 16
 
+/* Window opened when a UI_WindowConfig leaves the field zero. The browser
+ * shell sizes its canvas from the same numbers, so the two must move together. */
+#define DEFAULT_WINDOW_WIDTH 1280
+#define DEFAULT_WINDOW_HEIGHT 800
+#define DEFAULT_WINDOW_TITLE "cform-ui"
+
 /* Foreground used when a labelled frame leaves text_color unset. */
 static const UI_Color default_text_color = { 9, 9, 11, 255 };
 
@@ -554,7 +560,11 @@ static void draw_scrollbar(
 
 /* Recurses into children, clipping to the frame rect when it scrolls and
  * overlaying a thumb on whichever axis overflows. */
-static void draw_children(SDL_Renderer *renderer, UI_Frame *frame) {
+static void draw_children(
+    SDL_Renderer *renderer,
+    UI_Frame *frame,
+    float opacity
+) {
     const UI_FrameConfig *config = &frame->config;
 
     if (!config->scrollable) {
@@ -582,6 +592,8 @@ static void draw_children(SDL_Renderer *renderer, UI_Frame *frame) {
     if (thumb_color.a == 0) {
         thumb_color = default_scrollbar_color;
     }
+
+    thumb_color = ui_color_scale_alpha(thumb_color, opacity);
 
     draw_scrollbar(renderer, frame, true, frame->scroll_y, thumb_color);
     draw_scrollbar(renderer, frame, false, frame->scroll_x, thumb_color);
@@ -720,7 +732,8 @@ static ImageEntry *get_image(SDL_Renderer *renderer, const char *src) {
 static void draw_image(
     SDL_Renderer *renderer,
     const UI_Frame *frame,
-    const UI_FrameConfig *config
+    const UI_FrameConfig *config,
+    float opacity
 ) {
     ImageEntry *img = get_image(renderer, config->image_src);
 
@@ -765,22 +778,36 @@ static void draw_image(
     SDL_Rect previous;
     bool had_clip = push_clip(renderer, clip, &previous);
 
+    /* Textures are shared through the image cache, so the fade is set on every
+     * draw rather than left over from whichever frame drew last. */
+    SDL_SetTextureAlphaMod(
+        img->texture,
+        ui_color_scale_alpha((UI_Color){ 0, 0, 0, 255 }, opacity).a);
+
     SDL_RenderTexture(renderer, img->texture, NULL, &dst);
 
     pop_clip(renderer, had_clip, &previous);
 }
 
-static void draw_text(
-    SDL_Renderer *renderer,
-    const UI_Frame *frame,
-    const UI_FrameConfig *config
-) {
-    float size = config->font_size > 0.0f ? config->font_size : DEFAULT_FONT_SIZE;
+/* Fallback resolution happens before inheritance, so an unset text color on a
+ * faded frame still fades instead of snapping back to full alpha. */
+static UI_Color pick_text_color(const UI_FrameConfig *config, float opacity) {
     UI_Color color = config->text_color;
 
     if (color.a == 0) {
         color = default_text_color;
     }
+
+    return ui_color_scale_alpha(color, opacity);
+}
+
+static void draw_text(
+    SDL_Renderer *renderer,
+    const UI_Frame *frame,
+    const UI_FrameConfig *config,
+    UI_Color color
+) {
+    float size = config->font_size > 0.0f ? config->font_size : DEFAULT_FONT_SIZE;
 
     float content_x = frame->x + config->padding.left;
     float content_y = frame->y + config->padding.top;
@@ -836,6 +863,7 @@ static void ui_draw_frame(
     UI_Frame *frame
 ) {
     const UI_FrameConfig *config = &frame->config;
+    float opacity = ui_opacity(frame);
 
     SDL_FRect outer = {
         .x = frame->x,
@@ -844,10 +872,10 @@ static void ui_draw_frame(
         .h = frame->height
     };
 
-    UI_Color bg = pick_background(frame);
+    UI_Color bg = ui_color_scale_alpha(pick_background(frame), opacity);
 
     if (config->border_width > 0.0f) {
-        set_color(renderer, config->border_color);
+        set_color(renderer, ui_color_scale_alpha(config->border_color, opacity));
         fill_round_rect(renderer, outer, config->corner_radius);
 
         float bw = config->border_width;
@@ -869,15 +897,17 @@ static void ui_draw_frame(
     }
 
     if (config->image_src != NULL) {
-        draw_image(renderer, frame, config);
+        draw_image(renderer, frame, config, opacity);
     }
 
     if (config->text != NULL) {
-        draw_text(renderer, frame, config);
+        draw_text(renderer, frame, config, pick_text_color(config, opacity));
     }
 
-    draw_children(renderer, frame);
+    draw_children(renderer, frame, opacity);
 
+    /* The focus ring stays un-faded: it reports where the keyboard is, which
+     * has to stay readable even inside a container the app has dimmed. */
     if (frame->focused) {
         set_color(renderer, default_focus_color);
         SDL_FRect ring = {
@@ -1032,12 +1062,28 @@ static void handle_key(
     }
 }
 
-void ui_render(UI_Context *ctx, UI_Frame *root) {
+void ui_render(UI_Context *ctx, UI_Frame *root, const UI_WindowConfig *window) {
     if (ctx == NULL || root == NULL) {
         return;
     }
 
-    SDL_Window *window = NULL;
+    UI_WindowConfig defaults = { 0 };
+
+    if (window == NULL) {
+        window = &defaults;
+    }
+
+    int initial_width = window->width > 0 ? window->width : DEFAULT_WINDOW_WIDTH;
+    int initial_height = window->height > 0
+        ? window->height : DEFAULT_WINDOW_HEIGHT;
+
+    SDL_WindowFlags flags = window->fixed_size ? 0 : SDL_WINDOW_RESIZABLE;
+
+    if (window->fullscreen) {
+        flags |= SDL_WINDOW_FULLSCREEN;
+    }
+
+    SDL_Window *sdl_window = NULL;
     SDL_Renderer *renderer = NULL;
 
     /* HIGH_PIXEL_DENSITY gives the backbuffer the display's real pixel grid.
@@ -1047,11 +1093,11 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
      * of 1. Layout continues to run in logical points; SDL_SetRenderScale
      * bridges the two on every draw. */
     if (SDL_CreateWindowAndRenderer(
-            "cform-ui",
-            ctx->window_width,
-            ctx->window_height,
-            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
-            &window,
+            window->title != NULL ? window->title : DEFAULT_WINDOW_TITLE,
+            initial_width,
+            initial_height,
+            flags | SDL_WINDOW_HIGH_PIXEL_DENSITY,
+            &sdl_window,
             &renderer) == false) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
         return;
@@ -1062,7 +1108,7 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
      * zero-alpha frames to stay transparent and for the scrollbar thumb. */
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    float initial_scale = SDL_GetWindowDisplayScale(window);
+    float initial_scale = SDL_GetWindowDisplayScale(sdl_window);
 
     if (initial_scale > 0.0f) {
         g_display_scale = initial_scale;
@@ -1086,9 +1132,9 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
     while (running) {
         int width = 0;
         int height = 0;
-        SDL_GetWindowSize(window, &width, &height);
+        SDL_GetWindowSize(sdl_window, &width, &height);
 
-        float display_scale = SDL_GetWindowDisplayScale(window);
+        float display_scale = SDL_GetWindowDisplayScale(sdl_window);
 
         if (display_scale > 0.0f && display_scale != g_display_scale) {
             g_display_scale = display_scale;
@@ -1108,7 +1154,13 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
                 running = false;
                 break;
             case SDL_EVENT_KEY_DOWN:
-                handle_key(ctx, &event.key, (float)height);
+                if (event.key.key == SDLK_F11 && !event.key.repeat) {
+                    bool is_fullscreen = (SDL_GetWindowFlags(sdl_window)
+                        & SDL_WINDOW_FULLSCREEN) != 0;
+                    SDL_SetWindowFullscreen(sdl_window, !is_fullscreen);
+                } else {
+                    handle_key(ctx, &event.key, (float)height);
+                }
                 break;
             case SDL_EVENT_MOUSE_MOTION:
                 if (drag_frame != NULL) {
@@ -1169,6 +1221,6 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
 
     shutdown_text();
 
-    SDL_DestroyWindow(window);
+    SDL_DestroyWindow(sdl_window);
     SDL_Quit();
 }

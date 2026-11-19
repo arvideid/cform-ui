@@ -151,7 +151,31 @@ typedef struct {
      * to zero: give scrollable children a FIXED or PERCENT extent on that
      * axis. The perpendicular axis still fills normally. */
     bool scrollable;
+
+    /* Multiplied into the alpha of every fill, border and label this frame
+     * draws, and inherited by descendants. 0 means unset (fully opaque);
+     * values above 1 clamp. */
+    float opacity;
 } UI_FrameConfig;
+
+/* Window opened by ui_render. Every field falls back to its default when the
+ * struct is zeroed, so `{0}` gives a resizable 1280x800 windowed window. */
+typedef struct {
+    int width;
+    int height;
+    const char *title;
+
+    /* Maximizes to the desktop instead of switching display mode, so layout
+     * keeps resolving against real window pixels. F11 toggles this at
+     * runtime regardless of the starting value. */
+    bool fullscreen;
+
+    /* Pins the window to width x height when true. Layout already re-resolves
+     * against the live window size every frame, so a resizable window needs
+     * nothing else from the app. Inverted because a zeroed struct must select
+     * the common case. */
+    bool fixed_size;
+} UI_WindowConfig;
 
 UI_Context *ui_create(void);
 void ui_destroy(UI_Context *ctx);
@@ -181,11 +205,18 @@ void ui_update(UI_Frame *frame, UI_FrameConfig config);
  * before the first layout or when the point misses the root. */
 UI_Frame *ui_hit_test(UI_Context *ctx, float x, float y);
 
-void ui_render(UI_Context *ctx, UI_Frame *root);
+/* Runs the event loop and draws `root` until the window closes. `window`
+ * NULL selects the default window. Geometry is re-resolved against the live
+ * window size every frame, so a resize needs no extra call from the app. */
+void ui_render(UI_Context *ctx, UI_Frame *root, const UI_WindowConfig *window);
 
 /* Pointer interaction state, refreshed by ui_render's event loop. */
 bool ui_is_hovered(const UI_Frame *frame);
 bool ui_is_pressed(const UI_Frame *frame);
+
+/* Opacity of this frame multiplied by every ancestor's, so fading a container
+ * fades its subtree. Returns 1.0 for NULL and for unset values. */
+float ui_opacity(const UI_Frame *frame);
 
 #define UI_FIXED(value) \
     ((UI_Size){ UI_SIZE_FIXED, (float)(value) })
@@ -205,5 +236,8 @@ bool ui_is_pressed(const UI_Frame *frame);
 
 #define UI_COLOR(r, g, b) \
     ((UI_Color){r, g, b, 255})
+
+#define UI_RGBA(r, g, b, a) \
+    ((UI_Color){r, g, b, a})
 
 #endif

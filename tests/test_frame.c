@@ -7,7 +7,6 @@ static void context_create_returns_valid_defaults(void) {
     UI_Context *ctx = ui_create();
 
     CF_CHECK(ctx != NULL, "ui_create returns a context");
-    CF_NEAR(ctx->window_width, 1280);
     CF_NEAR(ctx->frame_count, 0);
 
     ui_destroy(ctx);

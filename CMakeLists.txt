@@ -153,6 +153,7 @@ add_library(cform_core STATIC
     src/core/frame.c
     src/core/input.c
     src/core/layout.c
+    src/core/style.c
 )
 
 target_include_directories(cform_core

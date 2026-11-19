@@ -464,6 +464,7 @@ int main(void) {
         .font_size          = 14.0f,
         .on_click           = on_action,
         .user_data          = (void *)"cancel",
+        .opacity            = 0.6f,
     });
 
     UI_Frame *confirm = ui_frame(ctx, (UI_FrameConfig){
@@ -488,7 +489,13 @@ int main(void) {
     ui_add(root, card);
     ui_add(root, footer);
 
-    ui_render(ctx, root);
+    UI_WindowConfig window = {
+        .width  = 1280,
+        .height = 800,
+        .title  = "cform-ui demo",
+    };
+
+    ui_render(ctx, root, &window);
     ui_destroy(ctx);
 
     return 0;
