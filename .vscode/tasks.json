@@ -55,6 +55,49 @@
             "problemMatcher": []
         },
         {
+            "label": "CMake: Configure (web)",
+            "detail": "cmake --preset web (needs emsdk activated: source ./emsdk_env.sh)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset",
+                "web"
+            ],
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "CMake: Build (web)",
+            "detail": "cmake --build --preset web",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "web"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "Run: demo (web)",
+            "detail": "Serve build/web/bin at http://localhost:8000/cform_demo.html",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "-m",
+                "http.server",
+                "8000",
+                "--directory",
+                "build/web/bin"
+            ],
+            "dependsOn": "CMake: Build (web)",
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
             "label": "Clean: build trees",
             "detail": "Remove all CMake build directories",
             "type": "shell",

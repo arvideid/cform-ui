@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>cform-ui demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background: #12141a;
+            color: #d5d8de;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            overflow: hidden;
+        }
+
+        #canvas {
+            display: block;
+            margin: 0 auto;
+            background: #12141a;
+            box-shadow: 0 0 0 1px #22262e;
+            outline: none;
+        }
+
+        #status {
+            position: fixed;
+            left: 12px;
+            bottom: 12px;
+            font-size: 12px;
+            color: #6c7280;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" width="1280" height="800" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+    <div id="status">Loading cform-ui...</div>
+
+    <script type='text/javascript'>
+        var Module = {
+            canvas: (function () { return document.getElementById('canvas'); })(),
+            setStatus: function (text) {
+                var el = document.getElementById('status');
+                el.textContent = text ? text : '';
+                if (!text) el.style.display = 'none';
+            },
+            onRuntimeInitialized: function () {
+                document.getElementById('status').style.display = 'none';
+            },
+            printErr: function (text) { console.error(text); },
+        };
+    </script>
+
+    {{{ SCRIPT }}}
+</body>
+
+</html>

@@ -44,3 +44,29 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure
+
+  web:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Configure and build in one shell so the emsdk environment (EMSDK,
+      # which the "web" preset reads) stays alive across the steps.
+      - name: Build browser target
+        run: |
+          git clone https://github.com/emscripten-core/emsdk.git "$HOME/emsdk"
+          cd "$HOME/emsdk"
+          ./emsdk install 3.1.64
+          ./emsdk activate 3.1.64
+          source ./emsdk_env.sh
+          cd "$GITHUB_WORKSPACE"
+          cmake --preset web
+          cmake --build --preset web
+
+      - name: Upload web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: cform-ui-web
+          path: build/web/bin/cform_demo.*

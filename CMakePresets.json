@@ -28,6 +28,19 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "web",
+      "displayName": "Web (Emscripten)",
+      "description": "WebAssembly build. Activate emsdk first (source ./emsdk_env.sh) so the EMSDK env var is set.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/web",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+        "CFORM_BUILD_EXAMPLES": "ON",
+        "CFORM_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -38,6 +51,10 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "web",
+      "configurePreset": "web"
     }
   ],
   "testPresets": [

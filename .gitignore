@@ -11,6 +11,9 @@ compile_commands.json
 # --- Fetched dependencies (SDL3 via FetchContent) ---
 _deps/
 
+# --- Local toolchain installs kept next to the checkout ---
+.vendor/
+
 # --- CMake generated files ---
 CMakeCache.txt
 CMakeFiles/
