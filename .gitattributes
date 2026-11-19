@@ -22,6 +22,15 @@
 # Exclude repository-only files from release / git-archive exports
 .gitattributes    export-ignore
 .gitignore        export-ignore
+.gitmessage       export-ignore
+.editorconfig     export-ignore
+.clang-format     export-ignore
+.clang-tidy       export-ignore
+.clangd           export-ignore
 .github/          export-ignore
+.vscode/          export-ignore
 CMakePresets.json export-ignore
+CMakeUserPresets.json export-ignore
 example/          export-ignore
+tests/            export-ignore
+docs/             export-ignore
