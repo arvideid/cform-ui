@@ -29,6 +29,13 @@ typedef enum {
     UI_VERTICAL
 } UI_Direction;
 
+typedef enum {
+    UI_ALIGN_START,
+    UI_ALIGN_CENTER,
+    UI_ALIGN_END,
+    UI_ALIGN_STRETCH
+} UI_Align;
+
 typedef struct {
     unsigned char r;
     unsigned char g;
@@ -55,6 +62,9 @@ typedef struct {
     float gap;
 
     UI_Direction direction;
+
+    /* Cross-axis placement of each child within the parent's content box. */
+    UI_Align align_items;
 
     UI_Color background;
 

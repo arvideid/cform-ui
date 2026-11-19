@@ -242,6 +242,75 @@ static void layout_cross_axis_clamps_fill_height(void) {
     ui_destroy(ctx);
 }
 
+static void layout_align_center_offsets_fixed_child_on_cross_axis(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .align_items = UI_ALIGN_CENTER });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(40) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->y, 30);
+    CF_NEAR(a->height, 40);
+
+    ui_destroy(ctx);
+}
+
+static void layout_align_end_positions_fixed_child_at_far_edge(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .align_items = UI_ALIGN_END });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(40) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->y, 60);
+
+    ui_destroy(ctx);
+}
+
+static void layout_align_stretch_grows_fixed_child_on_cross_axis(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .align_items = UI_ALIGN_STRETCH });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(40) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->y, 0);
+    CF_NEAR(a->height, 100);
+
+    ui_destroy(ctx);
+}
+
+static void layout_align_respects_child_margin_on_cross_axis(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .align_items = UI_ALIGN_CENTER });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(40),
+        .margin = UI_EDGES(6.0f, 0.0f, 2.0f, 0.0f) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    /* Room = 100 - 6 - 2 = 92. Extra = 92 - 40 = 52. Half = 26, plus leading
+     * margin 6 puts the child 32 pixels from the content-box top. */
+    CF_NEAR(a->y, 32);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -256,5 +325,9 @@ int main(void) {
     CF_RUN(layout_fill_child_respects_max_width);
     CF_RUN(layout_fill_child_respects_min_width);
     CF_RUN(layout_cross_axis_clamps_fill_height);
+    CF_RUN(layout_align_center_offsets_fixed_child_on_cross_axis);
+    CF_RUN(layout_align_end_positions_fixed_child_at_far_edge);
+    CF_RUN(layout_align_stretch_grows_fixed_child_on_cross_axis);
+    CF_RUN(layout_align_respects_child_margin_on_cross_axis);
     return CF_REPORT();
 }

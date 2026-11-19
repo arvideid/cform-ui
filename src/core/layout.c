@@ -49,12 +49,6 @@ static float main_margin(const UI_FrameConfig *c, UI_Direction direction) {
         : c->margin.top + c->margin.bottom;
 }
 
-static float cross_margin(const UI_FrameConfig *c, UI_Direction direction) {
-    return direction == UI_HORIZONTAL
-        ? c->margin.top + c->margin.bottom
-        : c->margin.left + c->margin.right;
-}
-
 void ui_layout_frame(
     UI_Frame *frame,
     float x,
@@ -129,13 +123,31 @@ void ui_layout_frame(
 
         UI_Size cross = cross_axis_size(child_config, direction);
         float cross_extent = horizontal ? content_height : content_width;
-        float cross_value = cross.type == UI_SIZE_FIXED
-            ? cross.value
-            : clamp_non_negative(cross_extent
-                  - cross_margin(child_config, direction));
-        cross_value = clamp_size(cross_value,
+        float leading_cross = horizontal
+            ? child_config->margin.top
+            : child_config->margin.left;
+        float trailing_cross = horizontal
+            ? child_config->margin.bottom
+            : child_config->margin.right;
+        float cross_room = clamp_non_negative(
+            cross_extent - leading_cross - trailing_cross);
+
+        bool fills_cross = cross.type != UI_SIZE_FIXED
+            || config->align_items == UI_ALIGN_STRETCH;
+        float cross_value = clamp_size(fills_cross ? cross_room : cross.value,
             cross_axis_min(child_config, direction),
             cross_axis_max(child_config, direction));
+
+        float cross_offset = leading_cross;
+        float extra_cross = clamp_non_negative(cross_room - cross_value);
+
+        if (extra_cross > 0.0f) {
+            if (config->align_items == UI_ALIGN_CENTER) {
+                cross_offset += extra_cross * 0.5f;
+            } else if (config->align_items == UI_ALIGN_END) {
+                cross_offset += extra_cross;
+            }
+        }
 
         float leading_main = horizontal
             ? child_config->margin.left
@@ -143,9 +155,6 @@ void ui_layout_frame(
         float trailing_main = horizontal
             ? child_config->margin.right
             : child_config->margin.bottom;
-        float leading_cross = horizontal
-            ? child_config->margin.top
-            : child_config->margin.left;
 
         cursor += leading_main;
 
@@ -154,9 +163,9 @@ void ui_layout_frame(
 
         if (horizontal) {
             child_x = content_x + cursor;
-            child_y = content_y + leading_cross;
+            child_y = content_y + cross_offset;
         } else {
-            child_x = content_x + leading_cross;
+            child_x = content_x + cross_offset;
             child_y = content_y + cursor;
         }
 
