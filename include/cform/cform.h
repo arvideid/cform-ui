@@ -36,6 +36,8 @@ typedef struct {
     unsigned char a;
 } UI_Color;
 
+typedef void (*UI_ClickHandler)(UI_Frame *frame, void *user_data);
+
 typedef struct {
     UI_Size width;
     UI_Size height;
@@ -61,6 +63,11 @@ typedef struct {
     UI_Color border_color;
     float border_width;
     float corner_radius;
+
+    /* Fires on a press+release pair that ends inside this frame. A NULL
+     * handler makes the frame non-clickable but it still tracks hover. */
+    UI_ClickHandler on_click;
+    void *user_data;
 } UI_FrameConfig;
 
 UI_Context *ui_create(void);
@@ -74,6 +81,10 @@ UI_Frame *ui_frame(
 void ui_add(UI_Frame *parent, UI_Frame *child);
 
 void ui_render(UI_Context *ctx, UI_Frame *root);
+
+/* Pointer interaction state, refreshed by ui_render's event loop. */
+bool ui_is_hovered(const UI_Frame *frame);
+bool ui_is_pressed(const UI_Frame *frame);
 
 #define UI_FIXED(value) \
     ((UI_Size){ UI_SIZE_FIXED, (float)(value) })

@@ -54,6 +54,7 @@ endif()
 add_library(cform_core STATIC
     src/core/context.c
     src/core/frame.c
+    src/core/input.c
     src/core/layout.c
 )
 

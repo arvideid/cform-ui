@@ -21,3 +21,4 @@ endfunction()
 
 cform_add_test(test_layout)
 cform_add_test(test_frame)
+cform_add_test(test_input)
