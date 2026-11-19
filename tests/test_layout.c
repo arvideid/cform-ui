@@ -311,6 +311,114 @@ static void layout_align_respects_child_margin_on_cross_axis(void) {
     ui_destroy(ctx);
 }
 
+/* Root is 210 wide; three 30-wide children consume 90 and leave 120 for
+ * justify to distribute. Every expected position is an integer. */
+static void make_justify_row(UI_Context *ctx, UI_Justify justify,
+                             UI_Frame **out_a, UI_Frame **out_b,
+                             UI_Frame **out_c) {
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .justify_content = justify });
+    *out_a = ui_frame(ctx, (UI_FrameConfig){ .width = UI_FIXED(30) });
+    *out_b = ui_frame(ctx, (UI_FrameConfig){ .width = UI_FIXED(30) });
+    *out_c = ui_frame(ctx, (UI_FrameConfig){ .width = UI_FIXED(30) });
+    ui_add(root, *out_a);
+    ui_add(root, *out_b);
+    ui_add(root, *out_c);
+    ui_layout_frame(root, 0.0f, 0.0f, 210.0f, 100.0f);
+}
+
+static void layout_justify_center_shifts_children_to_midpoint(void) {
+    UI_Context *ctx = ui_create();
+    UI_Frame *a; UI_Frame *b; UI_Frame *c;
+    make_justify_row(ctx, UI_JUSTIFY_CENTER, &a, &b, &c);
+
+    CF_NEAR(a->x, 60);
+    CF_NEAR(b->x, 90);
+    CF_NEAR(c->x, 120);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_end_shifts_children_to_far_edge(void) {
+    UI_Context *ctx = ui_create();
+    UI_Frame *a; UI_Frame *b; UI_Frame *c;
+    make_justify_row(ctx, UI_JUSTIFY_END, &a, &b, &c);
+
+    CF_NEAR(a->x, 120);
+    CF_NEAR(b->x, 150);
+    CF_NEAR(c->x, 180);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_space_between_packs_edges_tight(void) {
+    UI_Context *ctx = ui_create();
+    UI_Frame *a; UI_Frame *b; UI_Frame *c;
+    make_justify_row(ctx, UI_JUSTIFY_SPACE_BETWEEN, &a, &b, &c);
+
+    CF_NEAR(a->x, 0);
+    CF_NEAR(b->x, 90);
+    CF_NEAR(c->x, 180);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_space_around_adds_half_gaps_at_edges(void) {
+    UI_Context *ctx = ui_create();
+    UI_Frame *a; UI_Frame *b; UI_Frame *c;
+    make_justify_row(ctx, UI_JUSTIFY_SPACE_AROUND, &a, &b, &c);
+
+    CF_NEAR(a->x, 20);
+    CF_NEAR(b->x, 90);
+    CF_NEAR(c->x, 160);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_space_evenly_adds_full_gaps_at_edges(void) {
+    UI_Context *ctx = ui_create();
+    UI_Frame *a; UI_Frame *b; UI_Frame *c;
+    make_justify_row(ctx, UI_JUSTIFY_SPACE_EVENLY, &a, &b, &c);
+
+    CF_NEAR(a->x, 30);
+    CF_NEAR(b->x, 90);
+    CF_NEAR(c->x, 150);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_with_fill_child_leaves_no_extra_space(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .justify_content = UI_JUSTIFY_CENTER });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){ .width = UI_FILL });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 100.0f);
+
+    CF_NEAR(a->x, 0);
+    CF_NEAR(a->width, 200);
+
+    ui_destroy(ctx);
+}
+
+static void layout_justify_space_between_single_child_behaves_like_start(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL,
+        .justify_content = UI_JUSTIFY_SPACE_BETWEEN });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){ .width = UI_FIXED(30) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->x, 0);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -329,5 +437,12 @@ int main(void) {
     CF_RUN(layout_align_end_positions_fixed_child_at_far_edge);
     CF_RUN(layout_align_stretch_grows_fixed_child_on_cross_axis);
     CF_RUN(layout_align_respects_child_margin_on_cross_axis);
+    CF_RUN(layout_justify_center_shifts_children_to_midpoint);
+    CF_RUN(layout_justify_end_shifts_children_to_far_edge);
+    CF_RUN(layout_justify_space_between_packs_edges_tight);
+    CF_RUN(layout_justify_space_around_adds_half_gaps_at_edges);
+    CF_RUN(layout_justify_space_evenly_adds_full_gaps_at_edges);
+    CF_RUN(layout_justify_with_fill_child_leaves_no_extra_space);
+    CF_RUN(layout_justify_space_between_single_child_behaves_like_start);
     return CF_REPORT();
 }

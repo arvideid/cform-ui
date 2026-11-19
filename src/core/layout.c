@@ -49,6 +49,43 @@ static float main_margin(const UI_FrameConfig *c, UI_Direction direction) {
         : c->margin.top + c->margin.bottom;
 }
 
+typedef struct {
+    float before;
+    float between;
+} JustifySpacing;
+
+/* count is >= 1 whenever this is called. AROUND and EVENLY divide by count
+ * or count+1 so halves land on both ends even for a single child. */
+static JustifySpacing justify_spacing(UI_Justify mode, int count, float extra) {
+    JustifySpacing spacing = { 0.0f, 0.0f };
+
+    switch (mode) {
+    case UI_JUSTIFY_START:
+        break;
+    case UI_JUSTIFY_CENTER:
+        spacing.before = extra * 0.5f;
+        break;
+    case UI_JUSTIFY_END:
+        spacing.before = extra;
+        break;
+    case UI_JUSTIFY_SPACE_BETWEEN:
+        if (count > 1) {
+            spacing.between = extra / (float)(count - 1);
+        }
+        break;
+    case UI_JUSTIFY_SPACE_AROUND:
+        spacing.between = extra / (float)count;
+        spacing.before = spacing.between * 0.5f;
+        break;
+    case UI_JUSTIFY_SPACE_EVENLY:
+        spacing.before = extra / (float)(count + 1);
+        spacing.between = spacing.before;
+        break;
+    }
+
+    return spacing;
+}
+
 void ui_layout_frame(
     UI_Frame *frame,
     float x,
@@ -109,7 +146,24 @@ void ui_layout_frame(
         ? clamp_non_negative((available - fixed_total) / (float)fill_count)
         : 0.0f;
 
-    float cursor = 0.0f;
+    /* Sum post-clamp main-axis consumption so justify knows what's left
+     * over once every child has settled at its resolved size. */
+    float used = config->gap * (float)(count - 1);
+
+    for (int i = 0; i < count; i++) {
+        const UI_FrameConfig *child = &frame->children[i]->config;
+        UI_Size size = main_axis_size(child, direction);
+        float raw = size.type == UI_SIZE_FIXED ? size.value : fill_size;
+        used += clamp_size(raw,
+            main_axis_min(child, direction),
+            main_axis_max(child, direction))
+              + main_margin(child, direction);
+    }
+
+    JustifySpacing justify = justify_spacing(config->justify_content, count,
+        clamp_non_negative(track_size - used));
+
+    float cursor = justify.before;
 
     for (int i = 0; i < count; i++) {
         UI_Frame *child = frame->children[i];
@@ -169,7 +223,11 @@ void ui_layout_frame(
             child_y = content_y + cursor;
         }
 
-        cursor += main_value + trailing_main + config->gap;
+        cursor += main_value + trailing_main;
+
+        if (i + 1 < count) {
+            cursor += config->gap + justify.between;
+        }
 
         /* Map the direction-relative main/cross extents back onto
          * absolute width/height for the child. */

@@ -36,6 +36,15 @@ typedef enum {
     UI_ALIGN_STRETCH
 } UI_Align;
 
+typedef enum {
+    UI_JUSTIFY_START,
+    UI_JUSTIFY_CENTER,
+    UI_JUSTIFY_END,
+    UI_JUSTIFY_SPACE_BETWEEN,
+    UI_JUSTIFY_SPACE_AROUND,
+    UI_JUSTIFY_SPACE_EVENLY
+} UI_Justify;
+
 typedef struct {
     unsigned char r;
     unsigned char g;
@@ -65,6 +74,9 @@ typedef struct {
 
     /* Cross-axis placement of each child within the parent's content box. */
     UI_Align align_items;
+
+    /* Main-axis distribution of leftover space around and between children. */
+    UI_Justify justify_content;
 
     UI_Color background;
 
