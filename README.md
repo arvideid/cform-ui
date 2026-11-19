@@ -3,13 +3,14 @@
 [![Build](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A small, declarative layout UI library in C. You describe a tree of frames —
-sizes, direction, padding, margin, gap and colors — and `cform-ui` resolves the
-layout and renders it through SDL3.
+A small, declarative layout UI library in C. You describe a tree of frames -
+sizes, direction, padding, margin, gap and colors - and `cform-ui` resolves the
+layout and renders it through SDL3, either in a native window or in a browser.
 
-> **Status:** early development. The layout core and SDL3 renderer work and the
-> example runs, but the public API is experimental and may change between
-> releases. Text, buttons and interaction are on the roadmap, not implemented.
+> **Status:** early development. The layout core, the SDL3 renderer and the
+> WebAssembly port all build and run, but the public API is experimental and
+> may change between releases. Text, buttons and interaction are on the
+> roadmap, not implemented.
 
 ## Features
 
@@ -17,16 +18,18 @@ layout and renders it through SDL3.
 - Horizontal and vertical directions with nested containers.
 - Fixed (`UI_FIXED`) and fill (`UI_FILL`) sizing on both axes.
 - Box model: padding, margin and gap.
-- Renderer-agnostic core with a single SDL3 backend.
+- One layout implementation, two backends: native SDL3 and WebAssembly.
+- Renderer-agnostic core, verified by a headless test suite.
 - Zero setup: SDL3 is fetched automatically when it is not already installed.
 
 ## Requirements
 
-- CMake **3.20**+ and a C99 compiler (GCC, Clang or MSVC)
-- [Ninja](https://ninja-build.org/) — used by the local presets
+- CMake **3.25**+ and a C99 compiler (GCC, Clang or MSVC)
+- [Ninja](https://ninja-build.org/) - used by the presets
 - SDL3, resolved from your system or downloaded via `FetchContent`
+- For the web build only: [Emscripten](https://emscripten.org/) (`emsdk`)
 
-## Build and run
+## Build and run - native
 
 ```sh
 cmake --preset dev
@@ -44,15 +47,26 @@ build/dev/bin/cform_demo.exe
 ./build/dev/bin/cform_demo
 ```
 
-The SDL3 shared library is placed next to the executable, so it runs directly.
+## Run in the browser - WebAssembly
 
-Prefer no presets? Pick a generator that matches a compiler you actually have
-(on Windows without MSVC, avoid the `NMake Makefiles` fallback):
+Activate `emsdk` first so the `EMSDK` environment variable is set (the `web`
+preset reads it), then build the same `example/demo.c` to WebAssembly:
 
 ```sh
-cmake -S . -B build -G Ninja -DCMAKE_C_COMPILER=gcc
-cmake --build build
+source ./emsdk_env.sh          # or emsdk_env.bat / .ps1 on Windows
+cmake --preset web
+cmake --build --preset web
 ```
+
+This produces `cform_demo.{html,js,wasm}` in `build/web/bin/`. Browsers refuse
+to load `.wasm` from `file://`, so serve that folder:
+
+```sh
+python -m http.server -d build/web/bin 8080
+```
+
+Open <http://localhost:8080/cform_demo.html>. The page shows the same nested
+layout and colors as the native window.
 
 ## Usage
 
@@ -81,38 +95,81 @@ ui_render(ctx, root);
 ui_destroy(ctx);
 ```
 
-A minimal, commented example - nested frames that make padding and margin
-visible - lives in [`example/demo.c`](example/demo.c).
+A minimal example - nested frames that make padding and margin visible - lives
+in [`example/demo.c`](example/demo.c).
 
 ## Layout
 
 ```
 include/cform/   Public header (the API surface)
-src/core/        Context, frame and layout logic (no SDL)
+src/core/        Context, frame and layout logic (SDL-free)
 src/renderer/    SDL3 backend: window, draw loop
-example/         Runnable demo programs
+example/         Runnable demo programs (web/ holds the browser shell)
 tests/           Headless unit tests (CTest)
-docs/            Contributor guides
 ```
 
-## Development
+## Testing
 
-Shared formatting, compiler and editor configuration is committed so every
-machine behaves the same, and a small headless test suite runs under CTest.
+The suite uses **CTest** (CMake's built-in runner) with a tiny, dependency-free
+assertion header in [`tests/cform_test.h`](tests/cform_test.h). Tests link
+against `cform_core` only - never the SDL renderer - so they run headlessly:
+no window, no display, no SDL at runtime.
 
 ```sh
 cmake --build --preset dev   # library, example and tests
 ctest --preset dev           # run the test suite
 ```
 
-See [Development Setup](docs/development-setup.md) for the VS Code / VSCodium,
-clangd, CMake presets and Conventional Commits details.
+Add a case by writing a `static void <scenario>(void)` that calls `CF_CHECK` /
+`CF_NEAR`, register it with `CF_RUN` in that suite's `main`, and add
+`cform_add_test(<suite>)` in `tests/CMakeLists.txt`. Give the case a name that
+describes the scenario. The harness is small on purpose: if the suite grows, it
+is the only file to swap for Unity or CMocka.
+
+## Editor & developer experience
+
+**CMake is the single source of truth.** The compiler, C standard, include
+paths and warning flags are defined once in `CMakeLists.txt`; clangd, the IDE,
+CI and your terminal all read the same `compile_commands.json` it produces, so
+nobody sees different diagnostics on different machines.
+
+Committed, shared configuration - `.editorconfig`, `.clang-format`,
+`.clang-tidy`, `.clangd`, `CMakePresets.json`, `.vscode/settings.json`,
+`.vscode/tasks.json` and `.vscode/extensions.json`. Personal and generated
+files (`build/`, `compile_commands.json`, `.vscode/launch.json`,
+`CMakeUserPresets.json`) are git-ignored.
+
+To set up VS Code or VSCodium:
+
+1. Install the recommended extensions when prompted - the essential one is
+   **clangd** (it can fetch its own server binary on first launch).
+2. Configure once: run the **CMake: Configure (dev)** task, or *Configure* in
+   the CMake Tools status bar. This writes `build/dev/compile_commands.json`.
+3. clangd reads that database via `.clangd`, so the Outline view, go-to-definition
+   and inline warnings match the real build. `.vscode/settings.json` disables the
+   cpptools IntelliSense engine so it does not fight clangd.
+
+`Ctrl+Shift+B` runs the default build task; **Run: demo (dev)** and **Run: demo
+(web)** build and launch the native window or the browser build. Everything is
+driven through presets, so the IDE and the command line never drift apart.
+
+## Commit messages
+
+We use [Conventional Commits](https://www.conventionalcommits.org/):
+`<type>(<scope>): <short description>`, with types `feat`, `fix`, `test`,
+`docs`, `build`, `ci`, `refactor`, `chore`. One commit is one coherent change -
+no "update", "stuff", or unrelated changes squashed together. To use the
+bundled template locally (opt-in, not forced on anyone):
+
+```sh
+git config commit.template .gitmessage
+```
 
 ## Contributing
 
-Pull requests are welcome; open an issue first for anything substantial. Use
-[Conventional Commits](https://www.conventionalcommits.org/), keep the build
-warning-free, and make `ctest` pass - CI enforces all of it. A PR template is
+Pull requests are welcome; open an issue first for anything substantial. Keep
+the build warning-free (`-Wall -Wextra -Wpedantic` / `/W4`) and make `ctest`
+pass - CI enforces both, plus the WebAssembly compile. A PR template is
 provided.
 
 ## License

@@ -33,4 +33,3 @@ CMakePresets.json export-ignore
 CMakeUserPresets.json export-ignore
 example/          export-ignore
 tests/            export-ignore
-docs/             export-ignore
