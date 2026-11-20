@@ -323,6 +323,29 @@
                {SIZE(40.0f, 20.0f), 0u, RECT(40.0f, 0.0f, 40.0f, 20.0f)},
                {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 25.0f, 40.0f, 20.0f)}}},
 
+    /* A container that declared its width breaks its lines at that width even
+     * while it is being measured, so the height it hugs is the stack of lines
+     * it will really have rather than one overflowing row. */
+    {.name = "a declared width stacks the lines it wraps into",
+     .available = AVAILABLE(CF_PX(200.0f), CF_AUTO),
+     .node_count = 4u,
+     .nodes = {{STYLE(.width = CF_PX(100.0f), .wrap = CF_WRAP), ROOT,
+                RECT(0.0f, 0.0f, 100.0f, 40.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 0.0f, 40.0f, 20.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(40.0f, 0.0f, 40.0f, 20.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 20.0f, 40.0f, 20.0f)}}},
+
+    /* Max-content asks what the items want side by side, so the width an auto
+     * wrapped container claims is the offer it shrink-fits into, not the
+     * widest line its own wrapping produced. */
+    {.name = "a wrapped container takes the width it was offered",
+     .available = AVAILABLE(CF_PX(100.0f), CF_AUTO),
+     .node_count = 4u,
+     .nodes = {{STYLE(.wrap = CF_WRAP), ROOT, RECT(0.0f, 0.0f, 100.0f, 40.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 0.0f, 40.0f, 20.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(40.0f, 0.0f, 40.0f, 20.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 20.0f, 40.0f, 20.0f)}}},
+
     {.name = "order moves an item without moving it in the tree",
      .available = AVAILABLE(CF_PX(100.0f), CF_PX(50.0f)),
      .node_count = 3u,

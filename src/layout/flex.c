@@ -132,6 +132,15 @@ static cf_size flex_resolve(const flex_context *f) {
             cross_extent += lines[l].cross;
         }
 
+        /* Max-content asks what the items want together, not what the widest
+         * line of a wrapped container becomes: a container that breaks its line
+         * at the width it was offered still claims the whole main axis for its
+         * own size, and packs that width's worth of lines across it. */
+        if (f->intrinsic == CF_INTRINSIC_MAX_CONTENT) {
+            const flex_line unbroken = {.first = 0u, .count = count};
+            main_extent = line_outer_main(f, items, &unbroken);
+        }
+
         cross_extent += f->gap_cross * (float)(line_count > 1u ? line_count - 1u : 0u);
         extents = size_from_extents(f, main_extent, cross_extent);
     } else {

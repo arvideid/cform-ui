@@ -28,13 +28,16 @@ static float line_flexing_outer_main(const flex_context *f, const flex_item *ite
  * §9.2.2: wrapping happens between items, never inside one. An intrinsic
  * measure is content-driven and has no main size to break against: max-content
  * keeps every item on one line and min-content gives each a line of its own,
- * which is how the narrowest a wrapped container can go is found.
+ * which is how the narrowest a wrapped container can go is found. A measure of
+ * a container that declared its own main size does have one to break against,
+ * and it breaks there like the arrangement pass does - that is the width the
+ * lines will really be packed into.
  */
 void collect_lines(const flex_context *f, const flex_item *items, uint32_t count, flex_line *lines,
                    uint32_t *line_count) {
     const bool wraps = f->style->wrap != CF_NO_WRAP;
     const bool one_per_line = wraps && f->measuring && f->intrinsic == CF_INTRINSIC_MIN_CONTENT;
-    const bool may_break = one_per_line || (wraps && !f->measuring);
+    const bool may_break = one_per_line || (wraps && f->main_definite);
 
     lines[0] = (flex_line){.first = 0u, .count = 0u, .outer_main = 0.0f};
     *line_count = 1u;
@@ -44,7 +47,7 @@ void collect_lines(const flex_context *f, const flex_item *items, uint32_t count
         const float gap = line->count > 0u ? f->gap_main : 0.0f;
         const float outer = item_outer_main(&items[i]);
         const bool overflow =
-            one_per_line || (!f->measuring && f->main_definite &&
+            one_per_line || (f->main_definite &&
                              line->outer_main + gap + outer - f->main_size > MAIN_FIT_TOLERANCE);
 
         if (may_break && line->count > 0u && overflow) {
