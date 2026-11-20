@@ -33,15 +33,6 @@ struct UI_HttpDownload {
 
 static struct UI_HttpDownload downloads[DOWNLOAD_CAPACITY];
 
-bool ui_http_is_url(const char *src) {
-    if (src == NULL) {
-        return false;
-    }
-
-    return SDL_strncasecmp(src, "http://", 7) == 0
-        || SDL_strncasecmp(src, "https://", 8) == 0;
-}
-
 static struct UI_HttpDownload *slot_of(const emscripten_fetch_t *fetch) {
     return (struct UI_HttpDownload *)fetch->userData;
 }

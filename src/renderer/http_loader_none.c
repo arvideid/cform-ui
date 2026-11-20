@@ -9,15 +9,6 @@
 
 #include "http_loader.h"
 
-bool ui_http_is_url(const char *src) {
-    if (src == NULL) {
-        return false;
-    }
-
-    return SDL_strncasecmp(src, "http://", 7) == 0
-        || SDL_strncasecmp(src, "https://", 8) == 0;
-}
-
 UI_HttpDownload *ui_http_start(const char *url) {
     static bool warned;
 

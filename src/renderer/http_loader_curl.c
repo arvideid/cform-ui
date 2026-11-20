@@ -29,15 +29,6 @@ struct UI_HttpDownload {
 static struct UI_HttpDownload downloads[DOWNLOAD_CAPACITY];
 static bool curl_initialized;
 
-bool ui_http_is_url(const char *src) {
-    if (src == NULL) {
-        return false;
-    }
-
-    return SDL_strncasecmp(src, "http://", 7) == 0
-        || SDL_strncasecmp(src, "https://", 8) == 0;
-}
-
 /* Appends a received chunk, growing the buffer geometrically. Returning a
  * short count makes libcurl abort the transfer, which is how size limits and
  * cancellation take effect mid-download. */
@@ -241,12 +232,14 @@ UI_HttpStatus ui_http_status(const UI_HttpDownload *download) {
         return UI_HTTP_FAILED;
     }
 
+    /* SDL_GetAtomicInt reads without modifying but takes a mutable pointer, so
+     * the const comes off here and nowhere else. */
     return (UI_HttpStatus)SDL_GetAtomicInt(
         &((struct UI_HttpDownload *)download)->status);
 }
 
 const unsigned char *ui_http_bytes(const UI_HttpDownload *download, size_t *out_len) {
-    struct UI_HttpDownload *dl = (struct UI_HttpDownload *)download;
+    const struct UI_HttpDownload *dl = download;
 
     if (out_len != NULL) {
         *out_len = 0;

@@ -12,6 +12,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include <SDL3/SDL.h>
+
 /* Opaque handle; the concrete struct lives in whichever backend is linked. */
 typedef struct UI_HttpDownload UI_HttpDownload;
 
@@ -21,8 +23,16 @@ typedef enum {
     UI_HTTP_FAILED     /* terminal error, already logged; stop asking */
 } UI_HttpStatus;
 
-/* True when src starts with http:// or https://, case-insensitive. */
-bool ui_http_is_url(const char *src);
+/* True when src starts with http:// or https://, case-insensitive. Says which
+ * strings need a transport at all, so it is not any one backend's business. */
+static inline bool ui_http_is_url(const char *src) {
+    if (src == NULL) {
+        return false;
+    }
+
+    return SDL_strncasecmp(src, "http://", 7) == 0
+        || SDL_strncasecmp(src, "https://", 8) == 0;
+}
 
 /* Begins downloading url without blocking, or returns the running download
  * when the same URL is already tracked. The handle belongs to the loader and
