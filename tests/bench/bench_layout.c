@@ -10,27 +10,29 @@
 #include "cf/layout.h"
 #include "cform_test.h"
 
-#define NODE_COUNT 10000u
+#define MAX_NODES 10000u
+#define DEEP_FIRST_NODES (MAX_NODES / 8u)
 #define COLUMNS 100u
 #define DEEP_LAYOUTS 100u
 #define GRID_LAYOUTS 3u
 #define CELL_HEIGHT 20.0f
+#define NS_PER_S 1000000000.0
+#define NS_PER_MS 1000000.0
 #define SCRATCH_CAPACITY 1048576u
-#define CLOCK_TO_MS (1000.0 / (double)CLOCKS_PER_SEC)
 
-static cf_style styles[NODE_COUNT];
-static uint32_t child_start[NODE_COUNT + 1u];
-static uint32_t child_slots[NODE_COUNT];
+static cf_style styles[MAX_NODES];
+static uint32_t child_start[MAX_NODES + 1u];
+static uint32_t child_slots[MAX_NODES];
 static cf_track columns[COLUMNS];
-static cf_rect rects[NODE_COUNT];
+static cf_rect rects[MAX_NODES];
 static cf_arena scratch;
 
-static cf_tree tree_of(void) {
+static cf_tree tree_of(uint32_t node_count) {
     return (cf_tree){
         .styles = styles,
         .child_start = child_start,
         .child_slots = child_slots,
-        .node_count = NODE_COUNT,
+        .node_count = node_count,
     };
 }
 
@@ -39,10 +41,10 @@ static cf_tree tree_of(void) {
  * branches growing into the leftover space and a seventh claiming half the
  * width: the shape a widget tree is close to, and the deep case.
  */
-static void build_deep_tree(void) {
+static void build_deep_tree(uint32_t node_count) {
     uint32_t edge = 0u;
 
-    for (uint32_t slot = 0u; slot < NODE_COUNT; ++slot) {
+    for (uint32_t slot = 0u; slot < node_count; ++slot) {
         cf_style style = cf_style_default();
         style.direction = slot % 2u == 0u ? CF_DIRECTION_ROW : CF_DIRECTION_COLUMN;
         style.column_gap = CF_PX(4.0f);
@@ -60,13 +62,13 @@ static void build_deep_tree(void) {
         child_start[slot] = edge;
 
         for (uint32_t child = 2u * slot + 1u; child <= 2u * slot + 2u; ++child) {
-            if (child < NODE_COUNT) {
+            if (child < node_count) {
                 child_slots[edge++] = child;
             }
         }
     }
 
-    child_start[NODE_COUNT] = edge;
+    child_start[node_count] = edge;
 }
 
 /*
@@ -88,7 +90,7 @@ static void build_flat_grid(void) {
     grid.row_gap = CF_PX(4.0f);
     styles[0] = grid;
 
-    for (uint32_t slot = 1u; slot < NODE_COUNT; ++slot) {
+    for (uint32_t slot = 1u; slot < MAX_NODES; ++slot) {
         cf_style cell = cf_style_default();
         cell.height = CF_PX(CELL_HEIGHT);
 
@@ -97,23 +99,73 @@ static void build_flat_grid(void) {
         }
 
         styles[slot] = cell;
-        child_start[slot] = NODE_COUNT - 1u;
+        child_start[slot] = MAX_NODES - 1u;
         child_slots[slot - 1u] = slot;
     }
 
     child_start[0] = 0u;
-    child_start[NODE_COUNT] = NODE_COUNT - 1u;
+    child_start[MAX_NODES] = MAX_NODES - 1u;
 }
 
-static double layout_repeatedly(const cf_tree *tree, cf_available offer, uint32_t layouts) {
-    const clock_t started = clock();
+static double elapsed_ms(const struct timespec *started, const struct timespec *finished) {
+    const double seconds = (double)finished->tv_sec - (double)started->tv_sec;
+    const double nanos = (double)finished->tv_nsec - (double)started->tv_nsec;
+
+    return (seconds * NS_PER_S + nanos) / NS_PER_MS;
+}
+
+/*
+ * The fastest pass rather than the average. A shared runner spends its wall
+ * time on somebody else's process, and only an uncontended pass says what the
+ * engine did; clock() would also round a small tree to whole milliseconds.
+ */
+static double layout_fastest_ms(const cf_tree *tree, cf_available offer, uint32_t layouts) {
+    double best = -1.0;
 
     for (uint32_t i = 0u; i < layouts; ++i) {
+        struct timespec started;
+        struct timespec finished;
+        timespec_get(&started, TIME_UTC);
+
         cf_arena_clear(&scratch);
         cf_layout(&scratch, tree, 0u, offer, (cf_point){0.0f, 0.0f}, rects);
+
+        timespec_get(&finished, TIME_UTC);
+        const double ms = elapsed_ms(&started, &finished);
+
+        if (best < 0.0 || ms < best) {
+            best = ms;
+        }
     }
 
-    return (double)(clock() - started) * CLOCK_TO_MS / (double)layouts;
+    return best;
+}
+
+/*
+ * A published baseline is one number, but cost per node is what shows a subtree
+ * being measured once for every level above it: with nothing caching a
+ * measurement, the total grows faster than the tree does.
+ */
+static void bench_deep_tree(cf_available offer) {
+    for (uint32_t nodes = DEEP_FIRST_NODES; nodes <= MAX_NODES; nodes *= 2u) {
+        build_deep_tree(nodes);
+        const cf_tree tree = tree_of(nodes);
+        const double ms = layout_fastest_ms(&tree, offer, DEEP_LAYOUTS);
+
+        CF_NEAR(rects[0].width, 1280.0f);
+        printf("  deep flex tree, %5u nodes: %8.3f ms per layout, %7.1f ns per node\n", nodes, ms,
+               ms * NS_PER_MS / (double)nodes);
+    }
+}
+
+static void bench_flat_grid(cf_available offer) {
+    build_flat_grid();
+    const cf_tree tree = tree_of(MAX_NODES);
+    const double ms = layout_fastest_ms(&tree, offer, GRID_LAYOUTS);
+
+    CF_CHECK(rects[2u].x > 0.0f, "the second cell sits past the first column");
+    printf("  flat grid, %5u cells: %8.3f ms per layout, %7.1f ns per cell\n", MAX_NODES, ms,
+           ms * NS_PER_MS / (double)MAX_NODES);
 }
 
 int main(void) {
@@ -121,19 +173,8 @@ int main(void) {
 
     CF_CHECK(cf_arena_init(&scratch, SCRATCH_CAPACITY), "the rigs need scratch");
 
-    build_deep_tree();
-    const cf_tree deep = tree_of();
-    const double deep_ms = layout_repeatedly(&deep, offer, DEEP_LAYOUTS);
-
-    CF_NEAR(rects[0].width, 1280.0f);
-    printf("  deep flex tree, %u nodes: %6.3f ms per layout\n", NODE_COUNT, deep_ms);
-
-    build_flat_grid();
-    const cf_tree grid = tree_of();
-    const double grid_ms = layout_repeatedly(&grid, offer, GRID_LAYOUTS);
-
-    CF_CHECK(rects[2u].x > 0.0f, "the second cell sits past the first column");
-    printf("  flat grid, %u cells: %6.3f ms per layout\n", NODE_COUNT, grid_ms);
+    bench_deep_tree(offer);
+    bench_flat_grid(offer);
 
     cf_arena_free(&scratch);
 
