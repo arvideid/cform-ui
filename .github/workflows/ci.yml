@@ -32,7 +32,7 @@ jobs:
       - name: Format
         run: |
           mapfile -t sources < <(git ls-files \
-            'include/cf/*.h' 'src/*/*.[ch]' 'tests/unit/*.[ch]' 'examples/*.c')
+            'include/cf/*.h' 'src/*/*.[ch]' 'tests/*/*.[ch]' 'examples/*.c')
           clang-format --dry-run --Werror "${sources[@]}"
 
       - name: Layer graph
@@ -40,7 +40,7 @@ jobs:
 
       - name: Static analysis
         run: |
-          mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/unit/*.c')
+          mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/*/*.c')
           # No compile database: cf_base includes nothing outside libc, so the
           # include paths below are the ones the target actually gets.
           clang-tidy --quiet --warnings-as-errors='*' "${sources[@]}" \
@@ -66,7 +66,14 @@ jobs:
         run: cmake --build build --config ${{ matrix.type }} --parallel
 
       - name: Test
-        run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure
+        run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure -LE bench
+
+      # The rigs print the numbers a reviewer reads and only fail on a geometry
+      # assertion, so they get a step of their own: a passing Test step hides
+      # stdout, and an instrumented allocator would time the sanitizer instead
+      # of the engine.
+      - name: Bench
+        run: ctest --test-dir build --build-config ${{ matrix.type }} -L bench --verbose
 
   # GCC and Clang are the only toolchains with the ASan/UBSan pair, so this is
   # one Linux job rather than a matrix row that would have to be excluded
@@ -93,4 +100,4 @@ jobs:
         run: cmake --build build-san --parallel
 
       - name: Test
-        run: ctest --test-dir build-san --output-on-failure
+        run: ctest --test-dir build-san --output-on-failure -LE bench
