@@ -63,10 +63,12 @@ keeps drawing its own background until the bytes land, and the rest of the UI
 stays responsive. Each URL is fetched once and cached; a failure is logged
 with the reason (HTTP status, TLS or CORS) and not retried every frame.
 
-Two limits worth knowing: browser requests obey CORS, so the image server must
-allow your origin, and native TLS verification uses the trust store libcurl was
-built against - if you see a certificate error, point `CURL_CA_BUNDLE` at a CA
-bundle file.
+Two limits worth knowing. Browser requests obey CORS, so the image server must
+answer with `Access-Control-Allow-Origin`; `picsum.photos` does not, so the URL
+above only resolves in a native build. Native verification asks the operating
+system's certificate store first and falls back to the trust store libcurl was
+built against - if you still get a certificate error, point `CURL_CA_BUNDLE` at
+a CA bundle file.
 
 ## Build and run - native
 

@@ -111,12 +111,13 @@ static void log_failure(const struct UI_HttpDownload *dl, CURLcode code) {
         const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);
 
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-            "the TLS trust store could not be loaded; set CURL_CA_BUNDLE to a "
-            "CA bundle file if the system default is missing");
+            "no TLS trust store is reachable; the operating system store was "
+            "requested and refused, so set CURL_CA_BUNDLE to a CA bundle file");
         /* capath is the only trust location this struct exposes; the default
          * bundle file is a build-time constant reachable via CURL_CA_BUNDLE. */
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-            "curl was built with capath=%s",
+            "curl was built with ssl_backends=%s capath=%s",
+            info->ssl_version != NULL ? info->ssl_version : "(unknown)",
             info->capath != NULL ? info->capath : "(none)");
     }
 }
@@ -137,6 +138,17 @@ static int SDLCALL transfer(void *userdata) {
     curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, write_bytes);
     curl_easy_setopt(easy, CURLOPT_WRITEDATA, dl);
     curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
+    /* Peer verification needs a trust store, and a libcurl packaged without a
+     * compiled-in capath or bundle has none to fall back on, so every HTTPS
+     * host fails with CURLE_SSL_CACERT_BADFILE. Ask for the certificates the
+     * operating system already trusts: no bundle has to ship beside the
+     * application. Backends that cannot do this reject the option, which is
+     * harmless because their compiled-in default stays in force. A
+     * CURL_CA_BUNDLE environment variable overrides both, as libcurl reads it
+     * itself. */
+#ifdef CURLSSLOPT_NATIVE_CA
+    curl_easy_setopt(easy, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
+#endif
     /* Treat 4xx/5xx as errors instead of handing an HTML error page to the
      * image decoder. */
     curl_easy_setopt(easy, CURLOPT_FAILONERROR, 1L);
