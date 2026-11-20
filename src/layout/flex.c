@@ -69,22 +69,23 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
  */
 static cf_size flex_resolve(const flex_context *f) {
     const layout_ctx *ctx = f->ctx;
-    const uint32_t count = child_count(ctx, f->slot);
-    if (count == 0u) {
+    const uint32_t capacity = child_count(ctx, f->slot);
+    if (capacity == 0u) {
         return (cf_size){0};
     }
 
     const size_t mark = cf_arena_mark(ctx->scratch);
-    flex_item *items = cf_alloc(ctx->scratch, (size_t)count * sizeof *items);
-    flex_line *lines = items != NULL ? cf_alloc(ctx->scratch, (size_t)count * sizeof *lines) : NULL;
+    flex_item *items = cf_alloc(ctx->scratch, (size_t)capacity * sizeof *items);
+    flex_line *lines =
+        items != NULL ? cf_alloc(ctx->scratch, (size_t)capacity * sizeof *lines) : NULL;
 
     if (items == NULL || lines == NULL) {
-        cf_logf(CF_LOG_LAYOUT, "layout: scratch refused a container with %u children", count);
+        cf_logf(CF_LOG_LAYOUT, "layout: scratch refused a container with %u children", capacity);
         cf_arena_rewind(ctx->scratch, mark);
         return (cf_size){0};
     }
 
-    build_items(f, items, count);
+    const uint32_t count = build_items(f, items, capacity);
 
     uint32_t line_count = 0u;
     collect_lines(f, items, count, lines, &line_count);
@@ -117,6 +118,7 @@ static cf_size flex_resolve(const flex_context *f) {
         extents = size_from_extents(f, main_extent, cross_extent);
     } else {
         arrange_items(ctx, f, items, lines, line_count);
+        place_absolute(f);
     }
 
     cf_arena_rewind(ctx->scratch, mark);

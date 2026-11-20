@@ -155,8 +155,12 @@ float item_outer_main(const flex_item *item);
 float item_outer_cross(const flex_item *item);
 float line_outer_main(const flex_context *f, const flex_item *items, const flex_line *line);
 
-/* §9.1 item 4 and §9.2.1: the item table, in the order the pass will pack it. */
-void build_items(const flex_context *f, flex_item *items, uint32_t count);
+/*
+ * §9.1 item 4 and §9.2.1: the item table for the children that stay in the
+ * flow. `capacity` is every child, because the table is allocated before the
+ * pass knows how many of them leave the flow; the count returned stays.
+ */
+uint32_t build_items(const flex_context *f, flex_item *items, uint32_t capacity);
 
 /* §9.2.1 steps 16-18: an item whose main size the pass changed is measured
  * again, because its content can wrap differently at the size it will have. */
@@ -173,5 +177,13 @@ void collect_line_cross(const flex_context *f, const flex_item *items, flex_line
 /* §9.5.2 and §9.6: place the lines, then every item inside them. */
 void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *items, flex_line *lines,
                    uint32_t line_count);
+
+/*
+ * The children that left the flow: measured against the container's content box
+ * and placed there by their insets, in declaration order. Out-of-flow children
+ * add nothing to the container's own extent, which is why a box holding only
+ * them measures as empty.
+ */
+void place_absolute(const flex_context *f);
 
 #endif

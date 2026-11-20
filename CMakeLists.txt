@@ -230,6 +230,7 @@ target_link_libraries(cf_style PUBLIC cf_base)
 add_library(cf_layout STATIC
     src/layout/layout.c
     src/layout/content.c
+    src/layout/absolute.c
     src/layout/flex.c
     src/layout/flex_item.c
     src/layout/flex_line.c

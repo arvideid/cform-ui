@@ -139,17 +139,26 @@ static void sort_by_order(const flex_context *f, flex_item *items, uint32_t coun
     }
 }
 
-void build_items(const flex_context *f, flex_item *items, uint32_t count) {
+uint32_t build_items(const flex_context *f, flex_item *items, uint32_t capacity) {
     const uint32_t first = f->ctx->tree->child_start[f->slot];
+    uint32_t count = 0u;
 
-    for (uint32_t i = 0; i < count; ++i) {
-        flex_item *item = &items[i];
-        *item = (flex_item){.slot = f->ctx->tree->child_slots[first + i]};
-        assign_margins(f, &f->ctx->tree->styles[item->slot].margin, item);
+    for (uint32_t i = 0; i < capacity; ++i) {
+        const uint32_t slot = f->ctx->tree->child_slots[first + i];
+        const cf_style *child = &f->ctx->tree->styles[slot];
+        if (child->position == CF_POSITION_ABSOLUTE) {
+            continue;
+        }
+
+        flex_item *item = &items[count++];
+        *item = (flex_item){.slot = slot};
+        assign_margins(f, &child->margin, item);
         measure_item(f, item);
     }
 
     sort_by_order(f, items, count);
+
+    return count;
 }
 
 /* §9.2.2 step 5 and §9.6.1: an item whose main size changed since it was

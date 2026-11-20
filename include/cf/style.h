@@ -52,6 +52,15 @@ typedef enum cf_align_content {
 } cf_align_content;
 
 /*
+ * Whether a child takes part in its container's flex layout. An absolute child
+ * is measured and placed against its container's content box instead of a
+ * line, which is the overlay a toolkit needs. The CSS chain of positioned
+ * ancestors is not modelled: every container is its absolute children's
+ * containing block.
+ */
+typedef enum cf_position { CF_POSITION_STATIC, CF_POSITION_ABSOLUTE } cf_position;
+
+/*
  * Margin, padding and border as tagged lengths, in the same physical order as
  * cf_edges so a paint pass can read the two side by side. Auto is a real value
  * for margin (§9.5.2 absorbs free space before justify-content gets any) and
@@ -89,10 +98,12 @@ typedef struct cf_style {
     cf_box margin;
     cf_box padding;
     cf_box border;
+    cf_box inset;
     cf_length column_gap;
     cf_length row_gap;
     float flex_grow;
     float flex_shrink;
+    cf_position position;
     cf_direction direction;
     cf_wrap wrap;
     cf_justify justify_content;
