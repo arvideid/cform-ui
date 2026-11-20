@@ -225,7 +225,17 @@ add_library(cf_style STATIC
 
 target_link_libraries(cf_style PUBLIC cf_base)
 
-set(CFORM_LAYER_TARGETS cf_base cf_style)
+# cf_layout reads styles and lengths only: no windowing, no text metrics, no
+# backend. Content it cannot see arrives through a measure callback.
+add_library(cf_layout STATIC
+    src/layout/layout.c
+    src/layout/content.c
+    src/layout/flex.c
+)
+
+target_link_libraries(cf_layout PUBLIC cf_style cf_base)
+
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout)
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}
