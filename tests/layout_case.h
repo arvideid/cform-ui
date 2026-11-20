@@ -8,7 +8,10 @@
  * rather than an owned structure and a corpus should not need a heap.
  *
  * A corpus with deeper trees than MAX_NODES raises the cap by defining it
- * before including this header; nothing else in the row format changes.
+ * before including this header; nothing else in the row format changes. The
+ * functions are inline because a tier takes the parts it needs: a hand-written
+ * corpus asks whether the whole table landed, a generated one reports its
+ * groups and asserts a floor instead.
  */
 #ifndef MAX_NODES
 #define MAX_NODES 6u
@@ -24,7 +27,15 @@
 #include "cform_test.h"
 
 #define ROOT UINT32_MAX
-#define RECT_TOLERANCE 0.01f
+
+/*
+ * The reference numbers are snapped to whole pixels by the browser that
+ * measured them; the engine returns exact fractions and leaves rounding to
+ * whoever paints. Half a pixel is therefore the widest a correct box can sit
+ * from a snapped one, so it is the grade, and a finer one would measure the
+ * divergence rather than the rules.
+ */
+#define RECT_TOLERANCE 0.5f
 
 #define ZERO_BOX {CF_PX(0.0f), CF_PX(0.0f), CF_PX(0.0f), CF_PX(0.0f)}
 #define SIDES(left, top, right, bottom) {(left), (top), (right), (bottom)}
@@ -85,7 +96,7 @@ static char mismatch[200];
  * Children are the nodes naming this one as their parent, in the order the
  * case lists them, so declaration order stays paint order.
  */
-static cf_tree tree_of(const layout_case *c) {
+static inline cf_tree tree_of(const layout_case *c) {
     uint32_t edge = 0u;
 
     for (uint32_t slot = 0u; slot < c->node_count; ++slot) {
@@ -109,13 +120,13 @@ static cf_tree tree_of(const layout_case *c) {
     };
 }
 
-static bool close_enough(float got, float want) {
+static inline bool close_enough(float got, float want) {
     const float difference = got > want ? got - want : want - got;
 
-    return difference < RECT_TOLERANCE;
+    return difference <= RECT_TOLERANCE;
 }
 
-static bool rect_is_expected(cf_rect want, cf_rect got, const char *name, uint32_t slot) {
+static inline bool rect_is_expected(cf_rect want, cf_rect got, const char *name, uint32_t slot) {
     if (close_enough(got.x, want.x) && close_enough(got.y, want.y) &&
         close_enough(got.width, want.width) && close_enough(got.height, want.height)) {
         return true;
@@ -129,7 +140,7 @@ static bool rect_is_expected(cf_rect want, cf_rect got, const char *name, uint32
 
 /* Runs one case and says whether every node landed where it was owed. The
  * mismatch is printed either way, so a caller decides what a miss is worth. */
-static bool layout_case_run(const layout_case *c) {
+static inline bool layout_case_run(const layout_case *c) {
     const cf_tree tree = tree_of(c);
     bool matched = true;
 
@@ -146,12 +157,12 @@ static bool layout_case_run(const layout_case *c) {
 }
 
 /*
- * Runs the corpus and prints what missed. A conformance tier publishes a score
- * from the return value and a unit tier only asks whether the count came back
- * whole; both read the same miss lines, so a lower score is diagnosable
- * without rerunning the corpus under a debugger.
+ * Runs every case, prints what missed and returns the count that landed. A
+ * corpus that grades itself as a whole calls this; one that reports by group
+ * loops over layout_case_run and keeps the same miss lines.
  */
-static uint32_t layout_corpus_run(const char *title, const layout_case *cases, uint32_t count) {
+static inline uint32_t layout_corpus_run(const char *title, const layout_case *cases,
+                                         uint32_t count) {
     uint32_t matched = 0u;
 
     printf("%s\n", title);
