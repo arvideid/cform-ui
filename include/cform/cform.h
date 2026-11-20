@@ -83,6 +83,9 @@ typedef struct {
     float min_height;
     float max_height;
 
+    /* Insets around the content box. Negative padding edges are meaningless and
+     * are clamped to zero when the config is stored; margins are kept exactly
+     * as written, so a negative margin may pull a child outward on purpose. */
     UI_Edges padding;
     UI_Edges margin;
 
@@ -116,14 +119,18 @@ typedef struct {
 
     /* Label drawn centered in the content box. NULL hides it. `font_size` is
      * in pixels; 0 selects the renderer default. `text_color` with a zero
-     * alpha falls back to a renderer-chosen foreground. */
+     * alpha falls back to a renderer-chosen foreground. A single line keeps the
+     * width it measures, so it is clipped to the content box at both ends
+     * instead of being drawn across the frames beside it. */
     const char *text;
     UI_Color text_color;
     float font_size;
     UI_FontStyle font_style;
 
     /* When true the label word-wraps to the content-box width and is drawn
-     * top-left instead of as a single centred line. */
+     * top-left instead of as a single centred line. Wrapping does not grow the
+     * frame: lines that do not fit the reserved height are clipped at the
+     * bottom edge, so give wrapped text enough FIXED height or a FILL parent. */
     bool wrap_text;
 
     /* Image drawn in the content box, decoded by SDL3_image (PNG, JPEG, WebP,
@@ -139,7 +146,10 @@ typedef struct {
     const char *link_url;
 
     /* When true the frame clips its overflowing children and scrolls in
-     * response to wheel input on whichever axis its direction runs. */
+     * response to wheel input on whichever axis its direction runs.
+     * The scrolling axis becomes unbounded, so a UI_FILL child there resolves
+     * to zero: give scrollable children a FIXED or PERCENT extent on that
+     * axis. The perpendicular axis still fills normally. */
     bool scrollable;
 } UI_FrameConfig;
 

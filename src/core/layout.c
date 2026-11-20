@@ -4,14 +4,16 @@ static float clamp_non_negative(float value) {
     return value < 0.0f ? 0.0f : value;
 }
 
-/* min wins when min > max so a misconfigured constraint still resolves. */
+/* min wins when min > max so a misconfigured constraint still resolves: apply
+ * the maximum first, then let the minimum have the last word, the same order
+ * the CSS box sizing rules use for a content-width conflict. */
 static float clamp_size(float value, float min, float max) {
-    if (min > 0.0f && value < min) {
-        value = min;
-    }
-
     if (max > 0.0f && value > max) {
         value = max;
+    }
+
+    if (min > 0.0f && value < min) {
+        value = min;
     }
 
     return value;

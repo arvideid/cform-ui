@@ -2,6 +2,21 @@
 
 #include "internal.h"
 
+/* Padding is an inset, so a negative edge means nothing: clamping it when the
+ * config is stored keeps the content box inside its frame and makes the layout
+ * pass and the renderer agree on one value. Margins may be negative on purpose,
+ * so they are stored untouched. */
+static UI_FrameConfig sanitize(UI_FrameConfig config) {
+    UI_Edges *pad = &config.padding;
+
+    pad->top = pad->top < 0.0f ? 0.0f : pad->top;
+    pad->right = pad->right < 0.0f ? 0.0f : pad->right;
+    pad->bottom = pad->bottom < 0.0f ? 0.0f : pad->bottom;
+    pad->left = pad->left < 0.0f ? 0.0f : pad->left;
+
+    return config;
+}
+
 UI_Frame *ui_frame(UI_Context *ctx, UI_FrameConfig config) {
     if (ctx == NULL) {
         return NULL;
@@ -13,7 +28,7 @@ UI_Frame *ui_frame(UI_Context *ctx, UI_FrameConfig config) {
         return NULL;
     }
 
-    frame->config = config;
+    frame->config = sanitize(config);
 
     /* Register the frame with the context so it is freed on ui_destroy(). */
     if (ctx->frame_count == ctx->frame_capacity) {
@@ -127,5 +142,5 @@ void ui_update(UI_Frame *frame, UI_FrameConfig config) {
         return;
     }
 
-    frame->config = config;
+    frame->config = sanitize(config);
 }

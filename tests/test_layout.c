@@ -706,6 +706,179 @@ static void layout_horizontal_scroll_offsets_x(void) {
     ui_destroy(ctx);
 }
 
+/* A min/max conflict still has to resolve, and the minimum gets the last word:
+ * a mistyped max must never shrink a child below the size its author asked to
+ * guarantee. */
+static void layout_conflicting_min_and_max_favours_min(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(100), .height = UI_FIXED(50),
+        .min_width = 80.0f, .max_width = 40.0f });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(50) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 400.0f, 50.0f);
+
+    CF_NEAR(a->width, 80);
+    CF_NEAR(b->x, 80);
+
+    ui_destroy(ctx);
+}
+
+/* The border is documented as a decoration painted inside the rect, so it must
+ * not move the content box. Pinning that here keeps the public contract from
+ * drifting into a second, undocumented inset. */
+static void layout_border_does_not_affect_content_box(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .padding = UI_ALL(10),
+        .border_color = UI_COLOR(0, 0, 0), .border_width = 8.0f });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FILL, .border_width = 4.0f });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->x, 10);
+    CF_NEAR(a->y, 10);
+    CF_NEAR(a->width, 80);
+    CF_NEAR(a->height, 80);
+
+    ui_destroy(ctx);
+}
+
+/* Parent padding and child margin are separate boxes and both count: the
+ * padding shrinks the track the child is measured against, then the margin is
+ * spent inside that track on whichever axis it runs. */
+static void layout_parent_padding_and_child_margin_both_inset(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .padding = UI_ALL(10) });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FILL, .margin = UI_ALL(15) });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 200.0f, 200.0f);
+
+    /* Content box is 180x180 at (10, 10). FILL then loses the child's 30 of
+     * margin on each axis, so 150 stays, offset 25 from the frame edge. */
+    CF_NEAR(a->x, 25);
+    CF_NEAR(a->y, 25);
+    CF_NEAR(a->width, 150);
+    CF_NEAR(a->height, 150);
+
+    ui_destroy(ctx);
+}
+
+/* A negative padding edge would slide the content box outside its frame and
+ * make the renderer and layout disagree, so ui_frame() drops it on store. */
+static void layout_negative_padding_clamps_to_zero(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .padding = UI_ALL(-20) });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FILL });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(root->config.padding.left, 0);
+    CF_NEAR(root->config.padding.bottom, 0);
+    CF_NEAR(a->x, 0);
+    CF_NEAR(a->y, 0);
+    CF_NEAR(a->width, 100);
+    CF_NEAR(a->height, 100);
+
+    ui_destroy(ctx);
+}
+
+/* Gap separates children, it never trails the last one, and whatever is left
+ * after gaps and children is what justify distributes. */
+static void layout_gap_and_justify_center_share_leftover_space(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .gap = 20.0f,
+        .justify_content = UI_JUSTIFY_CENTER });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(50) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(30), .height = UI_FIXED(50) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 50.0f);
+
+    /* Two 30-wide children and one 20 gap consume 80 of the 100 track, so
+     * justify centres the block 10 pixels in. */
+    CF_NEAR(a->x, 10);
+    CF_NEAR(b->x, 60);
+    CF_NEAR(b->x + b->width, 90);
+
+    ui_destroy(ctx);
+}
+
+/* A scrollable lays its children out at their natural extent, and that extent
+ * has to include every gap and margin the placement loop will spend, or the
+ * content stops scrolling short of its own last child. */
+static void layout_scrollable_extent_includes_gaps_and_margins(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true,
+        .padding = UI_ALL(6), .gap = 8.0f });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(40), .margin = UI_ALL(10) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(40), .margin = UI_ALL(10) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    /* 8 gap + two children at 40 with 20 of vertical margin each. */
+    CF_NEAR(root->content_height, 128);
+    CF_NEAR(a->y, 16);
+    CF_NEAR(b->y, 84);
+
+    /* The cross axis is still bounded by the viewport, margins included. */
+    CF_NEAR(a->x, 16);
+    CF_NEAR(a->width, 68);
+
+    ui_destroy(ctx);
+}
+
+/* The scrolling axis of a scrollable is unbounded, so FILL has nothing to
+ * divide: it resolves to zero rather than to the viewport. Scrollable children
+ * need a FIXED or PERCENT extent on that axis, and this pins the trap. */
+static void layout_fill_child_in_scrollable_collapses_on_main_axis(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FILL });
+    ui_add(root, a);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(a->height, 0);
+    CF_NEAR(root->content_height, 0);
+
+    /* The perpendicular axis is bounded, so FILL still works there. */
+    CF_NEAR(a->width, 100);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -745,5 +918,12 @@ int main(void) {
     CF_RUN(layout_scroll_offset_shifts_children_and_clamps);
     CF_RUN(layout_scroll_clamps_to_zero_when_content_fits);
     CF_RUN(layout_horizontal_scroll_offsets_x);
+    CF_RUN(layout_conflicting_min_and_max_favours_min);
+    CF_RUN(layout_border_does_not_affect_content_box);
+    CF_RUN(layout_parent_padding_and_child_margin_both_inset);
+    CF_RUN(layout_negative_padding_clamps_to_zero);
+    CF_RUN(layout_gap_and_justify_center_share_leftover_space);
+    CF_RUN(layout_scrollable_extent_includes_gaps_and_margins);
+    CF_RUN(layout_fill_child_in_scrollable_collapses_on_main_axis);
     return CF_REPORT();
 }
