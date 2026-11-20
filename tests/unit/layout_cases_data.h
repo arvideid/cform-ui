@@ -417,6 +417,35 @@
                {ABSOLUTE(.width = CF_PX(20.0f), .height = CF_PX(20.0f)), 0u,
                 RECT(0.0f, 0.0f, 20.0f, 20.0f)}}},
 
+    /* The static position: Flexible Box Layout §4 puts an inset-less child
+     * where its container's packing would have put it as the only box. */
+    {.name = "the container's justify-content centres an absolute child without insets",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{STYLE(.width = CF_PX(200.0f), .height = CF_PX(100.0f),
+                      .justify_content = CF_JUSTIFY_CENTER),
+                ROOT, RECT(0.0f, 0.0f, 200.0f, 100.0f)},
+               {ABSOLUTE(.width = CF_PX(40.0f), .height = CF_PX(20.0f)), 0u,
+                RECT(80.0f, 0.0f, 40.0f, 20.0f)}}},
+
+    {.name = "the container's align-items centres an absolute child across the line",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{COLUMN(.width = CF_PX(200.0f), .height = CF_PX(100.0f),
+                       .align_items = CF_ALIGN_CENTER),
+                ROOT, RECT(0.0f, 0.0f, 200.0f, 100.0f)},
+               {ABSOLUTE(.width = CF_PX(40.0f), .height = CF_PX(20.0f)), 0u,
+                RECT(80.0f, 0.0f, 40.0f, 20.0f)}}},
+
+    {.name = "an absolute child's own alignment beats the container's",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{COLUMN(.width = CF_PX(200.0f), .height = CF_PX(100.0f),
+                       .align_items = CF_ALIGN_CENTER),
+                ROOT, RECT(0.0f, 0.0f, 200.0f, 100.0f)},
+               {ABSOLUTE(.width = CF_PX(40.0f), .height = CF_PX(20.0f), .align_self = CF_ALIGN_END),
+                0u, RECT(160.0f, 0.0f, 40.0f, 20.0f)}}},
+
     /* A root has no container to place it, so its own outer edges move it in
      * the space the caller offered. */
     {.name = "the root's margin moves it and its children with it",

@@ -191,15 +191,35 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
                    uint32_t line_count);
 
 /*
+ * The flow an out-of-flow child would have taken had it stayed in the flow: the
+ * container that owns it, its content box, and how that container packs a
+ * single box. `main` is the container's `justify_content` and `cross` its
+ * `align_items`; `row` says which physical axis is the main one, and the two
+ * reversals say which edge each axis counts from - the main axis reverses with
+ * the direction, the cross axis with the wrap. A grid has no line for a child
+ * to sit in and so packs nothing: it hands over the content corner.
+ */
+typedef struct absolute_flow {
+    cf_point origin;
+    cf_available content;
+    cf_justify main;
+    cf_align cross;
+    bool row;
+    bool main_reverse;
+    bool cross_reverse;
+} absolute_flow;
+
+/*
  * The children of `slot` that leave the flow: measured against `containing`,
  * their containing block, and placed from its edges by their insets. A child
- * whose insets are all `auto` takes the static position, where the flow would
- * have put it at `origin` - the content origin of the container that owns it,
- * which is not the container that owns the block. Out-of-flow children add
- * nothing to the container's own extent, which is why a box holding only them
- * measures as empty.
+ * whose insets are all `auto` takes the static position, where `flow` says the
+ * flow would have put it - the container that owns the child, which is not the
+ * container that owns the block. Out-of-flow children add nothing to the
+ * container's own extent, which is why a box holding only them measures as
+ * empty.
  */
-void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_rect containing, cf_point origin);
+void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_rect containing,
+                    const absolute_flow *flow);
 
 /*
  * One in-flow grid item and the cells it holds. Starts are 0-based line

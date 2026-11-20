@@ -11,7 +11,7 @@
  * floor's to be raised beside. docs/conformance.md publishes the number, the
  * suites it is made of and the behaviour each miss needs.
  */
-#define CONFORMANCE_FLOOR 352u
+#define CONFORMANCE_FLOOR 383u
 
 /*
  * Written by tools/gentest from Yoga's generated fixtures: every case the

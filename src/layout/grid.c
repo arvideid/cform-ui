@@ -181,7 +181,14 @@ static cf_size grid_resolve(grid_ctx *g, bool arranging) {
             place_item(g, &items[i]);
         }
 
-        place_absolute(ctx, g->slot, g->containing, g->origin);
+        /* A grid gives an out-of-flow child no line to sit in: its packing
+         * keywords share out the tracks, never a child, so the child lands on
+         * the content corner with nothing distributed around it. */
+        const absolute_flow flow = {.origin = g->origin,
+                                    .content = g->constraint,
+                                    .main = CF_JUSTIFY_START,
+                                    .cross = CF_ALIGN_START};
+        place_absolute(ctx, g->slot, g->containing, &flow);
     }
 
     cf_arena_rewind(ctx->scratch, mark);

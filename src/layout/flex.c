@@ -64,6 +64,23 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
 }
 
 /*
+ * The line an out-of-flow child of this container would have filled had it
+ * stayed in the flow: one box, packed by the container's own keywords across
+ * the content box it was given.
+ */
+static absolute_flow sole_line(const flex_context *f) {
+    return (absolute_flow){
+        .origin = f->origin,
+        .content = f->constraint,
+        .main = f->style->justify_content,
+        .cross = f->style->align_items,
+        .row = f->row,
+        .main_reverse = f->reverse,
+        .cross_reverse = f->style->wrap == CF_WRAP_REVERSE,
+    };
+}
+
+/*
  * The pass both entries share: §9.2.1 through §9.7 over slot's children. The
  * content extent the children ask for comes back either way; arranging has
  * already placed them by then.
@@ -118,8 +135,9 @@ static cf_size flex_resolve(const flex_context *f) {
         cross_extent += f->gap_cross * (float)(line_count > 1u ? line_count - 1u : 0u);
         extents = size_from_extents(f, main_extent, cross_extent);
     } else {
+        const absolute_flow flow = sole_line(f);
         arrange_items(ctx, f, items, lines, line_count);
-        place_absolute(ctx, f->slot, f->containing, f->origin);
+        place_absolute(ctx, f->slot, f->containing, &flow);
     }
 
     cf_arena_rewind(ctx->scratch, mark);
