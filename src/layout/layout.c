@@ -100,7 +100,9 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
                     cf_available verdict, cf_point origin, cf_rect containing) {
     const cf_size border = border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, verdict);
     const cf_style *style = &ctx->tree->styles[slot];
-    const cf_point placed = relative_origin(style, constraint, origin);
+    /* A root's own margin and insets were counted before the recursion began,
+     * because nothing above it places it. */
+    const cf_point placed = slot == ctx->root ? origin : relative_origin(style, constraint, origin);
     const cf_rect box = {
         .x = placed.x, .y = placed.y, .width = border.width, .height = border.height};
 
@@ -142,6 +144,29 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
     flex_arrange(ctx, slot, &pass);
 }
 
+/*
+ * The root is the only box the engine lays out in a flow nobody owns: the
+ * caller names where it starts, and the root's own margin and insets move it
+ * from there exactly as they move a box sitting in a containing block. Every
+ * other node arrives at an origin its container has already counted its
+ * margins into, so this belongs to `cf_layout` and not to the recursion.
+ */
+static cf_point root_origin(const cf_style *style, cf_available available, cf_point origin) {
+    float percent_base = 0.0f;
+    definite_offer(available.width, &percent_base);
+
+    const cf_point margined = {.x = origin.x + cf_length_resolve(style->margin.left, percent_base),
+                               .y = origin.y + cf_length_resolve(style->margin.top, percent_base)};
+
+    if (style->position == CF_POSITION_STATIC) {
+        return margined;
+    }
+
+    return (cf_point){
+        .x = margined.x + inset_offset(style->inset.left, style->inset.right, available.width),
+        .y = margined.y + inset_offset(style->inset.top, style->inset.bottom, available.height)};
+}
+
 void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_available available,
                cf_point origin, cf_rect *rects) {
     if (scratch == NULL || tree == NULL || rects == NULL || root >= tree->node_count) {
@@ -154,5 +179,6 @@ void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_availab
      * block is never read. */
     const cf_rect nowhere = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    layout_subtree(&ctx, root, available, undecided, origin, nowhere);
+    layout_subtree(&ctx, root, available, undecided,
+                   root_origin(&tree->styles[root], available, origin), nowhere);
 }

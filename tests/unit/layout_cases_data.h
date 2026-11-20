@@ -417,6 +417,23 @@
                {ABSOLUTE(.width = CF_PX(20.0f), .height = CF_PX(20.0f)), 0u,
                 RECT(0.0f, 0.0f, 20.0f, 20.0f)}}},
 
+    /* A root has no container to place it, so its own outer edges move it in
+     * the space the caller offered. */
+    {.name = "the root's margin moves it and its children with it",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(200.0f)),
+     .node_count = 2u,
+     .nodes = {{MARGIN(EDGES(10.0f, 20.0f, 0.0f, 0.0f), .width = CF_PX(100.0f),
+                       .height = CF_PX(50.0f)),
+                ROOT, RECT(10.0f, 20.0f, 100.0f, 50.0f)},
+               {SIZE(40.0f, 20.0f), 0u, RECT(10.0f, 20.0f, 40.0f, 20.0f)}}},
+
+    {.name = "the root's inset places it in the space the caller offered",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(200.0f)),
+     .node_count = 1u,
+     .nodes = {{ABSOLUTE(.width = CF_PX(50.0f), .height = CF_PX(50.0f),
+                         .inset = SIDES(CF_PX(30.0f), CF_PX(40.0f), CF_AUTO, CF_AUTO)),
+                ROOT, RECT(30.0f, 40.0f, 50.0f, 50.0f)}}},
+
     /* Grid tracks and cells. */
     {.name = "fixed columns give each cell its width",
      .available = AVAILABLE(CF_AUTO, CF_AUTO),
