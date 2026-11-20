@@ -54,8 +54,8 @@ denominator stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-314 of the 485 ported fixtures match, 65% of what was ported and 58% of the
-whole corpus. Measured at `f015f5a`. The table is the tier's own output, so a
+341 of the 485 ported fixtures match, 70% of what was ported and 63% of the
+whole corpus. Measured at `f6a8d76`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
 The grade is half a pixel. The reference snapped every fixture edge to the
@@ -66,14 +66,14 @@ the rules.
 
 | suite | ported | match | miss |
 |-------|--------|-------|------|
-| absoluteposition | 33 | 17 | 16 |
+| absoluteposition | 33 | 18 | 15 |
 | aligncontent | 64 | 50 | 14 |
 | alignitems | 29 | 11 | 18 |
 | alignself | 5 | 4 | 1 |
 | androidnewsfeed | 1 | 1 | 0 |
 | auto | 5 | 5 | 0 |
 | border | 5 | 5 | 0 |
-| boxsizing | 23 | 15 | 8 |
+| boxsizing | 23 | 16 | 7 |
 | dimension | 2 | 2 | 0 |
 | flex | 10 | 9 | 1 |
 | flexbasisfitcontent | 5 | 4 | 1 |
@@ -87,30 +87,30 @@ the rules.
 | percentage | 24 | 20 | 4 |
 | rounding | 13 | 3 | 10 |
 | sizeoverflow | 3 | 3 | 0 |
-| staticposition | 62 | 23 | 39 |
-| **total** | **485** | **314** | **171** |
+| staticposition | 62 | 48 | 14 |
+| **total** | **485** | **341** | **144** |
 
-348 node assertions fail across those 171 cases. Only 12 of them differ from
-the reference by two pixels or less everywhere; 155 differ by more than eight.
+315 node assertions fail across those 144 cases. Only 12 of them differ from
+the reference by two pixels or less everywhere; 125 differ by more than eight.
 The grade is not what is missing - the rules are.
 
 ## What the misses need
 
-- **Where an absolute child actually goes.** 55 cases, `staticposition`'s
-  remaining 39 and 16 of `absoluteposition`, and they split on one rule: CSS
-  makes the padding box of the nearest *positioned* ancestor the containing
-  block, the engine makes every direct parent's content box one. The same rule
-  fixes the static position an inset-less absolute child lands at, where the
-  reference applies the container's `justify-content` and `align-items` to it -
-  which is what the `static_position_*_amalgamation` family measures. Relative
-  boxes already read their insets; these cases ask which ancestor the insets
-  belong to.
 - **Line packing when the container wraps.** Multiple lines have to be sized,
   then distributed by `align-content`, and `stretch` has to give the leftover
   cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 14 of
   64; 8 of `gap` are `*_wrapping` cases where a percentage row gap resolves
   against a line box that has not been packed, so wrapping is worth about 41
-  cases in total.
+  cases in total - the largest single rule left.
+- **The static position a container's alignment gives.** 29
+  cases, `staticposition`'s 14 amalgamations and 15 of `absoluteposition`, all
+  asking for the same thing: the static position is not the content origin but
+  wherever `justify-content` and `align-items` would have put the child had it
+  stayed in the flow - `(container - child) / 2` for a centred container,
+  `container - child - margin` for an end-packed one. The engine places it at
+  the origin plus its own margin and stops there; the containing block itself
+  is the nearest positioned ancestor's padding box now, which is what lifted
+  `staticposition` from 23 to 48.
 - **Reverse directions and their edges.** `row-reverse` and `column-reverse`
   flip which edge a margin, border or padding offsets from, and every one of
   `flexdirection`'s 21 remaining misses names a start or end edge of one of
@@ -121,7 +121,7 @@ The grade is not what is missing - the rules are.
   child bigger than the parent), 7 of `alignitems` and 1 of `minmaxdimension`.
 - **`align-items: baseline`** and the self variant, which need a baseline the
   engine can only get from a measure callback. 11 cases.
-- **`box-sizing: content-box`.** `cf_style` has no field for it, so the 8
+- **`box-sizing: content-box`.** `cf_style` has no field for it, so the 7
   `box_sizing_border_box_*` cases that mix the two arrive already misstated -
   as do the 23 fixtures the port skips for want of it.
 - **Edge rounding.** Rounding a box means rounding both its edges, so its size
@@ -133,7 +133,7 @@ The grade is not what is missing - the rules are.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 314 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 341 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
