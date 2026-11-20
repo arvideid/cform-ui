@@ -8,9 +8,10 @@ nodes; systems sweep parallel arrays to resolve styles, lay the tree out and
 emit draw commands. No DSL, no C++, no per-node vtables.
 
 > **Status:** `1.0.0` in development. The arena, the style vocabulary and the
-> layout engine are built and conformance-tested; text, paint, the node tree,
-> widgets and the backend do not exist yet. The 0.2 frame API on `main` is not
-> compatible and has no aliases — `cf_` names are the contract from here.
+> layout engine are built and scored against a published conformance number;
+> text, paint, the node tree, widgets and the backend do not exist yet. The 0.2
+> frame API on `main` is not compatible and has no aliases — `cf_` names are the
+> contract from here.
 
 ## What is usable today
 
@@ -108,8 +109,9 @@ src/layout/     Flex, grid, absolute, intrinsic measurement, measure callback
 src/*/internal.h  Types shared across src/ but not published
 examples/       Standalone programs, off unless CFORM_BUILD_EXAMPLES is on
 tests/unit/     One file per layer, scenario-named cases
+tests/conformance/  Yoga's fixtures as data, scored against a published number
 tests/bench/    Throughput rigs at the size the budget names
-tools/          The include-graph check CI runs
+tools/          The include-graph check CI runs, and the corpus generator
 ```
 
 Dependency direction is enforced by one CMake target per layer and by
@@ -123,12 +125,19 @@ you can use today.
 Layout math is testable without a window, so it is tested that way.
 [`tests/unit/layout_cases.c`](tests/unit/layout_cases.c) runs a corpus of
 scenarios kept as data — a tree of styles, the offer the pass starts from, and
-the border box every node must land in — and prints one line per case, so a
-failure names the node and shows both rects. Add a row to
+the border box every node must land in — and prints only what missed: the node,
+the rect it got, the rect it was owed. Add a row to
 [`tests/unit/layout_cases_data.h`](tests/unit/layout_cases_data.h) rather than
 a function when a rule needs covering. Assertions come from the tiny,
 dependency-free [`tests/cform_test.h`](tests/cform_test.h); the harness is
 small on purpose.
+
+[`tests/conformance/yoga_cases.c`](tests/conformance/yoga_cases.c) runs the
+other tier: the same row format filled with 485 of Yoga's flexbox fixtures,
+which are HTML as a reference browser measured it, ported to this engine's
+style by [`tools/gentest.py`](tools/gentest.py). It reports a score and asserts
+a floor that only moves up, so a fixture that regresses goes red while the ones
+that have never passed stay counted rather than deleted.
 
 [`tests/bench/bench_layout.c`](tests/bench/bench_layout.c) is the bench tier:
 two 10,000-node rigs that print milliseconds per layout and assert only that the
@@ -147,6 +156,10 @@ at it, never by mocking the backend or asserting pixels.
 
 [`docs/bench.md`](docs/bench.md) publishes the layout baseline: what the rigs
 cost, how the cost grows with the tree, and why no number is asserted in CI.
+
+[`docs/conformance.md`](docs/conformance.md) publishes the flexbox score: which
+fixtures were ported and why the rest were not, how many match per suite, and
+the behaviour each miss needs.
 
 ## Editor and developer experience
 
