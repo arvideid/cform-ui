@@ -16,8 +16,9 @@
 /* Foreground used when a labelled frame leaves text_color unset. */
 static const UI_Color default_text_color = { 9, 9, 11, 255 };
 
-/* Probed in order at startup; the first that opens wins. Emscripten has no
- * system font paths, so text silently stays hidden in the browser build. */
+/* Probed in order at startup; the first that opens wins. The bundled Lato is
+ * last so every platform ends with a readable face, and it is the only one the
+ * browser can reach, where there is no system font filesystem. */
 static const char *const font_candidates[] = {
     "C:/Windows/Fonts/segoeui.ttf",
     "C:/Windows/Fonts/arial.ttf",
@@ -25,6 +26,7 @@ static const char *const font_candidates[] = {
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/TTF/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "assets/fonts/Lato-Regular.ttf",
 };
 
 typedef struct {
@@ -56,12 +58,21 @@ typedef struct {
 /* Renderer-owned caches. The path is NULL until a font loads; entries live
  * for the whole ui_render() call and are dropped before the window closes. */
 static const char *g_font_path;
+static char g_font_resolved[1024];
 static FontEntry g_font_cache[FONT_CACHE_CAPACITY];
 static int g_font_cache_count;
 static TextEntry g_text_cache[TEXT_CACHE_CAPACITY];
 static int g_text_cache_count;
 static ImageEntry g_image_cache[IMAGE_CACHE_CAPACITY];
 static int g_image_cache_count;
+
+/* Ratio of device pixels to layout points for the active display. Text is
+ * rasterized at `logical * scale` so the texture maps 1:1 onto the backbuffer
+ * that SDL_WINDOW_HIGH_PIXEL_DENSITY allocated; every other draw stays in
+ * logical points and relies on SDL_SetRenderScale to lift it up. The caches
+ * key on the rasterized value, so a mid-run DPI change simply adds new
+ * entries rather than corrupting old ones. */
+static float g_display_scale = 1.0f;
 
 #define SCROLLBAR_SIZE 10.0f
 
@@ -208,8 +219,11 @@ static TTF_Font *get_font(float size, UI_FontStyle style) {
         return NULL;
     }
 
+    float raster_size = size * g_display_scale;
+
     for (int i = 0; i < g_font_cache_count; i++) {
-        if (g_font_cache[i].size == size && g_font_cache[i].style == style) {
+        if (g_font_cache[i].size == raster_size
+            && g_font_cache[i].style == style) {
             return g_font_cache[i].font;
         }
     }
@@ -221,7 +235,7 @@ static TTF_Font *get_font(float size, UI_FontStyle style) {
         g_font_cache_count = 0;
     }
 
-    TTF_Font *font = TTF_OpenFont(g_font_path, size);
+    TTF_Font *font = TTF_OpenFont(g_font_path, raster_size);
 
     if (font == NULL) {
         return NULL;
@@ -229,7 +243,7 @@ static TTF_Font *get_font(float size, UI_FontStyle style) {
 
     TTF_SetFontStyle(font, ttf_style(style));
 
-    g_font_cache[g_font_cache_count].size = size;
+    g_font_cache[g_font_cache_count].size = raster_size;
     g_font_cache[g_font_cache_count].style = style;
     g_font_cache[g_font_cache_count].font = font;
     g_font_cache_count++;
@@ -237,8 +251,8 @@ static TTF_Font *get_font(float size, UI_FontStyle style) {
     return font;
 }
 
-/* Picks the first readable system font and keeps it open in the cache at the
- * default size. Silent no-op if none exists on this machine. */
+/* Picks the first readable font and keeps it open in the cache at the default
+ * size. Silent no-op if none exists on this machine. */
 static void probe_font(void) {
     const size_t count = sizeof(font_candidates) / sizeof(font_candidates[0]);
 
@@ -247,18 +261,44 @@ static void probe_font(void) {
 
         if (font != NULL) {
             g_font_path = font_candidates[i];
-            g_font_cache[0].size = DEFAULT_FONT_SIZE;
-            g_font_cache[0].style = UI_FONT_NORMAL;
-            g_font_cache[0].font = font;
-            g_font_cache_count = 1;
-            return;
+        } else {
+            /* Relative paths resolve against the executable directory, where
+             * the build copies the demo assets and where the browser mounts
+             * its preloaded filesystem. */
+            const char *base = SDL_GetBasePath();
+
+            if (base == NULL) {
+                continue;
+            }
+
+            SDL_snprintf(
+                g_font_resolved, sizeof g_font_resolved, "%s%s", base,
+                font_candidates[i]);
+            SDL_free((void *)base);
+            font = TTF_OpenFont(g_font_resolved, DEFAULT_FONT_SIZE);
+            g_font_path = font != NULL ? g_font_resolved : NULL;
         }
+
+        if (font == NULL) {
+            continue;
+        }
+
+        g_font_cache[0].size = DEFAULT_FONT_SIZE;
+        g_font_cache[0].style = UI_FONT_NORMAL;
+        g_font_cache[0].font = font;
+        g_font_cache_count = 1;
+
+        return;
     }
 }
 
 /* Returns the cached texture for (text, size, color, style, wrap_width),
  * rebuilding on any change. Wrapped labels get a new entry per width, so a
- * full cache is flushed and rebuilt rather than silently dropping the text. */
+ * full cache is flushed and rebuilt rather than silently dropping the text.
+ * `size` and `wrap_width` are in logical points; the bitmap is baked at
+ * device resolution so SDL's render scale maps it 1:1 onto the backbuffer.
+ * The reported dimensions come back in logical points so draw_text can place
+ * them without knowing about the DPI factor. */
 static SDL_Texture *get_text_texture(
     SDL_Renderer *renderer,
     const char *text,
@@ -269,14 +309,19 @@ static SDL_Texture *get_text_texture(
     int *out_w,
     int *out_h
 ) {
+    float raster_size = size * g_display_scale;
+    int raster_wrap = wrap_width > 0
+        ? (int)((float)wrap_width * g_display_scale)
+        : 0;
+
     for (int i = 0; i < g_text_cache_count; i++) {
         TextEntry *e = &g_text_cache[i];
 
-        if (e->text == text && e->size == size && e->style == style &&
-            e->wrap_width == wrap_width &&
-            memcmp(&e->color, &color, sizeof color) == 0) {
-            *out_w = e->width;
-            *out_h = e->height;
+        if (e->text == text && e->size == raster_size && e->style == style
+            && e->wrap_width == raster_wrap
+            && memcmp(&e->color, &color, sizeof color) == 0) {
+            *out_w = (int)((float)e->width / g_display_scale);
+            *out_h = (int)((float)e->height / g_display_scale);
             return e->texture;
         }
     }
@@ -295,8 +340,8 @@ static SDL_Texture *get_text_texture(
     }
 
     SDL_Color fg = { color.r, color.g, color.b, color.a };
-    SDL_Surface *surface = wrap_width > 0
-        ? TTF_RenderText_Blended_Wrapped(font, text, 0, fg, wrap_width)
+    SDL_Surface *surface = raster_wrap > 0
+        ? TTF_RenderText_Blended_Wrapped(font, text, 0, fg, raster_wrap)
         : TTF_RenderText_Blended(font, text, 0, fg);
 
     if (surface == NULL) {
@@ -314,16 +359,16 @@ static SDL_Texture *get_text_texture(
 
     TextEntry *slot = &g_text_cache[g_text_cache_count++];
     slot->text = text;
-    slot->size = size;
+    slot->size = raster_size;
     slot->color = color;
     slot->style = style;
-    slot->wrap_width = wrap_width;
+    slot->wrap_width = raster_wrap;
     slot->texture = texture;
     slot->width = w;
     slot->height = h;
 
-    *out_w = w;
-    *out_h = h;
+    *out_w = (int)((float)w / g_display_scale);
+    *out_h = (int)((float)h / g_display_scale);
 
     return texture;
 }
@@ -692,8 +737,11 @@ static void draw_image(
         return;
     }
 
-    float iw = (float)img->width;
-    float ih = (float)img->height;
+    /* Texture dims are device pixels; convert to logical points so the fit
+     * math lives in the same space as the content box. UI_IMAGE_CENTER then
+     * lands 1:1 on the backbuffer once SDL applies the render scale. */
+    float iw = (float)img->width / g_display_scale;
+    float ih = (float)img->height / g_display_scale;
     SDL_FRect dst;
 
     switch (config->image_fit) {
@@ -739,6 +787,10 @@ static void draw_text(
     float content_w = frame->width - config->padding.left - config->padding.right;
     float content_h = frame->height - config->padding.top - config->padding.bottom;
 
+    if (content_w <= 0.0f || content_h <= 0.0f) {
+        return;
+    }
+
     int wrap_width = config->wrap_text ? (int)content_w : 0;
 
     int w = 0;
@@ -764,7 +816,19 @@ static void draw_text(
         };
     }
 
+    /* A label keeps the size it was measured at: an unwrapped one is as wide as
+     * the string needs, a wrapped one as tall as its line count needs, so either
+     * can leave the box the layout handed it — a FILL box narrows with the
+     * window, and a fixed height stops counting lines. Clipping to the content
+     * box keeps a label inside the space layout reserved for it, exactly as
+     * draw_image does, instead of overprinting the frames stacked below it. */
+    SDL_Rect clip = { (int)content_x, (int)content_y, (int)content_w, (int)content_h };
+    SDL_Rect previous;
+    bool had_clip = push_clip(renderer, clip, &previous);
+
     SDL_RenderTexture(renderer, texture, NULL, &dst);
+
+    pop_clip(renderer, had_clip, &previous);
 }
 
 static void ui_draw_frame(
@@ -976,11 +1040,17 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
 
+    /* HIGH_PIXEL_DENSITY gives the backbuffer the display's real pixel grid.
+     * Without it, SDL hands us a point-sized surface that the compositor
+     * stretches to fit — the source of the reported blur on Windows at
+     * fractional scaling and on every browser canvas above devicePixelRatio
+     * of 1. Layout continues to run in logical points; SDL_SetRenderScale
+     * bridges the two on every draw. */
     if (SDL_CreateWindowAndRenderer(
             "cform-ui",
             ctx->window_width,
             ctx->window_height,
-            SDL_WINDOW_RESIZABLE,
+            SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY,
             &window,
             &renderer) == false) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
@@ -991,6 +1061,14 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
      * paints transparent backgrounds solid black. Blending must be on for
      * zero-alpha frames to stay transparent and for the scrollbar thumb. */
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    float initial_scale = SDL_GetWindowDisplayScale(window);
+
+    if (initial_scale > 0.0f) {
+        g_display_scale = initial_scale;
+    }
+
+    SDL_SetRenderScale(renderer, g_display_scale, g_display_scale);
 
     if (TTF_Init() == true) {
         probe_font();
@@ -1010,9 +1088,21 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
         int height = 0;
         SDL_GetWindowSize(window, &width, &height);
 
+        float display_scale = SDL_GetWindowDisplayScale(window);
+
+        if (display_scale > 0.0f && display_scale != g_display_scale) {
+            g_display_scale = display_scale;
+            SDL_SetRenderScale(renderer, display_scale, display_scale);
+        }
+
         SDL_Event event;
 
         while (SDL_PollEvent(&event) != 0) {
+            /* Motion and button coordinates arrive in device pixels whenever
+             * the renderer carries a scale. Convert once so the rest of the
+             * loop, and the hit tests below, can assume logical points. */
+            SDL_ConvertEventToRenderCoordinates(renderer, &event);
+
             switch (event.type) {
             case SDL_EVENT_QUIT:
                 running = false;

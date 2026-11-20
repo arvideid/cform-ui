@@ -212,8 +212,9 @@ if(CFORM_BUILD_EXAMPLES)
     add_executable(cform_demo example/demo.c)
     target_link_libraries(cform_demo PRIVATE cform)
 
-    # The demo loads images relative to its own directory; ship the assets
-    # beside the executable so SDL_GetBasePath finds them from any CWD.
+    # The renderer probes `assets/fonts/…` as a last-resort font candidate.
+    # Ship the directory beside the executable so SDL_GetBasePath finds it
+    # from any CWD; the browser build mounts it into the virtual FS below.
     add_custom_command(TARGET cform_demo POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_CURRENT_SOURCE_DIR}/example/assets
