@@ -269,7 +269,7 @@ if(CFORM_BUILD_EXAMPLES)
             "-sALLOW_MEMORY_GROWTH=1"
             "-sFETCH=1"
             "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/example/assets@/assets"
-            "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/example/web/index.html"
+            "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/example/web/shell.html"
         )
         # --shell-file requires the linker output to end in .html; emcc then
         # emits cform_demo.{html,js,wasm} side-by-side.

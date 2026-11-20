@@ -111,7 +111,11 @@ python -m http.server -d build/web/bin 8080
 ```
 
 Open <http://localhost:8080/cform_demo.html>. The page shows the same nested
-layout and colors as the native window.
+layout and colors as the native window, at whatever size the viewport happens
+to be: `example/web/shell.html` gives the canvas the whole page, and the render
+loop lays out again every frame, so nothing has to be resized by hand. That
+file is the `--shell-file` input, so page-level changes belong there; the build
+directory only ever holds the generated copy, which Emscripten minifies.
 
 ## Usage
 

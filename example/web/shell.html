@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>CForm UI demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#12141a">
+    <style>
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #12141a;
+        }
+
+        /* On a phone the URL bar overlays the bottom of a percentage-height
+         * box, so the last rows of the UI hide behind it. dvh is the dynamic
+         * viewport height and tracks the bar; browsers that predate it keep the
+         * vh declaration and behave as before. */
+        body {
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* The canvas is the whole application. No pixel size is written here on
+         * purpose: SDL reads this element's CSS box, sizes the drawing buffer to
+         * it times devicePixelRatio, and posts a resize whenever the box
+         * changes, which the render loop answers with a fresh layout pass. So
+         * the page is responsive at any viewport and the C code owns every
+         * measurement. Writing width/height attributes here would be worse than
+         * useless - Emscripten_CreateWindow overwrites them from the CSS box the
+         * moment the window is created. touch-action: none keeps drags on the
+         * scrollbars instead of panning the document, and the outline is dropped
+         * because the renderer draws its own keyboard focus ring. */
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #12141a;
+            outline: none;
+            touch-action: none;
+        }
+
+        #status {
+            position: fixed;
+            left: 16px;
+            bottom: 16px;
+            font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+            color: #6c7280;
+            pointer-events: none;
+        }
+
+        #status[hidden] {
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas" tabindex="0" aria-label="CForm UI demo"></canvas>
+    <div id="status" role="status" aria-live="polite">Loading CForm UI...</div>
+
+    <script>
+        /* This page owns three things only: the canvas element, the loading and
+         * failure message, and the browser hooks that have no equivalent in C.
+         * Windows, layout, drawing and interaction belong to the library.
+         *
+         * Emscripten minifies this file on its way into the build directory, so
+         * names are rewritten and anything it cannot see read is deleted. Keep
+         * every reference inside this one scope and derive the state that
+         * matters from the DOM, never from a variable the minifier is free to
+         * consider dead. */
+        var Module = (function () {
+            'use strict';
+
+            var canvas = document.getElementById('canvas');
+            var status = document.getElementById('status');
+
+            function report(message) {
+                status.textContent = message;
+                status.hidden = message === '';
+            }
+
+            canvas.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+            });
+
+            /* A missing .wasm or .data file rejects the loader's promise instead
+             * of aborting, so without this the loading message would sit there
+             * forever. The status line is the record of how far startup got: if
+             * it is still visible the runtime never came up, and only then does a
+             * rejection become something to show the user. */
+            window.addEventListener('unhandledrejection', function (event) {
+                if (!status.hidden) {
+                    report('CForm UI failed to load. Serve this directory over HTTP so the .js, .wasm and .data files stay beside it.');
+                    console.error('CForm UI failed to load:', event.reason);
+                }
+            });
+
+            /* The loader reads a global Module, so the configuration itself
+             * cannot stay inside this function. Only the properties this build
+             * consumes are set: canvas for Browser.getCanvas, setStatus for the
+             * package download and the keep-alive count, print and printErr for
+             * stdout and stderr, and the two hooks that end the loading message.
+             * requestFullscreen is absent on purpose because SDL3's Emscripten
+             * backend installs its own. */
+            return {
+                canvas: canvas,
+
+                setStatus: report,
+
+                print: function (text) {
+                    console.log(text);
+                },
+
+                printErr: function (text) {
+                    console.error(text);
+                },
+
+                /* Called once the wasm instance and its imports exist, before
+                 * main() runs. The demo then keeps its own loop alive, so an
+                 * empty message means the overlay has done its job. */
+                onRuntimeInitialized: function () {
+                    report('');
+                },
+
+                onAbort: function (reason) {
+                    report('CForm UI failed to start: ' + reason);
+                }
+            };
+        })();
+    </script>
+
+    {{{ SCRIPT }}}
+</body>
+
+</html>
