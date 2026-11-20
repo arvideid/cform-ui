@@ -218,7 +218,14 @@ add_library(cf_base STATIC
     src/base/store.c
 )
 
-set(CFORM_LAYER_TARGETS cf_base)
+# cf_style is libc and cf_base only; it knows no node, no geometry, no backend.
+add_library(cf_style STATIC
+    src/style/style.c
+)
+
+target_link_libraries(cf_style PUBLIC cf_base)
+
+set(CFORM_LAYER_TARGETS cf_base cf_style)
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}

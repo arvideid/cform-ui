@@ -1,0 +1,124 @@
+#include "cf/style.h"
+#include "cform_test.h"
+
+static void percent_resolves_against_the_reference_it_is_given(void) {
+    CF_NEAR(cf_length_resolve(CF_PERCENT(25.0f), 200.0f), 50.0f);
+    CF_NEAR(cf_length_resolve(CF_PERCENT(25.0f), 100.0f), 25.0f);
+    CF_NEAR(cf_length_resolve(CF_PX(12.5f), 4096.0f), 12.5f);
+}
+
+static void auto_and_fr_hold_no_length(void) {
+    CF_CHECK(cf_length_is_auto(CF_AUTO), "auto is the length that asks for nothing");
+    CF_CHECK(!cf_length_is_auto(CF_PX(0.0f)), "zero pixels is not auto");
+    CF_NEAR(cf_length_resolve(CF_AUTO, 300.0f), 0.0f);
+    CF_NEAR(cf_length_resolve(CF_FR(1.0f), 300.0f), 0.0f);
+}
+
+static void clamp_lets_the_minimum_have_the_last_word(void) {
+    CF_NEAR(cf_size_clamp(100.0f, CF_PX(120.0f), CF_PX(80.0f), CF_AUTO), 120.0f);
+    CF_NEAR(cf_size_clamp(100.0f, CF_PX(20.0f), CF_PX(80.0f), CF_AUTO), 80.0f);
+    CF_NEAR(cf_size_clamp(100.0f, CF_AUTO, CF_AUTO, CF_AUTO), 100.0f);
+}
+
+static void clamp_bounds_are_lengths_too(void) {
+    CF_NEAR(cf_size_clamp(100.0f, CF_AUTO, CF_PERCENT(50.0f), CF_PX(120.0f)), 60.0f);
+    CF_NEAR(cf_size_clamp(10.0f, CF_PERCENT(50.0f), CF_AUTO, CF_PX(120.0f)), 60.0f);
+    /* Against an extent nobody has sized yet a bound bounds nothing, so the
+     * value survives instead of collapsing to zero. */
+    CF_NEAR(cf_size_clamp(100.0f, CF_PERCENT(50.0f), CF_AUTO, CF_AUTO), 100.0f);
+}
+
+static void clamp_reads_a_negative_extent_as_zero(void) {
+    CF_NEAR(cf_size_clamp(-24.0f, CF_AUTO, CF_AUTO, CF_AUTO), 0.0f);
+    /* The minimum is still a floor the caller asked for, so it wins over the
+     * zero floor rather than being clamped away. */
+    CF_NEAR(cf_size_clamp(-24.0f, CF_PX(8.0f), CF_AUTO, CF_AUTO), 8.0f);
+}
+
+static void a_declaration_holds_a_length_only_when_it_can_be_measured(void) {
+    float value = -1.0f;
+
+    CF_CHECK(cf_length_of(CF_PX(8.0f), CF_AUTO, &value), "pixels are always a length");
+    CF_NEAR(value, 8.0f);
+
+    value = -1.0f;
+    CF_CHECK(cf_length_of(CF_PERCENT(25.0f), CF_PX(200.0f), &value),
+             "a percentage of a sized extent is a length");
+    CF_NEAR(value, 50.0f);
+
+    value = 0.0f;
+    CF_CHECK(!cf_length_of(CF_PERCENT(25.0f), CF_AUTO, &value),
+             "a percentage of an extent still being measured is not");
+    CF_NEAR(value, 0.0f);
+
+    CF_CHECK(!cf_length_of(CF_PERCENT(25.0f), CF_PERCENT(200.0f), &value),
+             "a percentage of a percentage describes no box");
+    CF_CHECK(!cf_length_of(CF_AUTO, CF_PX(200.0f), &value), "auto asks for nothing");
+    CF_CHECK(!cf_length_of(CF_FR(1.0f), CF_PX(200.0f), &value),
+             "a share of leftover space is not a measurement");
+}
+
+static void a_box_resolves_every_side_against_the_inline_size(void) {
+    const cf_box padding = {
+        .left = CF_PX(4.0f),
+        .top = CF_PERCENT(10.0f),
+        .right = CF_AUTO,
+        .bottom = CF_PERCENT(50.0f),
+    };
+
+    const cf_edges resolved = cf_box_resolve(padding, 100.0f);
+
+    CF_NEAR(resolved.left, 4.0f);
+    /* Both percentages read the container's width, never the axis they sit on. */
+    CF_NEAR(resolved.top, 10.0f);
+    CF_NEAR(resolved.right, 0.0f);
+    CF_NEAR(resolved.bottom, 50.0f);
+}
+
+static void direction_separates_the_axis_from_the_packing_edge(void) {
+    CF_CHECK(cf_direction_is_row(CF_DIRECTION_ROW), "row packs horizontally");
+    CF_CHECK(cf_direction_is_row(CF_DIRECTION_ROW_REVERSE), "row-reverse still packs horizontally");
+    CF_CHECK(!cf_direction_is_row(CF_DIRECTION_COLUMN), "column packs vertically");
+    CF_CHECK(!cf_direction_is_row(CF_DIRECTION_COLUMN_REVERSE), "column-reverse packs vertically");
+
+    CF_CHECK(!cf_direction_is_reverse(CF_DIRECTION_ROW), "row packs from the leading edge");
+    CF_CHECK(cf_direction_is_reverse(CF_DIRECTION_ROW_REVERSE),
+             "row-reverse packs from the far edge");
+    CF_CHECK(!cf_direction_is_reverse(CF_DIRECTION_COLUMN), "column packs from the leading edge");
+    CF_CHECK(cf_direction_is_reverse(CF_DIRECTION_COLUMN_REVERSE),
+             "column-reverse packs from the far edge");
+}
+
+static void default_holds_the_css_initial_values_zero_cannot_express(void) {
+    const cf_style unset = (cf_style){0};
+    const cf_style style = cf_style_default();
+
+    CF_NEAR(style.flex_shrink, 1.0f);
+    CF_NEAR(unset.flex_shrink, 0.0f);
+    /* The zero margin is auto, which would let an untouched item absorb every
+     * pixel of leftover space beside it; CSS's initial margin is zero. */
+    CF_CHECK(cf_length_is_auto(unset.margin.left), "the zero margin asks for space");
+    CF_CHECK(!cf_length_is_auto(style.margin.left), "the default margin is a length");
+    CF_NEAR(cf_length_resolve(style.margin.left, 300.0f), 0.0f);
+    CF_NEAR(cf_length_resolve(style.margin.bottom, 300.0f), 0.0f);
+    CF_CHECK(style.flex_grow == unset.flex_grow, "nothing grows until asked");
+    CF_CHECK(style.direction == CF_DIRECTION_ROW, "the zero direction is a row");
+    CF_CHECK(style.wrap == CF_NO_WRAP, "the zero style lays one line");
+    CF_CHECK(style.align_items == CF_ALIGN_AUTO, "items inherit the container's alignment");
+    CF_CHECK(cf_length_is_auto(style.width) && cf_length_is_auto(style.height),
+             "the zero size hugs its content on both axes");
+}
+
+int main(void) {
+    printf("style\n");
+    CF_RUN(percent_resolves_against_the_reference_it_is_given);
+    CF_RUN(auto_and_fr_hold_no_length);
+    CF_RUN(clamp_lets_the_minimum_have_the_last_word);
+    CF_RUN(clamp_bounds_are_lengths_too);
+    CF_RUN(clamp_reads_a_negative_extent_as_zero);
+    CF_RUN(a_declaration_holds_a_length_only_when_it_can_be_measured);
+    CF_RUN(a_box_resolves_every_side_against_the_inline_size);
+    CF_RUN(direction_separates_the_axis_from_the_packing_edge);
+    CF_RUN(default_holds_the_css_initial_values_zero_cannot_express);
+    return CF_REPORT();
+}
