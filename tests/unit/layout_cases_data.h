@@ -384,7 +384,7 @@
     {.name = "an absolute child does not size its container",
      .available = AVAILABLE(CF_AUTO, CF_AUTO),
      .node_count = 2u,
-     .nodes = {{cf_style_default(), ROOT, RECT(0.0f, 0.0f, 0.0f, 0.0f)},
+     .nodes = {{STYLE(), ROOT, RECT(0.0f, 0.0f, 0.0f, 0.0f)},
                {ABSOLUTE(.width = CF_PX(50.0f), .height = CF_PX(50.0f)), 0u,
                 RECT(0.0f, 0.0f, 50.0f, 50.0f)}}},
 
