@@ -54,8 +54,8 @@ denominator stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-300 of the 485 ported fixtures match, 62% of what was ported and 55% of the
-whole corpus. Measured at `8d066b6`. The table is the tier's own output, so a
+314 of the 485 ported fixtures match, 65% of what was ported and 58% of the
+whole corpus. Measured at `f015f5a`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
 The grade is half a pixel. The reference snapped every fixture edge to the
@@ -77,57 +77,63 @@ the rules.
 | dimension | 2 | 2 | 0 |
 | flex | 10 | 9 | 1 |
 | flexbasisfitcontent | 5 | 4 | 1 |
-| flexdirection | 53 | 25 | 28 |
+| flexdirection | 53 | 32 | 21 |
 | flexwrap | 23 | 5 | 18 |
 | gap | 32 | 24 | 8 |
 | justifycontent | 28 | 22 | 6 |
 | margin | 34 | 29 | 5 |
 | minmaxdimension | 24 | 23 | 1 |
 | padding | 7 | 7 | 0 |
-| percentage | 24 | 18 | 6 |
-| rounding | 13 | 2 | 11 |
+| percentage | 24 | 20 | 4 |
+| rounding | 13 | 3 | 10 |
 | sizeoverflow | 3 | 3 | 0 |
-| staticposition | 62 | 19 | 43 |
-| **total** | **485** | **300** | **185** |
+| staticposition | 62 | 23 | 39 |
+| **total** | **485** | **314** | **171** |
 
-382 node assertions fail across those 185 cases. Only 12 of them differ from
-the reference by two pixels or less everywhere; 169 differ by more than eight.
+348 node assertions fail across those 171 cases. Only 12 of them differ from
+the reference by two pixels or less everywhere; 155 differ by more than eight.
 The grade is not what is missing - the rules are.
 
 ## What the misses need
 
-- **`position: relative` insets.** A relative box moves by its own `inset` and
-  carries its subtree along. Nothing outside `absolute.c` reads `style->inset`,
-  and `cf_position` has no word for relative at all: the generator maps
-  `YGPositionTypeRelative` onto static, which is right while the insets are
-  zero and wrong wherever they are not. Most of `staticposition` (43 of 62)
-  and part of `percentage`.
-- **Which box an absolute child measures against.** CSS makes the padding box
-  of the nearest *positioned* ancestor the containing block; the engine makes
-  every direct parent one, which `cf_position`'s comment states as a
-  simplification. That is the `*_relative_to_positioned_ancestor` family and
-  most of the remaining `absoluteposition` misses (16 of 33). The same rule
-  covers the static position an inset-less absolute child lands at, where the
-  reference applies the container's `justify-content` and `align-items` to it.
+- **Where an absolute child actually goes.** 55 cases, `staticposition`'s
+  remaining 39 and 16 of `absoluteposition`, and they split on one rule: CSS
+  makes the padding box of the nearest *positioned* ancestor the containing
+  block, the engine makes every direct parent's content box one. The same rule
+  fixes the static position an inset-less absolute child lands at, where the
+  reference applies the container's `justify-content` and `align-items` to it -
+  which is what the `static_position_*_amalgamation` family measures. Relative
+  boxes already read their insets; these cases ask which ancestor the insets
+  belong to.
 - **Line packing when the container wraps.** Multiple lines have to be sized,
   then distributed by `align-content`, and `stretch` has to give the leftover
   cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 14 of
-  64.
-- **`align-items: baseline`** and the self variant, which need a baseline the
-  engine can only get from a measure callback. 13 cases.
+  64; 8 of `gap` are `*_wrapping` cases where a percentage row gap resolves
+  against a line box that has not been packed, so wrapping is worth about 41
+  cases in total.
 - **Reverse directions and their edges.** `row-reverse` and `column-reverse`
-  flip which edge a margin, border or padding offsets from, and 28 of
-  `flexdirection` disagree by more than a pixel.
+  flip which edge a margin, border or padding offsets from, and every one of
+  `flexdirection`'s 21 remaining misses names a start or end edge of one of
+  those three on a reversed container.
+- **Negative free space.** When the children do not fit, `justify-content`
+  has no slack to distribute and min, max and auto margins all resolve
+  differently: 6 of `justifycontent`, 5 of `margin` (`margin_auto_*` with a
+  child bigger than the parent), 7 of `alignitems` and 1 of `minmaxdimension`.
+- **`align-items: baseline`** and the self variant, which need a baseline the
+  engine can only get from a measure callback. 11 cases.
+- **`box-sizing: content-box`.** `cf_style` has no field for it, so the 8
+  `box_sizing_border_box_*` cases that mix the two arrive already misstated -
+  as do the 23 fixtures the port skips for want of it.
 - **Edge rounding.** Rounding a box means rounding both its edges, so its size
   can land a whole pixel from the exact one - `33.333` wide starting at `33.333`
   becomes `34` when the far edge snaps to `67`. That is more than the grade
-  forgives, and it is why 11 of the 13 `rounding` cases still miss: the snap is
+  forgives, and it is why 10 of the 13 `rounding` cases still miss: the snap is
   a renderer decision that `cf_layout` deliberately does not make, so this gap
   stays a published divergence rather than a rule to implement.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 300 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 314 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
