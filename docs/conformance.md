@@ -15,24 +15,33 @@ clang-format -i tests/conformance/yoga_cases_data.h
 
 [facebook/yoga](https://github.com/facebook/yoga) at `503bec3` (MIT, Copyright
 (c) Facebook, Inc. and its affiliates) ships `tests/generated/*.cpp`: the
-output of its `gentest` driver, which loads each HTML fixture in headless Chrome
-at device-scale-factor 1 and records what the browser laid out, expressed as
-engine calls in and border boxes out. The fixtures themselves are plain CSS
-flexbox, and `gentest/test-template.html` styles every `div` with the defaults
-Yoga's own API starts from - `display: flex`, `flex-direction: column`,
-`box-sizing: border-box`, `flex-shrink: 0`, `align-content: flex-start` - so
-those are the values a ported row states rather than the ones CSS would infer.
+output of its `gentest` driver, which loads each HTML fixture in headless
+Chrome at device-scale-factor 1 and writes a test from what it measured - the
+calls that rebuild the tree in Yoga's API, and per node the box the browser
+gave it as an offset from its parent element. The fixtures themselves are plain
+CSS flexbox, and `gentest/test-template.html` styles every `div` with the
+defaults Yoga's own API starts from - `display: flex`, `position: relative`,
+`flex-direction: column`, `box-sizing: border-box`, `flex-shrink: 0`,
+`align-content: flex-start` - so those are the values a ported row states
+rather than the ones CSS would infer.
 
 Nothing at test time reads Yoga or a browser: `tools/gentest.py` turns the
 recorded calls into `cf_style` rows and the corpus is checked-in C data. The
 generated header is reproducible - regenerating it and running `clang-format`
 replays the same bytes.
 
+`YGNodeLayoutGetLeft` and `YGNodeLayoutGetTop` answer relative to the parent
+node, and the recorded offsets are too, while a corpus row places its box in
+the root's space - so the generator carries the pair down the tree before
+writing a row. Without that step a fixture whose ancestors are not at the
+origin asks for a box no absolute rect can hold: the parent-relative `-50`
+where the CSS answer is `50`.
+
 ## What is ported
 
-Chrome's number is only a target when `cf_style` can state the request. 485 of
-543 fixtures can; the rest are counted by what they need, so the denominator
-stays the whole suite rather than the convenient part of it.
+The reference's number is only a target when `cf_style` can state the request.
+485 of 543 fixtures can; the rest are counted by what they need, so the
+denominator stays the whole suite rather than the convenient part of it.
 
 | skipped | needs |
 |---------|-------|
@@ -45,62 +54,64 @@ stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-277 of the 485 ported fixtures match, 57% of what was ported and 51% of the
-whole corpus. Measured at `7df2820`. The table is the tier's own output, so a
+300 of the 485 ported fixtures match, 62% of what was ported and 55% of the
+whole corpus. Measured at `8d066b6`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
-The grade is half a pixel. Chrome snapped every fixture edge to the device
-grid; `cf_layout` returns exact fractions and leaves rounding to whoever
-paints, so a correct box can sit at most half a pixel from a snapped edge. A
-finer grade would score that divergence instead of the rules.
+The grade is half a pixel. The reference snapped every fixture edge to the
+device grid before it was recorded; `cf_layout` returns exact fractions and
+leaves rounding to whoever paints, so a correct box can sit at most half a
+pixel from a snapped edge. A finer grade would score that divergence instead of
+the rules.
 
 | suite | ported | match | miss |
 |-------|--------|-------|------|
-| absoluteposition | 33 | 15 | 18 |
-| aligncontent | 64 | 37 | 27 |
+| absoluteposition | 33 | 17 | 16 |
+| aligncontent | 64 | 50 | 14 |
 | alignitems | 29 | 11 | 18 |
 | alignself | 5 | 4 | 1 |
-| androidnewsfeed | 1 | 0 | 1 |
+| androidnewsfeed | 1 | 1 | 0 |
 | auto | 5 | 5 | 0 |
 | border | 5 | 5 | 0 |
 | boxsizing | 23 | 15 | 8 |
 | dimension | 2 | 2 | 0 |
 | flex | 10 | 9 | 1 |
-| flexbasisfitcontent | 5 | 2 | 3 |
+| flexbasisfitcontent | 5 | 4 | 1 |
 | flexdirection | 53 | 25 | 28 |
 | flexwrap | 23 | 5 | 18 |
 | gap | 32 | 24 | 8 |
-| justifycontent | 28 | 21 | 7 |
+| justifycontent | 28 | 22 | 6 |
 | margin | 34 | 29 | 5 |
 | minmaxdimension | 24 | 23 | 1 |
 | padding | 7 | 7 | 0 |
-| percentage | 24 | 16 | 8 |
+| percentage | 24 | 18 | 6 |
 | rounding | 13 | 2 | 11 |
 | sizeoverflow | 3 | 3 | 0 |
-| staticposition | 62 | 17 | 45 |
-| **total** | **485** | **277** | **208** |
+| staticposition | 62 | 19 | 43 |
+| **total** | **485** | **300** | **185** |
 
-444 node assertions fail across those 208 cases. Only 8 of them differ from
-Chrome by two pixels or less everywhere; 197 differ by more than eight. The
-grade is not what is missing - the rules are.
+382 node assertions fail across those 185 cases. Only 12 of them differ from
+the reference by two pixels or less everywhere; 169 differ by more than eight.
+The grade is not what is missing - the rules are.
 
 ## What the misses need
 
-- **`position: relative` insets.** A static box offsets by its own `inset`, and
-  a positioned ancestor becomes the containing block its absolute children
-  measure against. Nothing in `src/layout/` reads `style->inset` except
-  `absolute.c`, which reads it for absolute children only. This is most of the
-  `staticposition` suite (45 of 62) and part of `flexdirection` and
-  `percentage`.
-- **Where an absolute child's static position comes from.** With no insets to
-  place it, the child sits at the container's content-box start; Chrome applies
-  the container's `justify-content` and `align-items` to it, and measures
-  percentages against the *padding* box, which is what CSS defines as the
-  containing block for an absolutely positioned descendant. Most of
-  `absoluteposition` (18 of 33) and the `*_inner_*` cases in `flexdirection`.
+- **`position: relative` insets.** A relative box moves by its own `inset` and
+  carries its subtree along. Nothing outside `absolute.c` reads `style->inset`,
+  and `cf_position` has no word for relative at all: the generator maps
+  `YGPositionTypeRelative` onto static, which is right while the insets are
+  zero and wrong wherever they are not. Most of `staticposition` (43 of 62)
+  and part of `percentage`.
+- **Which box an absolute child measures against.** CSS makes the padding box
+  of the nearest *positioned* ancestor the containing block; the engine makes
+  every direct parent one, which `cf_position`'s comment states as a
+  simplification. That is the `*_relative_to_positioned_ancestor` family and
+  most of the remaining `absoluteposition` misses (16 of 33). The same rule
+  covers the static position an inset-less absolute child lands at, where the
+  reference applies the container's `justify-content` and `align-items` to it.
 - **Line packing when the container wraps.** Multiple lines have to be sized,
   then distributed by `align-content`, and `stretch` has to give the leftover
-  cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 27 of
+  cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 14 of
   64.
 - **`align-items: baseline`** and the self variant, which need a baseline the
   engine can only get from a measure callback. 13 cases.
@@ -116,7 +127,7 @@ grade is not what is missing - the rules are.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 277 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 300 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
