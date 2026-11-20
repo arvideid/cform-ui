@@ -310,6 +310,37 @@ static void a_measure_callback_sizes_content_the_engine_cannot_see(void) {
     CF_NEAR(f.rects[1].height, 11.0f);
 }
 
+/* A callback that asks nothing of its caller, so a tree can be handed to it
+ * without a measure_data table. */
+static cf_size measure_icon(void *user_data, cf_available available, cf_intrinsic kind) {
+    (void)user_data;
+    (void)available;
+    (void)kind;
+
+    return (cf_size){.width = 32.0f, .height = 32.0f};
+}
+
+static void a_tree_that_carries_no_measure_tables_still_lays_out(void) {
+    const cf_available offer = {.width = CF_PX(200.0f), .height = CF_AUTO};
+
+    fixture f;
+    begin(&f, cf_style_default());
+    append(&f, 0u, cf_style_default());
+    f.measures[1] = measure_icon;
+
+    cf_tree tree = tree_of(&f);
+    tree.measure_data = NULL;
+    cf_layout(&scratch, &tree, 0u, offer, (cf_point){0.0f, 0.0f}, f.rects);
+    CF_NEAR(f.rects[1].width, 32.0f);
+
+    /* A caller that measures nothing carries neither array, which is the shape
+     * a leaf-only tree has: the callback lives in the table that is gone. */
+    tree.measures = NULL;
+    cf_layout(&scratch, &tree, 0u, offer, (cf_point){0.0f, 0.0f}, f.rects);
+    CF_NEAR(f.rects[0].width, 0.0f);
+    CF_NEAR(f.rects[1].width, 0.0f);
+}
+
 static void padding_and_border_inset_the_content_box(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 200.0f, 100.0f);
@@ -414,6 +445,7 @@ int main(void) {
     CF_RUN(an_auto_margin_claims_the_space_before_justify_content_does);
     CF_RUN(order_moves_items_without_moving_them_in_the_tree);
     CF_RUN(a_measure_callback_sizes_content_the_engine_cannot_see);
+    CF_RUN(a_tree_that_carries_no_measure_tables_still_lays_out);
     CF_RUN(padding_and_border_inset_the_content_box);
     CF_RUN(a_gap_sits_between_items_only);
     CF_RUN(refused_scratch_leaves_the_subtree_as_it_was);

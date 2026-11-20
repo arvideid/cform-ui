@@ -11,6 +11,30 @@ static bool settled_length(cf_length verdict, cf_length declaration, cf_length c
 }
 
 /*
+ * A callback claims a node's content even when the node has children: the
+ * engine lays those children out inside whatever the callback reported, which
+ * is the only way a foreign subtree can keep its own layout rules. Neither
+ * table has to be there: a caller that measures nothing carries neither, and a
+ * caller whose callbacks need no state carries only the function table.
+ */
+static bool measured_extent(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
+                            cf_intrinsic mode, cf_size *out) {
+    const cf_measure_fn *measures = ctx->tree->measures;
+
+    if (measures == NULL || measures[slot] == NULL) {
+        return false;
+    }
+
+    void *user_data = ctx->tree->measure_data != NULL ? ctx->tree->measure_data[slot] : NULL;
+    const cf_size measured = measures[slot](user_data, constraint, mode);
+
+    *out = (cf_size){.width = clamp_non_negative(measured.width),
+                     .height = clamp_non_negative(measured.height)};
+
+    return true;
+}
+
+/*
  * How far the content box sits inside the border box. Padding and border are
  * only ever added together - the engine paints no separate frame - so they
  * resolve into one set of edges.
@@ -27,18 +51,15 @@ cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base
 }
 
 /*
- * A callback claims a node's content even when the node has children: the
- * engine lays those children out inside whatever the callback reported, which
- * is the only way a foreign subtree can keep its own layout rules.
+ * The content extent of a node: what a callback reports, what its children
+ * fill, or nothing at all when it is a leaf nobody can measure.
  */
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint) {
-    if (ctx->tree->measures[slot] != NULL) {
-        const cf_size measured =
-            ctx->tree->measures[slot](ctx->tree->measure_data[slot], constraint, mode);
+    cf_size measured;
 
-        return (cf_size){.width = clamp_non_negative(measured.width),
-                         .height = clamp_non_negative(measured.height)};
+    if (measured_extent(ctx, slot, constraint, mode, &measured)) {
+        return measured;
     }
 
     if (child_count(ctx, slot) == 0u) {

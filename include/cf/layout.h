@@ -40,7 +40,9 @@ typedef cf_size (*cf_measure_fn)(void *user_data, cf_available available, cf_int
  *
  * `measure_data` is handed to the callback unread and unchanged: the engine
  * never looks through it, so a callback may point it at whatever its own
- * state needs.
+ * state needs. Either array may be NULL, which is how a caller that measures
+ * nothing writes the tree; a callback then reads as absent and its node is
+ * measured from its children instead.
  */
 typedef struct cf_tree {
     const cf_style *styles;
