@@ -7,23 +7,23 @@ same pull request that moves it.
 
 ```sh
 ctest --preset release -L bench   # the numbers below
-ctest --preset dev -L bench       # Debug, roughly 3x slower and noisier
+ctest --preset dev -L bench       # Debug, roughly three times slower
 ```
 
 ## Release, 1280 × 720 offer
 
-A Windows desktop, the `release` preset, GCC from MSYS2 UCRT64, fastest pass of
-the rig. Three consecutive runs of the flex tree agreed within 5%; the flat grid
-spread 240 to 330 ms, which is what a quadratic scan shows when the machine is
-not idle.
+Best of nine consecutive runs on a Windows desktop, the `release` preset, GCC
+from MSYS2 UCRT64, fastest pass of 50 layouts. Runs spread 10 to 30%: the rig
+reports the fastest pass because the slowest one describes the machine rather
+than the engine.
 
 | rig                    | nodes  | ms per layout | ns per node |
 |------------------------|--------|---------------|-------------|
-| deep flex tree         |  1,250 | 1.0           | 780         |
-| deep flex tree         |  2,500 | 2.3           | 900         |
-| deep flex tree         |  5,000 | 4.9           | 980         |
-| deep flex tree         | 10,000 | 10.5          | 1,050       |
-| flat 100-column grid    | 10,000 | ~300          | 30,000      |
+| deep flex tree         |  1,250 | 1.2           | 930         |
+| deep flex tree         |  2,500 | 2.7           | 1,060       |
+| deep flex tree         |  5,000 | 5.8           | 1,170       |
+| deep flex tree         | 10,000 | 13.1          | 1,310       |
+| flat 100-column grid    | 10,000 | 6.5           | 650         |
 
 The deep rig is a complete binary tree of alternating rows and columns with a
 third of the branches growing into the leftover space and a seventh claiming half
@@ -33,17 +33,18 @@ names.
 
 ## What the gap means
 
-2 ms at 10,000 nodes is the budget, and neither rig meets it. The two gaps are
-structural, not tuning:
+2 ms at 10,000 nodes is the budget. The flat grid is within a factor of four of
+it; the deep flex tree is not, and the reason is structural:
 
-- **Cost per node rises with the tree** - 780 ns at 1,250 nodes against 1,050 ns
+- **Cost per node rises with the tree** - 930 ns at 1,250 nodes against 1,310 ns
   at 10,000, a log factor. Nothing caches a measured size, so a subtree is
   measured once at every level above it: `layout_subtree` resolves a node's own
   border box from its content and then arranges children, each of which measures
   again.
-- **The flat grid is quadratic in the cells** - dense auto-placement restarts its
-  row-major scan of the occupancy map at the first cell for every item, so
-  10,000 cells cost on the order of 5e7 cell tests before any track is sized.
+
+The other structural gap closed with the placement scan: dense auto-placement
+used to restart at the first cell of the occupancy map for every item, which
+cost a 10,000-cell grid roughly 300 ms - the same rig now costs 6.5 ms.
 
 ## Why no number is asserted
 
@@ -55,6 +56,9 @@ layout cache and the dirty bits that invalidate it.
 
 ## History
 
-| commit    | deep 10,000 | flat grid 10,000 |
-|-----------|-------------|------------------|
-| `3febb17` | 10.5 ms     | ~300 ms          |
+| rig               | before `6e6a53a` | after |
+|-------------------|------------------|-------|
+| flat grid, 10,000 cells | ~300 ms          | 6.5 ms |
+
+The deep flex tree has not been retuned yet, so its numbers move with the load
+on the machine that measured them rather than with any change to the engine.
