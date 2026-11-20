@@ -17,12 +17,28 @@
             overflow: hidden;
         }
 
+        /* On mobile the URL bar overlays the bottom of a viewport-height box,
+         * so dvh keeps the canvas equal to the space actually visible. Browsers
+         * that do not know dvh keep the vh declaration above. */
+        body {
+            height: 100vh;
+            height: 100dvh;
+        }
+
+        /* The demo's root frame is UI_FILL on both axes, so this box *is* the
+         * layout: size it to the viewport and the UI fills the page. SDL only
+         * follows CSS that is already there - it reads this element's box, keeps
+         * the backing store equal to it times devicePixelRatio, and posts a
+         * resize event whenever the window changes, which ui_render() turns into
+         * a fresh layout pass. touch-action: none stops the page from swallowing
+         * the drags the scrollable panels depend on. */
         #canvas {
             display: block;
-            margin: 0 auto;
+            width: 100%;
+            height: 100%;
             background: #12141a;
-            box-shadow: 0 0 0 1px #22262e;
             outline: none;
+            touch-action: none;
         }
 
         #status {
@@ -40,6 +56,16 @@
     <div id="status">Loading cform-ui...</div>
 
     <script type='text/javascript'>
+        // Give the backing store the viewport's real pixel grid before SDL takes
+        // over, so the first frame is not a browser-stretched surface. SDL owns
+        // these numbers from here on; it recomputes them on every resize.
+        (function () {
+            var canvas = document.getElementById('canvas');
+            var dpr = window.devicePixelRatio || 1;
+            canvas.width = Math.round(canvas.clientWidth * dpr);
+            canvas.height = Math.round(canvas.clientHeight * dpr);
+        })();
+
         var Module = {
             canvas: (function () { return document.getElementById('canvas'); })(),
             setStatus: function (text) {

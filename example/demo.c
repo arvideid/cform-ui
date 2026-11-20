@@ -20,6 +20,28 @@
 static const UI_Color HOVER = { 212, 212, 212, 255 };    /* #d4d4d4 */
 static const UI_Color PRESSED = { 161, 161, 161, 255 };  /* #a1a1a1 */
 
+/* Every picture in the demo is fetched over HTTPS at runtime, so there is no
+ * binary art to commit. A browser enforces CORS on cross-origin reads and
+ * i.pinimg.com answers without an Access-Control-Allow-Origin header, so the
+ * wasm build cannot fetch it even though libcurl happily does; the web build
+ * asks hosts that answer `Access-Control-Allow-Origin: *` instead. The frames,
+ * their fits and their layout are identical on both platforms. */
+#ifdef __EMSCRIPTEN__
+#define IMAGE_HERO   "https://httpbin.org/image/jpeg"
+#define IMAGE_WIDE   "https://httpbin.org/image/png"
+#define IMAGE_SQUARE "https://placehold.co/320x320/e5e5e5/525252/png"
+#else
+#define IMAGE_HERO \
+    "https://i.pinimg.com/1200x/0d/65/55/0d6555e28635db8b1cad7ec76b306313.jpg"
+#define IMAGE_WIDE \
+    "https://i.pinimg.com/1200x/d2/4f/b2/d24fb208b009927d004d4327f23b7c00.jpg"
+#define IMAGE_SQUARE \
+    "https://i.pinimg.com/1200x/de/73/9c/de739cc20271eba69c58099bd9492e21.jpg"
+#endif
+
+/* CORS-open everywhere, so this frame looks the same on both platforms. */
+#define IMAGE_REMOTE "https://placehold.co/900x200/e5e5e5/525252/png"
+
 static const char *const LOREM =
     "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod "
     "tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim "
@@ -137,7 +159,7 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
     UI_Frame *hero = ui_frame(ctx, (UI_FrameConfig){
         .width         = UI_FILL,
         .height        = UI_FIXED(320),
-        .image_src     = "assets/hero.png",
+        .image_src     = IMAGE_HERO,
         .image_fit     = UI_IMAGE_FIT,
         .background    = SURFACE_ALT,
         .border_color  = BORDER,
@@ -148,7 +170,7 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
     ui_add(panel, hero);
 
     ui_add(panel, make_text(ctx,
-        "Decoded from disk by SDL3_image. Click it to open the decoder's home.",
+        "Downloaded over HTTPS and decoded by SDL3_image. Click it to open the decoder's home.",
         24, UI_FONT_ITALIC, 14.0f, MUTED, true));
 
     UI_Frame *strip = ui_frame(ctx, (UI_FrameConfig){
@@ -161,7 +183,7 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
     UI_Frame *scene = ui_frame(ctx, (UI_FrameConfig){
         .width         = UI_FILL,
         .height        = UI_FILL,
-        .image_src     = "assets/scene.png",
+        .image_src     = IMAGE_WIDE,
         .image_fit     = UI_IMAGE_FILL,
         .border_color  = BORDER,
         .border_width  = 1.0f,
@@ -171,7 +193,7 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
     UI_Frame *icon = ui_frame(ctx, (UI_FrameConfig){
         .width         = UI_FIXED(180),
         .height        = UI_FILL,
-        .image_src     = "assets/icon.svg",
+        .image_src     = IMAGE_SQUARE,
         .image_fit     = UI_IMAGE_CENTER,
         .background    = SURFACE_ALT,
         .border_color  = BORDER,
@@ -184,25 +206,26 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
     ui_add(panel, strip);
 
     ui_add(panel, make_text(ctx,
-        "Left fills the box; the SVG icon on the right is vector, drawn at native size.",
+        "Left fills the box, discarding aspect; the right draws at native pixel size and clips.",
         24, UI_FONT_ITALIC, 14.0f, MUTED, true));
 
-    /* Downloads over HTTP while the demo runs. The frame paints its
-     * background immediately and the image replaces it when the bytes land. */
+    /* Downloads while the demo runs. The frame paints its background
+     * immediately and the image replaces it when the bytes land; a transfer the
+     * platform is not allowed to make logs once instead of retrying per frame. */
     UI_Frame *remote = ui_frame(ctx, (UI_FrameConfig){
         .width         = UI_FILL,
         .height        = UI_FIXED(200),
-        .image_src     = "https://picsum.photos/seed/cform/900/200",
+        .image_src     = IMAGE_REMOTE,
         .image_fit     = UI_IMAGE_FIT,
         .background    = SURFACE_ALT,
         .border_color  = BORDER,
         .border_width  = 1.0f,
         .corner_radius = 12.0f,
-        .link_url      = "https://picsum.photos/",
+        .link_url      = "https://developer.mozilla.org/CORS",
     });
 
     ui_add(panel, make_text(ctx,
-        "Fetched over HTTP at runtime - note the frame drawing its background first, then the picture.",
+        "This frame draws its own background first, then the fetched picture lands on top of it.",
         24, UI_FONT_ITALIC, 14.0f, MUTED, true));
     ui_add(panel, remote);
 
