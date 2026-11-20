@@ -54,8 +54,8 @@ denominator stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-420 of the 485 ported fixtures match, 87% of what was ported and 77% of the
-whole corpus. Measured at `f792789`. The table is the tier's own output, so a
+438 of the 485 ported fixtures match, 90% of what was ported and 81% of the
+whole corpus. Measured at `5a03cba`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
 The grade is half a pixel. The reference snapped every fixture edge to the
@@ -73,7 +73,7 @@ the rules.
 | androidnewsfeed | 1 | 1 | 0 |
 | auto | 5 | 5 | 0 |
 | border | 5 | 5 | 0 |
-| boxsizing | 23 | 16 | 7 |
+| boxsizing | 23 | 23 | 0 |
 | dimension | 2 | 2 | 0 |
 | flex | 10 | 9 | 1 |
 | flexbasisfitcontent | 5 | 4 | 1 |
@@ -87,11 +87,11 @@ the rules.
 | percentage | 24 | 20 | 4 |
 | rounding | 13 | 3 | 10 |
 | sizeoverflow | 3 | 3 | 0 |
-| staticposition | 62 | 48 | 14 |
-| **total** | **485** | **420** | **65** |
+| staticposition | 62 | 59 | 3 |
+| **total** | **485** | **438** | **47** |
 
-155 node assertions fail across those 65 cases. Only 12 of them differ from
-the reference by two pixels or less everywhere; 43 differ by more than eight.
+121 node assertions fail across those 47 cases. Only 12 of them differ from
+the reference by two pixels or less everywhere; 33 differ by more than eight.
 The grade is not what is missing - the rules are.
 
 ## What the misses need
@@ -105,17 +105,12 @@ The grade is not what is missing - the rules are.
   and resolves it once the layout has settled that block; the engine resolves it
   against the space the box was measured in. `percentage`'s
   `percent_within_flex_grow` wants a 100% child to fill the 150 its grown parent
-  settles at rather than the 350 the root offered, and 11 `staticposition`
-  amalgamations want the settled answer for a 21% or 10% width - `133` from the
-  content where the first pass measured `44`, `20` where it measured `14.6`. The
-  other two `percentage` misses are the same shape, and the 8 `gap` cases are a
-  percentage row gap resolving against a wrapped line box that has to settle
-  before the gap divides.
-- **A box smaller than its own padding and border.** A border-box size cannot
-  shrink below the padding and border it has to hold, and the engine lets it:
-  7 of `boxsizing` want `40` where the declared `25` is what came out, and
-  `staticposition`'s 3 `*_child_padding_percentage` want the same floor under a
-  padding percentage of the containing block's width.
+  settles at rather than the 350 the root offered, and the `staticposition`
+  amalgamations left standing want the settled answer for a 21% or 10% width -
+  `133` from the content where the first pass measured `44`. The other
+  `percentage` misses are the same shape, and the 8 `gap` cases are a percentage
+  row gap resolving against a wrapped line box that has to settle before the gap
+  divides.
 - **Edge rounding.** Rounding a box means rounding both its edges, so its size
   can land a whole pixel from the exact one - `33.333` wide starting at `33.333`
   becomes `34` when the far edge snaps to `67`. That is more than the grade
@@ -129,7 +124,7 @@ The grade is not what is missing - the rules are.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 420 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 438 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
