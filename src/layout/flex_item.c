@@ -22,17 +22,19 @@ static void axes_of_size(const flex_context *f, cf_size box, float *main, float 
 }
 
 /*
- * §9.3: reversing a direction moves which physical edge is main-start. The
- * cross axis keeps packing from the top in a row and from the left in a column,
- * because reversing the main axis does not flip the block or inline direction.
+ * §9.3: reversing a direction moves which physical edge is main-start. §9.4
+ * does the same for cross-start when the wrap is reversed, and only then -
+ * reversing the main axis leaves the block and inline directions alone.
  */
 static void assign_margins(const flex_context *f, const cf_box *margin, flex_item *item) {
     const cf_length main_start = f->row ? (f->reverse ? margin->right : margin->left)
                                         : (f->reverse ? margin->bottom : margin->top);
     const cf_length main_end = f->row ? (f->reverse ? margin->left : margin->right)
                                       : (f->reverse ? margin->top : margin->bottom);
-    const cf_length cross_start = f->row ? margin->top : margin->left;
-    const cf_length cross_end = f->row ? margin->bottom : margin->right;
+    const cf_length cross_start = f->row ? (f->cross_reverse ? margin->bottom : margin->top)
+                                         : (f->cross_reverse ? margin->right : margin->left);
+    const cf_length cross_end = f->row ? (f->cross_reverse ? margin->top : margin->bottom)
+                                       : (f->cross_reverse ? margin->left : margin->right);
 
     const cf_length sides[4] = {main_start, main_end, cross_start, cross_end};
     float *resolved[4] = {&item->margin_main_start, &item->margin_main_end,

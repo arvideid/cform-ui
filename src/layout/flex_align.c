@@ -105,7 +105,7 @@ static void place_lines(const flex_context *f, flex_line *lines, uint32_t line_c
 
     /* §9.4: wrap-reverse stacks the lines from the cross end, so every offset
      * measured from cross-start has its distance read off the far edge. */
-    if (f->style->wrap == CF_WRAP_REVERSE) {
+    if (f->cross_reverse) {
         const float stack = f->cross_definite ? f->cross_size : used;
         for (uint32_t l = 0; l < line_count; ++l) {
             lines[l].offset_cross = stack - lines[l].offset_cross - lines[l].cross;
@@ -198,7 +198,13 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
              * reads the same distance from the far edge inwards. */
             const float logical = cursor + main_start;
             const float main_position = f->reverse ? f->main_size - logical - item->main : logical;
-            const float cross_position = line->offset_cross + cross_offset(f, line, item);
+
+            /* A reversed wrap counts across the line the same way, so the box
+             * lands against the other side of the band its line was given. */
+            const float within = cross_offset(f, line, item);
+            const float cross_position =
+                f->cross_reverse ? line->offset_cross + line->cross - within - item->cross
+                                 : line->offset_cross + within;
 
             const cf_point origin = f->row ? (cf_point){.x = f->origin.x + main_position,
                                                         .y = f->origin.y + cross_position}

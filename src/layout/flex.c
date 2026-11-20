@@ -44,6 +44,7 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
         .containing = pass->containing,
         .row = cf_direction_is_row(style->direction),
         .reverse = cf_direction_is_reverse(style->direction),
+        .cross_reverse = style->wrap == CF_WRAP_REVERSE,
         .measuring = pass->mode == FLEX_MEASURE,
         .intrinsic = pass->mode == FLEX_MEASURE ? pass->intrinsic : CF_INTRINSIC_MAX_CONTENT,
     };
@@ -76,7 +77,7 @@ static absolute_flow sole_line(const flex_context *f) {
         .cross = f->style->align_items,
         .row = f->row,
         .main_reverse = f->reverse,
-        .cross_reverse = f->style->wrap == CF_WRAP_REVERSE,
+        .cross_reverse = f->cross_reverse,
     };
 }
 

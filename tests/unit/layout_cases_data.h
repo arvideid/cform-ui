@@ -346,6 +346,22 @@
                {SIZE(40.0f, 20.0f), 0u, RECT(40.0f, 0.0f, 40.0f, 20.0f)},
                {SIZE(40.0f, 20.0f), 0u, RECT(0.0f, 20.0f, 40.0f, 20.0f)}}},
 
+    /* A reversed wrap moves cross-start to the far edge, so items of different
+     * heights hug the bottom of the line rather than the top. */
+    {.name = "a reversed wrap stacks its line against the far edge",
+     .available = AVAILABLE(CF_AUTO, CF_AUTO),
+     .node_count = 5u,
+     .nodes = {{STYLE(.width = CF_PX(300.0f), .wrap = CF_WRAP_REVERSE), ROOT,
+                RECT(0.0f, 0.0f, 300.0f, 40.0f)},
+               {STYLE(.width = CF_PX(30.0f), .height = CF_PX(10.0f)), 0u,
+                RECT(0.0f, 30.0f, 30.0f, 10.0f)},
+               {STYLE(.width = CF_PX(30.0f), .height = CF_PX(20.0f)), 0u,
+                RECT(30.0f, 20.0f, 30.0f, 20.0f)},
+               {STYLE(.width = CF_PX(30.0f), .height = CF_PX(30.0f)), 0u,
+                RECT(60.0f, 10.0f, 30.0f, 30.0f)},
+               {STYLE(.width = CF_PX(30.0f), .height = CF_PX(40.0f)), 0u,
+                RECT(90.0f, 0.0f, 30.0f, 40.0f)}}},
+
     {.name = "order moves an item without moving it in the tree",
      .available = AVAILABLE(CF_PX(100.0f), CF_PX(50.0f)),
      .node_count = 3u,

@@ -34,7 +34,8 @@ typedef struct flex_pass {
 /*
  * One container seen from its own axes. `main` and `cross` are the layout
  * axes, `row` says which of width and height each is, and `reverse` says which
- * physical edge main-start is.
+ * physical edge main-start is. `cross_reverse` says the same for cross-start,
+ * which a reversed wrap - and nothing else - moves to the far edge.
  */
 typedef struct flex_context {
     const layout_ctx *ctx;
@@ -55,6 +56,7 @@ typedef struct flex_context {
     bool cross_definite;
     bool row;
     bool reverse;
+    bool cross_reverse;
     bool measuring;
 } flex_context;
 
