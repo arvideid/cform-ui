@@ -8,7 +8,7 @@ cmake-build-*/
 compile_commands.json
 .cache/
 
-# --- Fetched dependencies (SDL3 via FetchContent) ---
+# --- Fetched build dependencies (FetchContent) ---
 _deps/
 
 # --- Local toolchain installs kept next to the checkout ---

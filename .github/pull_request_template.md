@@ -15,7 +15,7 @@
 
 ## Checklist
 
-- [ ] Code follows [`CONTRIBUTING.md`](../CONTRIBUTING.md) — layer graph, naming,
+- [ ] Code follows [`AGENTS.md`](../AGENTS.md) — layer graph, naming,
       data rules
 - [ ] `clang-format`, `clang-tidy` and `tools/check_includes.py` are clean for
       the files touched

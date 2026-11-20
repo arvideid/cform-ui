@@ -1,4 +1,8 @@
-# Contributing
+# cform — repository contract
+
+Rules for humans and agents editing this repository. This file is tracked,
+reviewed and enforced by CI as far as it can be; the rest is review policy.
+When a shortcut and this file conflict, this file wins.
 
 cform is a retained-mode, data-oriented UI framework in C17. The tree is data,
 work is systems, and a low-level command stream sits beneath the convenience
@@ -13,17 +17,13 @@ command line and CI never drift.
 cmake --preset dev            # Ninja, Debug, tests on, compile_commands.json
 cmake --build --preset dev
 ctest --preset dev
-./build/dev/bin/cform_demo    # the native window
 ```
 
-SDL3, SDL3_ttf and SDL3_image are found locally when installed and fetched from
-pinned release tags otherwise. Native remote images need libcurl; without it the
-build configures and `http(s)` image sources report as unloadable.
+`release` is the same graph without the debug information. There are no
+third-party dependencies to find or fetch: the layers link libc and nothing
+else until a backend exists.
 
-The WebAssembly port needs emsdk activated first (`source ./emsdk_env.sh`), then
-`cmake --preset web && cmake --build --preset web`.
-
-`-DCFORM_WITH_SANITIZERS=ON` builds `cf_base` and its tests under AddressSanitizer
+`-DCFORM_WITH_SANITIZERS=ON` builds the layers and their tests under AddressSanitizer
 and UndefinedBehaviorSanitizer. Configure fails where the toolchain has no
 sanitizer runtime to link, rather than producing a build that checks nothing.
 
@@ -55,11 +55,6 @@ not configure. `tools/check_includes.py` catches the mirror-image mistake: an
 - One job per file, roughly 300 lines, 400 the ceiling. Split when a file starts
   changing for two unrelated reasons. Moving code across a layer boundary is
   architectural — propose it before doing it.
-
-The v0.2 tree (`include/cform/`, `src/core/`, `src/renderer/`, `example/`) is
-grandfathered until the 1.0 layers reach parity, then it goes in one commit. Its
-`ui_`/`UI_` prefix and its SDL-owning renderer directory do not extend to new
-files.
 
 ## Data rules
 
@@ -96,12 +91,13 @@ commented-out code, no TODO without an issue link, no license repetition.
 
 ## Tests
 
-Four tiers: unit (per layer, headless), conformance (fixtures plus expected
-rects as data, generated once against a reference browser by `tools/gentest`),
-golden (command-stream snapshots, updated only through `tools/golden --update`
-and reviewed as data), and bench (published baselines). Test names describe the
-scenario — `store_rejects_a_stale_id`, not `test_store_3`. Add a failing test
-before fixing a bug and keep it afterwards.
+Unit and conformance cases run headless against the layer under test. The layout
+corpus lives in `tests/unit/layout_cases_data.h` as data — a tree of styles, the
+offer, the rect every node must land in — so a rule is covered by adding a row,
+not a function. Golden (command-stream snapshots, changed only through an update
+tool and reviewed as data) and bench (published baselines) arrive with the layers
+they cover. Test names describe the scenario — `store_rejects_a_stale_id`, not
+`test_store_3`. Add a failing test before fixing a bug and keep it afterwards.
 
 Nothing in the suite verifies a pixel. Screenshots and window behaviour are the
 maintainer's check, so a PR that changes rendering says what to look at.
