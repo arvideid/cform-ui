@@ -120,8 +120,19 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
 
     /* min and max clamp the border box, and min keeps the last word when the
      * pair contradicts, so a misconfigured node still lands somewhere. */
+    const float clamped_width =
+        cf_size_clamp(width, style->min_width, style->max_width, constraint.width);
+    const float clamped_height =
+        cf_size_clamp(height, style->min_height, style->max_height, constraint.height);
+
+    /* A border box is drawn no smaller than the padding and border it has to
+     * hold: the frame has the last word, the way min does when min and max
+     * contradict. A declared or clamped size below it is impossible to paint. */
+    const float frame_width = inset.left + inset.right;
+    const float frame_height = inset.top + inset.bottom;
+
     return (cf_size){
-        .width = cf_size_clamp(width, style->min_width, style->max_width, constraint.width),
-        .height = cf_size_clamp(height, style->min_height, style->max_height, constraint.height),
+        .width = clamped_width > frame_width ? clamped_width : frame_width,
+        .height = clamped_height > frame_height ? clamped_height : frame_height,
     };
 }

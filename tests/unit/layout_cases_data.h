@@ -74,6 +74,14 @@
                 ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
                {FILL, 0u, RECT(18.0f, 18.0f, 64.0f, 64.0f)}}},
 
+    {.name = "a box smaller than its padding and border grows to the frame",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+               {STYLE(.width = CF_PX(25.0f), .height = CF_PX(25.0f), .padding = BOX(5.0f),
+                      .border = BOX(15.0f)),
+                0u, RECT(0.0f, 0.0f, 40.0f, 40.0f)}}},
+
     {
         .name = "a nested tree resolves recursively",
         .available = AVAILABLE(CF_PX(200.0f), CF_PX(100.0f)),

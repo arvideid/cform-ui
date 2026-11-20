@@ -90,11 +90,25 @@ static void measure_item(const flex_context *f, flex_item *item) {
     item->hypothetical_main = clamp_range(item->basis, item->min_main, item->max_main);
     item->main = item->hypothetical_main;
 
+    /* A declared main size is a border box, so it is reserved no smaller than
+     * the padding and border it carries: the line that books the item has to
+     * advance by the box the child is really painted at, not the raw number. */
+    const cf_edges inset = content_insets(f->ctx, item->slot, f->percent_base);
+    const float main_frame = f->row ? inset.left + inset.right : inset.top + inset.bottom;
+    const float cross_frame = f->row ? inset.top + inset.bottom : inset.left + inset.right;
+    if (item->main < main_frame) {
+        item->hypothetical_main = main_frame;
+        item->main = main_frame;
+    }
+
     float cross_settled;
     item->cross_is_auto = !cf_length_of(cross_declared, f->cross_offer, &cross_settled);
 
     if (!item->cross_is_auto) {
         item->cross = clamp_range(cross_settled, item->min_cross, item->max_cross);
+        if (item->cross < cross_frame) {
+            item->cross = cross_frame;
+        }
     }
 }
 
