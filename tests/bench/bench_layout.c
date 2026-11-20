@@ -13,8 +13,7 @@
 #define MAX_NODES 10000u
 #define DEEP_FIRST_NODES (MAX_NODES / 8u)
 #define COLUMNS 100u
-#define DEEP_LAYOUTS 100u
-#define GRID_LAYOUTS 3u
+#define LAYOUTS 50u
 #define CELL_HEIGHT 20.0f
 #define NS_PER_S 1000000000.0
 #define NS_PER_MS 1000000.0
@@ -150,7 +149,7 @@ static void bench_deep_tree(cf_available offer) {
     for (uint32_t nodes = DEEP_FIRST_NODES; nodes <= MAX_NODES; nodes *= 2u) {
         build_deep_tree(nodes);
         const cf_tree tree = tree_of(nodes);
-        const double ms = layout_fastest_ms(&tree, offer, DEEP_LAYOUTS);
+        const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 
         CF_NEAR(rects[0].width, 1280.0f);
         printf("  deep flex tree, %5u nodes: %8.3f ms per layout, %7.1f ns per node\n", nodes, ms,
@@ -161,7 +160,7 @@ static void bench_deep_tree(cf_available offer) {
 static void bench_flat_grid(cf_available offer) {
     build_flat_grid();
     const cf_tree tree = tree_of(MAX_NODES);
-    const double ms = layout_fastest_ms(&tree, offer, GRID_LAYOUTS);
+    const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 
     CF_CHECK(rects[2u].x > 0.0f, "the second cell sits past the first column");
     printf("  flat grid, %5u cells: %8.3f ms per layout, %7.1f ns per cell\n", MAX_NODES, ms,
