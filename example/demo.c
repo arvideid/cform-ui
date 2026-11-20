@@ -187,6 +187,25 @@ static UI_Frame *make_panel_images(UI_Context *ctx) {
         "Left fills the box; the SVG icon on the right is vector, drawn at native size.",
         24, UI_FONT_ITALIC, 14.0f, MUTED, true));
 
+    /* Downloads over HTTP while the demo runs. The frame paints its
+     * background immediately and the image replaces it when the bytes land. */
+    UI_Frame *remote = ui_frame(ctx, (UI_FrameConfig){
+        .width         = UI_FILL,
+        .height        = UI_FIXED(200),
+        .image_src     = "https://picsum.photos/seed/cform/900/200",
+        .image_fit     = UI_IMAGE_FIT,
+        .background    = SURFACE_ALT,
+        .border_color  = BORDER,
+        .border_width  = 1.0f,
+        .corner_radius = 12.0f,
+        .link_url      = "https://picsum.photos/",
+    });
+
+    ui_add(panel, make_text(ctx,
+        "Fetched over HTTP at runtime - note the frame drawing its background first, then the picture.",
+        24, UI_FONT_ITALIC, 14.0f, MUTED, true));
+    ui_add(panel, remote);
+
     return panel;
 }
 

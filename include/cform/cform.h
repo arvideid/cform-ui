@@ -127,8 +127,10 @@ typedef struct {
     bool wrap_text;
 
     /* Image drawn in the content box, decoded by SDL3_image (PNG, JPEG, WebP,
-     * GIF, SVG and more). A filesystem path; NULL hides it. Loading failures
-     * are silent. */
+     * GIF, SVG and more). Either a filesystem path or an http(s) URL; NULL
+     * hides it. Remote sources download in the background, so the frame keeps
+     * drawing its own background until the bytes land, and a failed transfer
+     * is logged once instead of retried every frame. */
     const char *image_src;
     UI_ImageFit image_fit;
 

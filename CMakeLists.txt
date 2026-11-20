@@ -121,6 +121,31 @@ if(NOT SDL3_image_FOUND)
     FetchContent_MakeAvailable(SDL3_image)
 endif()
 
+# Remote image sources need an HTTP client. SDL3, SDL3_ttf and SDL3_image
+# provide none, so native builds use libcurl, the browser build uses
+# emscripten_fetch, and a native build without libcurl degrades to a stub that
+# reports the URL as unloadable instead of failing the whole build.
+set(CFORM_HTTP_BACKEND "none")
+
+if(EMSCRIPTEN)
+    set(CFORM_HTTP_BACKEND "emscripten")
+    message(STATUS "Remote images: emscripten_fetch (CORS applies)")
+else()
+    find_package(CURL QUIET)
+
+    if(CURL_FOUND)
+        set(CFORM_HTTP_BACKEND "curl")
+        message(STATUS "Remote images: libcurl ${CURL_VERSION_STRING}")
+    else()
+        message(WARNING
+            "Remote images DISABLED - libcurl not found, so http(s) image_src "
+            "will not load. Install it and reconfigure:\n"
+            "  MSYS2:  pacman -S mingw-w64-ucrt-x86_64-curl\n"
+            "  Debian: sudo apt install libcurl4-openssl-dev\n"
+            "  or set -DCURL_DIR=/path/to/curl (local paths are unaffected).")
+    endif()
+endif()
+
 # A renderer-agnostic core (`cform_core`) plus an SDL3 backend (`cform`) so the
 # layout math can be unit-tested headlessly - no window, no display, no SDL.
 add_library(cform_core STATIC
@@ -135,8 +160,19 @@ target_include_directories(cform_core
     PRIVATE src
 )
 
+# One HTTP backend per platform behind a single internal header; the renderer
+# never sees a platform branch.
+if(CFORM_HTTP_BACKEND STREQUAL "emscripten")
+    set(CFORM_HTTP_SOURCES src/renderer/http_loader_emscripten.c)
+elseif(CFORM_HTTP_BACKEND STREQUAL "curl")
+    set(CFORM_HTTP_SOURCES src/renderer/http_loader_curl.c)
+else()
+    set(CFORM_HTTP_SOURCES src/renderer/http_loader_none.c)
+endif()
+
 add_library(cform STATIC
     src/renderer/sdl_renderer.c
+    ${CFORM_HTTP_SOURCES}
 )
 
 target_include_directories(cform
@@ -148,6 +184,12 @@ target_include_directories(cform
 target_link_libraries(cform
     PUBLIC cform_core SDL3::SDL3 SDL3_ttf::SDL3_ttf SDL3_image::SDL3_image
 )
+
+# PRIVATE, because curl is an implementation detail of the renderer; CMake
+# still records it as a link requirement for consumers of the static library.
+if(CFORM_HTTP_BACKEND STREQUAL "curl")
+    target_link_libraries(cform PRIVATE CURL::libcurl)
+endif()
 
 # Warning policy for our own targets, applied per-target so it never leaks
 # into SDL3 or other dependencies. Examples and tests opt in separately.
@@ -178,6 +220,43 @@ if(CFORM_BUILD_EXAMPLES)
             $<TARGET_FILE_DIR:cform_demo>/assets
     )
 
+    # On Windows libcurl is a shared library with a dependency chain of its own
+    # (OpenSSL, zlib, nghttp2, brotli...). Copy the closure beside the demo so
+    # it starts from Explorer or an IDE session without a prepared MSYS2 PATH.
+    if(WIN32 AND CFORM_HTTP_BACKEND STREQUAL "curl")
+        if(CURL_LIBRARY_RELEASE)
+            set(CFORM_CURL_IMPLIB "${CURL_LIBRARY_RELEASE}")
+        else()
+            set(CFORM_CURL_IMPLIB "${CURL_LIBRARY}")
+        endif()
+
+        # The runtime DLLs sit in bin/ next to the import library's ../lib.
+        # Globs tolerate an unnormalized path; anything unmatched simply is not
+        # copied, so toolchains that ship curl elsewhere stay silent.
+        get_filename_component(CFORM_CURL_LIBDIR "${CFORM_CURL_IMPLIB}" DIRECTORY)
+        set(CFORM_CURL_BINDIR "${CFORM_CURL_LIBDIR}/../bin")
+        set(CFORM_CURL_DLLS "")
+
+        foreach(pattern IN ITEMS
+            "libcurl-*.dll" "libcrypto-*.dll" "libssl-*.dll" "libz-*.dll"
+            "libidn2-*.dll" "libunistring-*.dll" "libpsl-*.dll" "libintl-*.dll"
+            "libiconv-*.dll" "libnghttp2-*.dll" "libnghttp3-*.dll"
+            "libngtcp2*.dll" "libbrotli*.dll" "libssh2-*.dll" "libzstd*.dll"
+        )
+            file(GLOB matched "${CFORM_CURL_BINDIR}/${pattern}")
+            list(APPEND CFORM_CURL_DLLS ${matched})
+        endforeach()
+
+        if(CFORM_CURL_DLLS)
+            add_custom_command(TARGET cform_demo POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${CFORM_CURL_DLLS}
+                    $<TARGET_FILE_DIR:cform_demo>
+                COMMENT "Copying libcurl runtime DLLs beside cform_demo"
+            )
+        endif()
+    endif()
+
     # WebAssembly: compile the SAME demo.c and layout into a browser-runnable
     # .html/.js/.wasm. ASYNCIFY lets the existing blocking ui_render() loop
     # yield to the browser instead of freezing the JS main thread.
@@ -186,6 +265,7 @@ if(CFORM_BUILD_EXAMPLES)
             "-sUSE_WEBGL2=1"
             "-sASYNCIFY=1"
             "-sALLOW_MEMORY_GROWTH=1"
+            "-sFETCH=1"
             "--preload-file=${CMAKE_CURRENT_SOURCE_DIR}/example/assets@/assets"
             "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/example/web/index.html"
         )

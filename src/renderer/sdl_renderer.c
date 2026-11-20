@@ -6,6 +6,7 @@
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include "internal.h"
+#include "http_loader.h"
 
 #define DEFAULT_FONT_SIZE 16.0f
 #define TEXT_CACHE_CAPACITY 64
@@ -29,6 +30,8 @@ static const char *const font_candidates[] = {
 typedef struct {
     const char *src;
     SDL_Texture *texture;
+    /* Non-NULL while a remote source is still downloading. */
+    UI_HttpDownload *download;
     int width;
     int height;
 } ImageEntry;
@@ -579,22 +582,92 @@ static SDL_Texture *texture_from_path(
     return texture;
 }
 
-/* Returns the cached entry for an image source. A failed load keeps a NULL
- * texture so the path is not retried on every frame. */
-static ImageEntry *get_image(SDL_Renderer *renderer, const char *src) {
-    for (int i = 0; i < g_image_cache_count; i++) {
-        if (g_image_cache[i].src == src) {
-            return &g_image_cache[i];
-        }
-    }
+/* Decodes an image that has already been downloaded. SDL_IOFromConstMem does
+ * not copy, but the loader keeps the buffer alive until ui_http_shutdown(),
+ * which runs after every texture is destroyed, so this stays valid. */
+static SDL_Texture *texture_from_bytes(
+    SDL_Renderer *renderer,
+    UI_HttpDownload *download,
+    int *width,
+    int *height
+) {
+    size_t len = 0;
+    const unsigned char *bytes = ui_http_bytes(download, &len);
+    SDL_Texture *texture;
+    SDL_IOStream *io;
 
-    if (g_image_cache_count >= IMAGE_CACHE_CAPACITY) {
+    if (bytes == NULL) {
         return NULL;
     }
 
-    ImageEntry *slot = &g_image_cache[g_image_cache_count++];
-    slot->src = src;
-    slot->texture = texture_from_path(renderer, src, &slot->width, &slot->height);
+    io = SDL_IOFromConstMem(bytes, len);
+
+    if (io == NULL) {
+        return NULL;
+    }
+
+    /* closeio is true, so the stream is released on both paths. */
+    texture = IMG_LoadTexture_IO(renderer, io, true);
+
+    if (texture != NULL) {
+        measure_texture(texture, width, height);
+    }
+
+    return texture;
+}
+
+/* Returns the cached entry for an image source, which may be a local path or
+ * an http(s) URL. A failed local load keeps a NULL texture so the path is not
+ * retried on every frame; a remote source keeps a download handle instead and
+ * drops it once the transfer reaches a terminal state. */
+static ImageEntry *get_image(SDL_Renderer *renderer, const char *src) {
+    ImageEntry *slot = NULL;
+
+    for (int i = 0; i < g_image_cache_count; i++) {
+        if (g_image_cache[i].src == src) {
+            slot = &g_image_cache[i];
+            break;
+        }
+    }
+
+    /* Done means a texture, a permanent local miss, or a finished download. */
+    if (slot != NULL && slot->download == NULL) {
+        return slot;
+    }
+
+    if (slot == NULL) {
+        if (g_image_cache_count >= IMAGE_CACHE_CAPACITY) {
+            return NULL;
+        }
+
+        slot = &g_image_cache[g_image_cache_count++];
+        slot->src = src;
+        slot->texture = NULL;
+        slot->download = NULL;
+        slot->width = 0;
+        slot->height = 0;
+
+        if (ui_http_is_url(src)) {
+            slot->download = ui_http_start(src);
+        } else {
+            slot->texture = texture_from_path(
+                renderer, src, &slot->width, &slot->height);
+        }
+    }
+
+    if (slot->download != NULL) {
+        UI_HttpStatus status = ui_http_status(slot->download);
+
+        if (status == UI_HTTP_READY) {
+            slot->texture = texture_from_bytes(
+                renderer, slot->download, &slot->width, &slot->height);
+            slot->download = NULL;
+        } else if (status == UI_HTTP_FAILED) {
+            /* The loader already logged the reason. Clearing the handle stops
+             * the retry; the frame draws its background in the meantime. */
+            slot->download = NULL;
+        }
+    }
 
     return slot;
 }
@@ -770,8 +843,14 @@ static void shutdown_text(void) {
         if (g_image_cache[i].texture != NULL) {
             SDL_DestroyTexture(g_image_cache[i].texture);
         }
+
+        /* A download that never finished must not outlive the textures that
+         * were copied from it. */
+        g_image_cache[i].download = NULL;
     }
     g_image_cache_count = 0;
+
+    ui_http_shutdown();
 
     TTF_Quit();
 }

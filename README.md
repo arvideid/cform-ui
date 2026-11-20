@@ -22,8 +22,8 @@ layout and renders it through SDL3, either in a native window or in a browser.
 - Pointer interaction: hit-testing, hover/pressed background swaps, click
   handlers.
 - Text labels rendered through SDL3_ttf with a system font.
-- Images through SDL3_image: PNG, JPEG, WebP, GIF and SVG, with scaling
-  modes.
+- Images through SDL3_image: local paths and remote `http(s)` URLs, with
+  scaling modes and background downloading that never blocks the frame loop.
 - Scrollable containers that clip overflowing children.
 - One layout implementation, two backends: native SDL3 and WebAssembly.
 - Renderer-agnostic core, verified by a headless test suite.
@@ -36,7 +36,37 @@ layout and renders it through SDL3, either in a native window or in a browser.
 - [Ninja](https://ninja-build.org/) - used by the presets
 - SDL3 and SDL3_ttf, resolved from your system or downloaded via
   `FetchContent` (SDL3_ttf vendors FreeType and HarfBuzz when fetched)
+- libcurl, for remote image URLs in native builds. Without it the build still
+  works and local images are unaffected; `http(s)` sources are reported as
+  unloadable:
+  - Windows (MSYS2): `pacman -S mingw-w64-ucrt-x86_64-curl`
+  - Debian/Ubuntu: `sudo apt install libcurl4-openssl-dev`
+  - macOS: the system SDK already provides it
 - For the web build only: [Emscripten](https://emscripten.org/) (`emsdk`)
+
+### Remote images
+
+`image_src` accepts either a filesystem path or an `http(s)` URL:
+
+```c
+UI_Frame *banner = ui_frame(ctx, (UI_FrameConfig){
+    .width     = UI_FILL,
+    .height    = UI_FIXED(200),
+    .image_src = "https://picsum.photos/seed/cform/900/200",
+    .image_fit = UI_IMAGE_FIT,
+});
+```
+
+Downloads run in the background - native builds hand each URL to a worker
+thread over libcurl, browser builds use `emscripten_fetch` - so the frame
+keeps drawing its own background until the bytes land, and the rest of the UI
+stays responsive. Each URL is fetched once and cached; a failure is logged
+with the reason (HTTP status, TLS or CORS) and not retried every frame.
+
+Two limits worth knowing: browser requests obey CORS, so the image server must
+allow your origin, and native TLS verification uses the trust store libcurl was
+built against - if you see a certificate error, point `CURL_CA_BUNDLE` at a CA
+bundle file.
 
 ## Build and run - native
 

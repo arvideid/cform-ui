@@ -27,7 +27,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install SDL3 build dependencies (Linux)
+      - name: Install SDL3 and libcurl build dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -35,7 +35,7 @@ jobs:
             libx11-dev libxcursor-dev libxrandr-dev libxss-dev \
             libxtst-dev libxxf86vm-dev libasound2-dev \
             mesa-common-dev libgl1-mesa-dev libudev-dev \
-            libfreetype-dev libharfbuzz-dev
+            libfreetype-dev libharfbuzz-dev libcurl4-openssl-dev
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }} -DCFORM_BUILD_TESTS=ON
