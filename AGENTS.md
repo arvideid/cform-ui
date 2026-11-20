@@ -91,13 +91,17 @@ commented-out code, no TODO without an issue link, no license repetition.
 
 ## Tests
 
-Unit and conformance cases run headless against the layer under test. The layout
-corpus lives in `tests/unit/layout_cases_data.h` as data — a tree of styles, the
-offer, the rect every node must land in — so a rule is covered by adding a row,
-not a function. Golden (command-stream snapshots, changed only through an update
-tool and reviewed as data) and bench (published baselines) arrive with the layers
-they cover. Test names describe the scenario — `store_rejects_a_stale_id`, not
-`test_store_3`. Add a failing test before fixing a bug and keep it afterwards.
+Unit and conformance cases run headless against the layer under test. Two
+corpora share one row format: the scenarios in
+`tests/unit/layout_cases_data.h`, and Yoga's flexbox fixtures ported into
+`tests/conformance/yoga_cases_data.h` by `tools/gentest.py` and scored in
+[`docs/conformance.md`](docs/conformance.md), where the tier asserts a floor
+that only moves up. A rule is covered by adding a row, not a function. Golden
+(command-stream snapshots, changed only through an update tool and reviewed as
+data) arrives with the paint layer; the bench tier publishes its baseline in
+[`docs/bench.md`](docs/bench.md). Test names describe the scenario —
+`store_rejects_a_stale_id`, not `test_store_3`. Add a failing test before fixing
+a bug and keep it afterwards.
 
 Nothing in the suite verifies a pixel. Screenshots and window behaviour are the
 maintainer's check, so a PR that changes rendering says what to look at.
@@ -135,6 +139,21 @@ Before committing, read `git diff --cached` and confirm the branch; stage by pat
 or hunk, never `git add .`. Before amending or rebasing, check `git reflog -5` —
 if HEAD moved underneath you, stop.
 
+## Gates and hygiene
+
+`cmake --build --preset dev` and `ctest --preset dev` are green with zero
+warnings on Linux, Windows and macOS; `.clang-format`, `.clang-tidy` and
+`tools/check_includes.py` pass for the files touched. No new mutable global, and
+no sentinel that means "unset" for one field and a real value for another.
+
+Benchmarks and conformance results are published, not claimed — a number lives
+in `docs/` and moves in the diff that moves it. Nothing is committed that the
+repository can regenerate or fetch, and no dependency joins the tree unless it
+removes more code than it imports.
+
+Build and `ctest` prove compilation and headless behaviour, not what the window
+draws. An example that changed still runs, and a human has seen it.
+
 ## Security
 
 Report vulnerabilities as described in [`SECURITY.md`](SECURITY.md), not in a
@@ -144,3 +163,7 @@ public issue.
 
 By contributing you agree that your contributions are licensed under the MIT
 license in [`LICENSE`](LICENSE).
+
+The checked-in conformance corpus derives from facebook/yoga, also MIT
+(Copyright (c) Facebook, Inc. and its affiliates); the attribution travels with
+the numbers, as [`docs/conformance.md`](docs/conformance.md) states.
