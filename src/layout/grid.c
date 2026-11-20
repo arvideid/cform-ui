@@ -162,7 +162,7 @@ static cf_size grid_resolve(grid_ctx *g, bool arranging) {
     g->column_sizes = column_sizes;
     g->row_sizes = row_sizes;
 
-    if (!grid_size_tracks(g)) {
+    if (!grid_size_tracks(g, arranging)) {
         cf_logf(CF_LOG_LAYOUT, "layout: scratch refused the axes of a %u by %u grid", column_count,
                 row_count);
         cf_arena_rewind(ctx->scratch, mark);

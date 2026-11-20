@@ -261,10 +261,10 @@ static void resolve_flexible(track_state *state, uint32_t count, float *sizes, f
 }
 
 /*
- * The alignment a grid container starts with behaves as stretch: what the
- * tracks leave over is shared between the ones that named no ceiling, so a
- * container with a definite height fills it instead of drawing a band of cells
- * at the top. A track that named a length keeps exactly that.
+ * The alignment a grid container starts with behaves as stretch: what a box
+ * that is already sized leaves over is shared between the tracks that named no
+ * ceiling, so a container with a definite height fills it instead of drawing a
+ * band of cells at the top. A track that named a length keeps exactly that.
  */
 static void stretch_tracks(track_state *state, const cf_track *tracks, uint32_t count, float room) {
     float leftover = room;
@@ -293,12 +293,16 @@ static void stretch_tracks(track_state *state, const cf_track *tracks, uint32_t 
 
 /*
  * §12.4 through §12.7 over one axis: the floors and ceilings the items ask for,
- * then whatever the container's own size allows. An indefinite axis gives every
- * track the size its content asked for and asks a fractional one for nothing
- * beyond its floor, because an axis with no end has no leftover to share.
+ * then whatever the container's own size allows. Leftover space is only shared
+ * out when `settled_box` says the axis is already sized: the offer a node is
+ * measured against comes from its parent's box, and a parent that took that
+ * height from this measurement would otherwise hand space back to the tracks
+ * that asked for it. An axis with no leftover gives a fractional track nothing
+ * beyond its floor.
  */
 static void size_axis(const grid_ctx *g, const cf_track *tracks, uint32_t count, float *sizes,
-                      track_state *state, float gap, cf_length offer_length, bool width_axis) {
+                      track_state *state, float gap, cf_length offer_length, bool width_axis,
+                      bool settled_box) {
     float percent_base = 0.0f;
     definite_offer(offer_length, &percent_base);
     init_states(tracks, count, percent_base, state);
@@ -308,7 +312,7 @@ static void size_axis(const grid_ctx *g, const cf_track *tracks, uint32_t count,
 
     float offer;
 
-    if (!definite_offer(offer_length, &offer)) {
+    if (!settled_box || !definite_offer(offer_length, &offer)) {
         for (uint32_t t = 0u; t < count; ++t) {
             sizes[t] = state[t].flex > 0.0f ? state[t].base : larger(state[t].base, state[t].limit);
         }
@@ -349,7 +353,7 @@ static void size_axis(const grid_ctx *g, const cf_track *tracks, uint32_t count,
  * measures its items at the width the cells turned out to have, so an item that
  * wraps reports the height it will really need.
  */
-bool grid_size_tracks(grid_ctx *g) {
+bool grid_size_tracks(grid_ctx *g, bool settled_box) {
     const size_t mark = cf_arena_mark(g->ctx->scratch);
     track_state *column_state =
         cf_alloc(g->ctx->scratch, (size_t)g->column_count * sizeof *column_state);
@@ -362,9 +366,9 @@ bool grid_size_tracks(grid_ctx *g) {
     }
 
     size_axis(g, g->columns, g->column_count, g->column_sizes, column_state, g->column_gap,
-              g->constraint.width, true);
+              g->constraint.width, true, settled_box);
     size_axis(g, g->rows, g->row_count, g->row_sizes, row_state, g->row_gap, g->constraint.height,
-              false);
+              false, settled_box);
 
     cf_arena_rewind(g->ctx->scratch, mark);
 

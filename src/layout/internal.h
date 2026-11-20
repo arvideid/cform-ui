@@ -248,9 +248,10 @@ float axis_extent(const float *sizes, uint32_t count, float gap);
 
 /*
  * Grid §12.4 through §12.7 over both axes of `g`, written into the size arrays
- * it carries. False when scratch refused the solver's own state.
+ * it carries. Leftover space is shared out only when `settled_box` says the
+ * axes are already sized; false when scratch refused the solver's own state.
  */
-bool grid_size_tracks(grid_ctx *g);
+bool grid_size_tracks(grid_ctx *g, bool settled_box);
 
 /*
  * The two entries the dispatcher uses. An item that names a size on an axis is

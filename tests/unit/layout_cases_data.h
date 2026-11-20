@@ -514,3 +514,19 @@
                {ABSOLUTE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
                          .inset = SIDES(CF_PX(20.0f), CF_PX(20.0f), CF_AUTO, CF_AUTO)),
                 0u, RECT(20.0f, 20.0f, 40.0f, 40.0f)}}},
+
+    /* The offer a grid is measured against comes from its parent's box, so a
+     * column that took its height from this grid must not give that height back
+     * as space the tracks can stretch into. */
+    {.name = "a grid inside a column that hugs it keeps the rows it measured",
+     .available = AVAILABLE(CF_AUTO, CF_AUTO),
+     .node_count = 6u,
+     .nodes = {{COLUMN(.width = CF_PX(240.0f), .row_gap = CF_PX(8.0f)), ROOT,
+                RECT(0.0f, 0.0f, 240.0f, 92.0f)},
+               {GRID(.column_tracks = TRACKS(FIXED(60.0f), TRACK(CF_AUTO, CF_FR(1.0f))),
+                     .column_count = 2u, .column_gap = CF_PX(8.0f), .row_gap = CF_PX(8.0f)),
+                0u, RECT(0.0f, 0.0f, 240.0f, 68.0f)},
+               {SIZE(60.0f, 30.0f), 1u, RECT(0.0f, 0.0f, 60.0f, 30.0f)},
+               {SIZE(40.0f, 30.0f), 1u, RECT(68.0f, 0.0f, 40.0f, 30.0f)},
+               {STYLE(.height = CF_PX(30.0f)), 1u, RECT(0.0f, 38.0f, 60.0f, 30.0f)},
+               {STYLE(.height = CF_PX(16.0f)), 0u, RECT(0.0f, 76.0f, 240.0f, 16.0f)}}},
