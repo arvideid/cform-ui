@@ -1,9 +1,14 @@
 #include "layout/internal.h"
 
 /* count is at least 1 wherever this is called. AROUND and EVENLY divide by
- * count or count + 1 so the halves land on both edges even for one item. */
+ * count or count + 1 so the halves land on both edges even for one item.
+ *
+ * Negative free space - more content than box - leaves the spreading keywords
+ * nothing to spread, and they pack from the start edge; centre and end still
+ * read the shortfall, which overflows the far edge (§9.5). */
 static line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra) {
     const float boxes = (float)count;
+    const bool room = extra >= 0.0f;
     line_spacing spacing = {0.0f, 0.0f};
 
     switch (mode) {
@@ -16,17 +21,21 @@ static line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra
         spacing.before = extra;
         break;
     case CF_JUSTIFY_SPACE_BETWEEN:
-        if (count > 1u) {
+        if (count > 1u && room) {
             spacing.between = extra / (boxes - 1.0f);
         }
         break;
     case CF_JUSTIFY_SPACE_AROUND:
-        spacing.between = extra / boxes;
-        spacing.before = spacing.between * 0.5f;
+        if (room) {
+            spacing.between = extra / boxes;
+            spacing.before = spacing.between * 0.5f;
+        }
         break;
     case CF_JUSTIFY_SPACE_EVENLY:
-        spacing.between = extra / (boxes + 1.0f);
-        spacing.before = spacing.between;
+        if (room) {
+            spacing.between = extra / (boxes + 1.0f);
+            spacing.before = spacing.between;
+        }
         break;
     }
 
@@ -34,9 +43,11 @@ static line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra
 }
 
 /* §9.6.2: how the leftover cross space falls between lines. Stretch grows the
- * lines themselves instead, so it never reaches here. */
+ * lines themselves instead, so it never reaches here. The spreading keywords
+ * read a shortfall as no space at all, the way §9.5 has them do. */
 static line_spacing content_spacing(cf_align_content mode, uint32_t count, float extra) {
     const float boxes = (float)count;
+    const bool room = extra >= 0.0f;
     line_spacing spacing = {0.0f, 0.0f};
 
     switch (mode) {
@@ -49,17 +60,21 @@ static line_spacing content_spacing(cf_align_content mode, uint32_t count, float
         spacing.before = extra;
         break;
     case CF_ALIGN_CONTENT_SPACE_BETWEEN:
-        if (count > 1u) {
+        if (count > 1u && room) {
             spacing.between = extra / (boxes - 1.0f);
         }
         break;
     case CF_ALIGN_CONTENT_SPACE_AROUND:
-        spacing.between = extra / boxes;
-        spacing.before = spacing.between * 0.5f;
+        if (room) {
+            spacing.between = extra / boxes;
+            spacing.before = spacing.between * 0.5f;
+        }
         break;
     case CF_ALIGN_CONTENT_SPACE_EVENLY:
-        spacing.between = extra / (boxes + 1.0f);
-        spacing.before = spacing.between;
+        if (room) {
+            spacing.between = extra / (boxes + 1.0f);
+            spacing.before = spacing.between;
+        }
         break;
     case CF_ALIGN_CONTENT_AUTO:
     case CF_ALIGN_CONTENT_STRETCH:
@@ -89,10 +104,12 @@ static void place_lines(const flex_context *f, flex_line *lines, uint32_t line_c
         used += lines[l].cross;
     }
 
-    const float extra = clamp_non_negative(f->cross_size - used);
+    const float extra = f->cross_size - used;
     line_spacing spacing = {0.0f, 0.0f};
 
-    if (mode == CF_ALIGN_CONTENT_STRETCH) {
+    /* Stretch gives the lines what is left and nothing more: a block of lines
+     * that already overflows keeps the sizes it measured. */
+    if (mode == CF_ALIGN_CONTENT_STRETCH && extra > 0.0f) {
         const float grow = extra / (float)line_count;
         for (uint32_t l = 0; l < line_count; ++l) {
             lines[l].cross += grow;
@@ -184,11 +201,14 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
                             (items[i].auto_margin_main_end ? 1u : 0u);
         }
 
-        const float extra = clamp_non_negative(f->main_size - line_outer_main(f, items, line));
+        const float extra = f->main_size - line_outer_main(f, items, line);
         const line_spacing justify =
             auto_margins > 0u ? (line_spacing){0.0f, 0.0f}
                               : justify_spacing(f->style->justify_content, line->count, extra);
-        const float auto_share = auto_margins > 0u ? extra / (float)auto_margins : 0.0f;
+        /* A line already wider than the box has nothing left for an auto margin
+         * to claim, and a negative share would pull the item back. */
+        const float auto_share =
+            auto_margins > 0u ? clamp_non_negative(extra) / (float)auto_margins : 0.0f;
 
         float cursor = justify.before;
         for (uint32_t i = line->first; i < end; ++i) {
