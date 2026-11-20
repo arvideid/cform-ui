@@ -207,6 +207,57 @@ if(CFORM_WARNINGS)
     target_compile_options(cform PRIVATE ${CFORM_WARNINGS})
 endif()
 
+# The 1.0 layer graph starts here: one target per layer, so a dependency can
+# only be created where the layer graph allows it — the linker is the check.
+# cf_base is libc-only and is what every later layer links.
+add_library(cf_base STATIC
+    src/base/arena.c
+    src/base/hash.c
+    src/base/intern.c
+    src/base/log.c
+    src/base/store.c
+)
+
+target_include_directories(cf_base
+    PUBLIC include
+    PRIVATE src
+)
+
+if(CFORM_WARNINGS)
+    target_compile_options(cf_base PRIVATE ${CFORM_WARNINGS})
+endif()
+
+# Address and undefined behaviour sanitizers over the 1.0 layers and their
+# tests. Off by default: the pair needs runtime libraries that neither MSVC nor
+# a bare MinGW toolchain ships, and the toolchain switch is a build-time
+# decision rather than a code one.
+option(CFORM_WITH_SANITIZERS "Build the 1.0 layers under ASan and UBSan" OFF)
+
+set(CFORM_SANITIZERS "")
+if(CFORM_WITH_SANITIZERS)
+    set(CFORM_SANITIZERS -fsanitize=address,undefined -fno-omit-frame-pointer)
+
+    # Asking for sanitizers and quietly getting an unsanitized build would
+    # report clean memory use for a run that checked nothing.
+    include(CheckCSourceCompiles)
+    set(CFORM_REQUIRED_FLAGS_BACKUP "${CMAKE_REQUIRED_FLAGS}")
+    list(JOIN CFORM_SANITIZERS " " CFORM_SANITIZER_FLAGS)
+    set(CMAKE_REQUIRED_FLAGS "${CFORM_SANITIZER_FLAGS}")
+    check_c_source_compiles("int main(void) { return 0; }" CFORM_SANITIZERS_USABLE)
+    set(CMAKE_REQUIRED_FLAGS "${CFORM_REQUIRED_FLAGS_BACKUP}")
+
+    if(NOT CFORM_SANITIZERS_USABLE)
+        message(FATAL_ERROR
+            "CFORM_WITH_SANITIZERS=ON, but the C compiler (${CMAKE_C_COMPILER_ID}) "
+            "cannot link -fsanitize=address,undefined. MSVC has no equivalent pair; "
+            "MinGW needs the sanitizer runtime packages installed. Reconfigure with "
+            "-DCFORM_WITH_SANITIZERS=OFF, or use clang on Linux or macOS.")
+    endif()
+
+    target_compile_options(cf_base PRIVATE ${CFORM_SANITIZERS})
+    target_link_options(cf_base PUBLIC ${CFORM_SANITIZERS})
+endif()
+
 option(CFORM_BUILD_EXAMPLES "Build cform-ui example programs" ON)
 
 if(CFORM_BUILD_EXAMPLES)
