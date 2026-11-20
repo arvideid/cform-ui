@@ -21,6 +21,15 @@ out of the flow with `position: absolute`. Content the engine cannot see into �
 text, an image, a foreign subtree — arrives through a `cf_measure_fn` callback,
 so the library links nothing but libc.
 
+Grid is a subset, and the subset is the contract: explicit tracks written as
+`px`, `%`, `fr`, `auto`, `minmax()` and `repeat()`, items placed by a 1-based
+start line and a span on either axis, and dense auto-placement for the items
+that name no lines. A container with no column tracks gets one content-sized
+column, and a row an item overflows into becomes a content-sized track of its
+own. The grid reads none of the alignment enums: leftover space in a settled box
+always goes to the tracks that named no ceiling, which is CSS's `normal` on both
+axes. Named lines, `span all` and `grid-auto-flow: column` are out of scope.
+
 ```c
 #include "cf/layout.h"
 
@@ -62,6 +71,11 @@ arrays, so a subtree can be moved, serialized or replayed without chasing
 pointers. Scratch is a caller-owned arena that each node hands back before
 descending, which keeps layout allocation-free across a frame.
 
+[`examples/layout_only.c`](examples/layout_only.c) is the same idea as a
+program: it links `cf_layout` and nothing else, lays a grid inside a column that
+hugs it, and measures a label through a callback. Building it is the check that
+the engine still stands alone.
+
 ## Requirements
 
 - CMake **3.25**+, a **C17** compiler (GCC, Clang or MSVC) and
@@ -92,7 +106,9 @@ src/base/       Arena, pool, handle, intern, hash, log (libc only)
 src/style/      Length and box resolution, style defaults
 src/layout/     Flex, grid, absolute, intrinsic measurement, measure callback
 src/*/internal.h  Types shared across src/ but not published
+examples/       Standalone programs, off unless CFORM_BUILD_EXAMPLES is on
 tests/unit/     One file per layer, scenario-named cases
+tests/bench/    Throughput rigs at the size the budget names
 tools/          The include-graph check CI runs
 ```
 
@@ -114,8 +130,47 @@ a function when a rule needs covering. Assertions come from the tiny,
 dependency-free [`tests/cform_test.h`](tests/cform_test.h); the harness is
 small on purpose.
 
-Renderer behaviour is verified by running the example and looking at it, never
-by mocking the backend or asserting pixels.
+[`tests/bench/bench_layout.c`](tests/bench/bench_layout.c) is the bench tier:
+two 10,000-node rigs that print milliseconds per layout and assert only that the
+tree still lands where it should. A shared runner cannot be trusted for a
+wall-clock number, so a regression is a diff in a published baseline a reviewer
+reads rather than a build that goes red on a busy machine. They carry the
+`bench` label, which keeps them out of an everyday run:
+
+```sh
+ctest --preset dev           # unit and conformance cases
+ctest --preset dev -L bench  # the throughput rigs, printing the baseline
+```
+
+When the renderer returns it will be verified by running the example and looking
+at it, never by mocking the backend or asserting pixels.
+
+## Benchmarks
+
+One layout of a 1280 × 720 offer, `release` preset, GCC on Windows (MSYS2
+UCRT64), reporting the fastest pass of the rig. Three consecutive runs agree
+within 5% on the flex tree; the flat grid spread 240 to 330 ms, which is what a
+quadratic scan makes visible when the machine is not idle.
+
+| rig                                              | nodes  | ms per layout |
+|--------------------------------------------------|--------|---------------|
+| deep flex tree                                   |  1,250 | 1.0           |
+| deep flex tree                                   |  2,500 | 2.3           |
+| deep flex tree                                   |  5,000 | 4.9           |
+| deep flex tree                                   | 10,000 | 10.5          |
+| flat 100-column grid, `fr` columns, content rows  | 10,000 | ~300          |
+
+Neither endpoint meets the 2 ms budget, and both gaps are structural rather than
+incidental:
+
+- Cost per node rises as the deep tree grows - 780 ns at 1,250 nodes, 1,070 ns
+  at 10,000, a log factor. Nothing caches a measured size, so a subtree is
+  measured once at every level above it: `layout_subtree` resolves the node's
+  own border box from its content and then arranges children, each of which
+  measures again. A layout cache invalidated by dirty bits is the node layer's
+  job, and the budget is its exit criterion.
+- The flat grid is quadratic in the cells, because dense placement restarts its
+  row-major scan of the occupancy map at the first cell for every item.
 
 ## Editor and developer experience
 
