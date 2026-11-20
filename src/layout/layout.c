@@ -69,18 +69,42 @@ static cf_point relative_origin(const cf_style *style, cf_available constraint, 
 }
 
 /*
+ * Whether a node frames the absolutely positioned descendants below it. A
+ * static box does not: it moves its children but owns no coordinate system for
+ * them, so the block keeps travelling up until it finds a box that does. The
+ * root frames its own because the engine is told no viewport to stand in for
+ * the initial containing block.
+ */
+static bool frames_block(const layout_ctx *ctx, uint32_t slot, const cf_style *style) {
+    return style->position != CF_POSITION_STATIC || slot == ctx->root;
+}
+
+/*
+ * The padding box: a border box taken inside its own frame. Declared sizes are
+ * border boxes here, so the frame comes back off both edges to reach the box
+ * CSS hands to an absolutely positioned child.
+ */
+static cf_rect padding_box(cf_rect border_box, cf_edges frame) {
+    return (cf_rect){.x = border_box.x + frame.left,
+                     .y = border_box.y + frame.top,
+                     .width = clamp_non_negative(border_box.width - frame.left - frame.right),
+                     .height = clamp_non_negative(border_box.height - frame.top - frame.bottom)};
+}
+
+/*
  * Padding wider than the box leaves a content extent of zero rather than a
  * negative one: every offset a child computes from the extent would otherwise
  * invert.
  */
 void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
-                    cf_available verdict, cf_point origin) {
+                    cf_available verdict, cf_point origin, cf_rect containing) {
     const cf_size border = border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, verdict);
     const cf_style *style = &ctx->tree->styles[slot];
     const cf_point placed = relative_origin(style, constraint, origin);
+    const cf_rect box = {
+        .x = placed.x, .y = placed.y, .width = border.width, .height = border.height};
 
-    ctx->rects[slot] =
-        (cf_rect){.x = placed.x, .y = placed.y, .width = border.width, .height = border.height};
+    ctx->rects[slot] = box;
 
     if (child_count(ctx, slot) == 0u) {
         return;
@@ -95,18 +119,23 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
         .height = clamp_non_negative(border.height - inset.top - inset.bottom),
     };
 
-    const cf_available box = {.width = CF_PX(content.width), .height = CF_PX(content.height)};
-    const cf_point content_origin = {.x = placed.x + inset.left, .y = placed.y + inset.top};
+    const cf_available content_box = {.width = CF_PX(content.width),
+                                      .height = CF_PX(content.height)};
+    const cf_point content_origin = {.x = box.x + inset.left, .y = box.y + inset.top};
+    const cf_rect block = frames_block(ctx, slot, style)
+                              ? padding_box(box, cf_box_resolve(style->border, percent_base))
+                              : containing;
 
     if (style->display == CF_DISPLAY_GRID) {
-        grid_arrange(ctx, slot, box, content_origin);
+        grid_arrange(ctx, slot, content_box, content_origin, block);
 
         return;
     }
 
     const flex_pass pass = {
-        .constraint = box,
+        .constraint = content_box,
         .origin = content_origin,
+        .containing = block,
         .mode = FLEX_ARRANGE,
     };
 
@@ -119,8 +148,11 @@ void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_availab
         return;
     }
 
-    const layout_ctx ctx = {.scratch = scratch, .tree = tree, .rects = rects};
+    const layout_ctx ctx = {.scratch = scratch, .tree = tree, .rects = rects, .root = root};
     const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
+    /* Nothing is inherited above the root: it frames its own box, so this
+     * block is never read. */
+    const cf_rect nowhere = {0.0f, 0.0f, 0.0f, 0.0f};
 
-    layout_subtree(&ctx, root, available, undecided, origin);
+    layout_subtree(&ctx, root, available, undecided, origin, nowhere);
 }

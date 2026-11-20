@@ -91,7 +91,8 @@ static void place_item(const grid_ctx *g, const grid_item *item) {
                    (cf_available){.width = CF_PX(cell.width), .height = CF_PX(cell.height)},
                    verdict,
                    (cf_point){.x = g->origin.x + offset.x + margin.left,
-                              .y = g->origin.y + offset.y + margin.top});
+                              .y = g->origin.y + offset.y + margin.top},
+                   g->containing);
 
     cf_arena_rewind(g->ctx->scratch, mark);
 }
@@ -180,7 +181,7 @@ static cf_size grid_resolve(grid_ctx *g, bool arranging) {
             place_item(g, &items[i]);
         }
 
-        place_absolute(ctx, g->slot, g->constraint, g->origin);
+        place_absolute(ctx, g->slot, g->containing, g->origin);
     }
 
     cf_arena_rewind(ctx->scratch, mark);
@@ -189,7 +190,7 @@ static cf_size grid_resolve(grid_ctx *g, bool arranging) {
 }
 
 static grid_ctx grid_context_of(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
-                                cf_intrinsic mode, cf_point origin) {
+                                cf_intrinsic mode, cf_point origin, cf_rect containing) {
     const cf_style *style = &ctx->tree->styles[slot];
 
     grid_ctx g = {
@@ -199,6 +200,7 @@ static grid_ctx grid_context_of(const layout_ctx *ctx, uint32_t slot, cf_availab
         .constraint = constraint,
         .intrinsic = mode,
         .origin = origin,
+        .containing = containing,
     };
 
     /* Gaps and percentage tracks resolve against the container's own content
@@ -212,13 +214,18 @@ static grid_ctx grid_context_of(const layout_ctx *ctx, uint32_t slot, cf_availab
 
 cf_size grid_extent_of(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
                        cf_intrinsic mode) {
-    grid_ctx g = grid_context_of(ctx, slot, constraint, mode, (cf_point){0.0f, 0.0f});
+    /* Measuring places no child, so the block a placed child would measure
+     * against is never read here. */
+    grid_ctx g = grid_context_of(ctx, slot, constraint, mode, (cf_point){0.0f, 0.0f},
+                                 (cf_rect){0.0f, 0.0f, 0.0f, 0.0f});
 
     return grid_resolve(&g, false);
 }
 
-void grid_arrange(const layout_ctx *ctx, uint32_t slot, cf_available constraint, cf_point origin) {
-    grid_ctx g = grid_context_of(ctx, slot, constraint, CF_INTRINSIC_MAX_CONTENT, origin);
+void grid_arrange(const layout_ctx *ctx, uint32_t slot, cf_available constraint, cf_point origin,
+                  cf_rect containing) {
+    grid_ctx g =
+        grid_context_of(ctx, slot, constraint, CF_INTRINSIC_MAX_CONTENT, origin, containing);
 
     grid_resolve(&g, true);
 }

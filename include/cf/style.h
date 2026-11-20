@@ -54,10 +54,12 @@ typedef enum cf_align_content {
 /*
  * Whether a child takes part in its container's flex layout, and what its
  * insets do. A relative box stays in the flow and moves by its own insets. An
- * absolute child is measured and placed against its container's content box
- * instead of a line, which is the overlay a toolkit needs. The CSS chain of
- * positioned ancestors is not modelled: every container is its absolute
- * children's containing block. CF_POSITION_RELATIVE is appended, so a stored
+ * absolute child leaves the flow and is measured and placed against its
+ * containing block: the padding box of the nearest ancestor that is not
+ * static, the root's own box when the chain never leaves `static`. Its static
+ * position still comes from the parent that holds it, so a child of a static
+ * box takes one ancestor's edges and its own parent's flow at once. This is
+ * the overlay a toolkit needs. CF_POSITION_RELATIVE is appended, so a stored
  * style from before it existed keeps its meaning.
  */
 typedef enum cf_position {

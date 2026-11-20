@@ -15,11 +15,18 @@ typedef struct layout_ctx {
     cf_arena *scratch;
     const cf_tree *tree;
     cf_rect *rects;
+    uint32_t root;
 } layout_ctx;
 
+/*
+ * What a pass over a container's children is for, seen from the container.
+ * `origin` and `containing` belong to arranging, the only pass that places
+ * anything: a measured container has no box for a child to land in.
+ */
 typedef struct flex_pass {
     cf_available constraint;
     cf_point origin;
+    cf_rect containing;
     cf_intrinsic intrinsic;
     flex_mode mode;
 } flex_pass;
@@ -35,6 +42,7 @@ typedef struct flex_context {
     uint32_t slot;
     cf_available constraint;
     cf_point origin;
+    cf_rect containing;
     cf_length main_offer;
     cf_length cross_offer;
     cf_intrinsic intrinsic;
@@ -115,9 +123,13 @@ uint32_t child_count(const layout_ctx *ctx, uint32_t slot);
  * content box - and `verdict` is what the parent already decided about each
  * axis. A verdict wins over the node's own declaration; an auto verdict lets
  * the node settle its axis from its declaration or its content.
+ *
+ * `containing` is the box the node's absolutely positioned descendants measure
+ * against, the padding box of the nearest ancestor that is positioned. A
+ * static node passes it along unchanged; the root frames its own box.
  */
 void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
-                    cf_available verdict, cf_point origin);
+                    cf_available verdict, cf_point origin, cf_rect containing);
 
 /*
  * The content box of a node: its measure callback's answer when it has one and
@@ -179,12 +191,15 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
                    uint32_t line_count);
 
 /*
- * The children of `slot` that leave the flow: measured against the content box
- * `box` and placed from its `origin` by their insets, in declaration order.
- * Out-of-flow children add nothing to the container's own extent, which is why
- * a box holding only them measures as empty.
+ * The children of `slot` that leave the flow: measured against `containing`,
+ * their containing block, and placed from its edges by their insets. A child
+ * whose insets are all `auto` takes the static position, where the flow would
+ * have put it at `origin` - the content origin of the container that owns it,
+ * which is not the container that owns the block. Out-of-flow children add
+ * nothing to the container's own extent, which is why a box holding only them
+ * measures as empty.
  */
-void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_available box, cf_point origin);
+void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_rect containing, cf_point origin);
 
 /*
  * One in-flow grid item and the cells it holds. Starts are 0-based line
@@ -212,6 +227,7 @@ typedef struct grid_ctx {
     cf_available constraint;
     cf_intrinsic intrinsic;
     cf_point origin;
+    cf_rect containing;
     float percent_base;
     float column_gap;
     float row_gap;
@@ -260,6 +276,7 @@ bool grid_size_tracks(grid_ctx *g, bool settled_box);
  */
 cf_size grid_extent_of(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
                        cf_intrinsic mode);
-void grid_arrange(const layout_ctx *ctx, uint32_t slot, cf_available constraint, cf_point origin);
+void grid_arrange(const layout_ctx *ctx, uint32_t slot, cf_available constraint, cf_point origin,
+                  cf_rect containing);
 
 #endif

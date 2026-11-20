@@ -207,7 +207,8 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
 
             const size_t child_mark = cf_arena_mark(ctx->scratch);
             layout_subtree(ctx, item->slot, f->constraint,
-                           verdict_for(f, CF_PX(item->main), CF_PX(item->cross)), origin);
+                           verdict_for(f, CF_PX(item->main), CF_PX(item->cross)), origin,
+                           f->containing);
             cf_arena_rewind(ctx->scratch, child_mark);
 
             cursor = logical + item->main + main_end + f->gap_main + justify.between;

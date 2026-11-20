@@ -41,6 +41,7 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
         .slot = slot,
         .constraint = pass->constraint,
         .origin = pass->origin,
+        .containing = pass->containing,
         .row = cf_direction_is_row(style->direction),
         .reverse = cf_direction_is_reverse(style->direction),
         .measuring = pass->mode == FLEX_MEASURE,
@@ -118,7 +119,7 @@ static cf_size flex_resolve(const flex_context *f) {
         extents = size_from_extents(f, main_extent, cross_extent);
     } else {
         arrange_items(ctx, f, items, lines, line_count);
-        place_absolute(ctx, f->slot, f->constraint, f->origin);
+        place_absolute(ctx, f->slot, f->containing, f->origin);
     }
 
     cf_arena_rewind(ctx->scratch, mark);
