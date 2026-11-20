@@ -45,14 +45,19 @@ stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-267 of the 485 ported fixtures match, 55% of what was ported and 49% of the
-whole corpus. Measured at `2b782f6`, tolerance 0.01 against Chrome's
-pixel-snapped numbers - `cf_layout` does not snap, which is its own line below.
+277 of the 485 ported fixtures match, 57% of what was ported and 51% of the
+whole corpus. Measured at `7df2820`. The table is the tier's own output, so a
+run is the check and this page is the record of it.
+
+The grade is half a pixel. Chrome snapped every fixture edge to the device
+grid; `cf_layout` returns exact fractions and leaves rounding to whoever
+paints, so a correct box can sit at most half a pixel from a snapped edge. A
+finer grade would score that divergence instead of the rules.
 
 | suite | ported | match | miss |
 |-------|--------|-------|------|
 | absoluteposition | 33 | 15 | 18 |
-| aligncontent | 64 | 31 | 33 |
+| aligncontent | 64 | 37 | 27 |
 | alignitems | 29 | 11 | 18 |
 | alignself | 5 | 4 | 1 |
 | androidnewsfeed | 1 | 0 | 1 |
@@ -64,20 +69,20 @@ pixel-snapped numbers - `cf_layout` does not snap, which is its own line below.
 | flexbasisfitcontent | 5 | 2 | 3 |
 | flexdirection | 53 | 25 | 28 |
 | flexwrap | 23 | 5 | 18 |
-| gap | 32 | 23 | 9 |
-| justifycontent | 28 | 19 | 9 |
+| gap | 32 | 24 | 8 |
+| justifycontent | 28 | 21 | 7 |
 | margin | 34 | 29 | 5 |
 | minmaxdimension | 24 | 23 | 1 |
 | padding | 7 | 7 | 0 |
 | percentage | 24 | 16 | 8 |
-| rounding | 13 | 1 | 12 |
+| rounding | 13 | 2 | 11 |
 | sizeoverflow | 3 | 3 | 0 |
 | staticposition | 62 | 17 | 45 |
-| **total** | **485** | **267** | **218** |
+| **total** | **485** | **277** | **208** |
 
-496 node assertions fail across those 218 cases. Only 17 of them differ by
-less than a pixel everywhere; 197 differ by more than eight. Snapping is
-therefore not the blocker - the misses are rules the engine does not implement.
+444 node assertions fail across those 208 cases. Only 8 of them differ from
+Chrome by two pixels or less everywhere; 197 differ by more than eight. The
+grade is not what is missing - the rules are.
 
 ## What the misses need
 
@@ -95,22 +100,23 @@ therefore not the blocker - the misses are rules the engine does not implement.
   `absoluteposition` (18 of 33) and the `*_inner_*` cases in `flexdirection`.
 - **Line packing when the container wraps.** Multiple lines have to be sized,
   then distributed by `align-content`, and `stretch` has to give the leftover
-  cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 33 of
+  cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 27 of
   64.
 - **`align-items: baseline`** and the self variant, which need a baseline the
   engine can only get from a measure callback. 13 cases.
 - **Reverse directions and their edges.** `row-reverse` and `column-reverse`
   flip which edge a margin, border or padding offsets from, and 28 of
   `flexdirection` disagree by more than a pixel.
-- **Pixel snapping.** Chrome rounds each box to the device grid; `cf_layout`
-  returns exact fractions. The `rounding` suite is 12 of 13 misses and another
-  17 cases fail only by sub-pixel amounts. Snapping is a renderer decision that
-  the engine does not yet make, and it is the one gap that is a published
-  divergence rather than a missing rule.
+- **Edge rounding.** Rounding a box means rounding both its edges, so its size
+  can land a whole pixel from the exact one - `33.333` wide starting at `33.333`
+  becomes `34` when the far edge snaps to `67`. That is more than the grade
+  forgives, and it is why 11 of the 13 `rounding` cases still miss: the snap is
+  a renderer decision that `cf_layout` deliberately does not make, so this gap
+  stays a published divergence rather than a rule to implement.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 267 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 277 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
