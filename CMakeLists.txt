@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.25)
 
 project(cform-ui
     VERSION 0.2.0
@@ -7,7 +7,7 @@ project(cform-ui
 )
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    set(CMAKE_C_STANDARD 99)
+    set(CMAKE_C_STANDARD 17)
     set(CMAKE_C_STANDARD_REQUIRED ON)
 
     # Emscripten's EM_ASM macros used inside SDL3 rely on GCC statement

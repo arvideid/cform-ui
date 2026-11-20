@@ -1,7 +1,9 @@
 BasedOnStyle: LLVM
 
 Language: Cpp
-Standard: c99
+# The C values (c99, c11) were dropped from this key in clang-format 15; the
+# dialect that actually compiles the code is CMake's C_STANDARD.
+Standard: Latest
 
 IndentWidth: 4
 TabWidth: 4
