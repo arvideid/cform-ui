@@ -1,0 +1,80 @@
+name: Bug report
+description: Wrong layout, wrong pixels, a crash or a leak
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Layout and tree behaviour are reproducible headlessly, so a bug there
+        should come with code rather than a screenshot. Rendering differences are
+        worth an image; the window is reviewed by a maintainer by hand.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect instead?
+      description: Both halves, in the same order you saw them.
+      placeholder: |
+        A child with CF_LENGTH_FILL inside a 200-point row got a width of 0.
+        I expected it to split the remaining space with its sibling.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Smallest program that shows it
+      description: |
+        Cut it down until only the failing part is left. Paste the build and
+        `ctest` output if a test already fails.
+      render: C
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Layer
+      description: The top-level directory that owns the code.
+      options:
+        - base (allocation, store, interning, log)
+        - style
+        - layout
+        - text
+        - paint
+        - node
+        - theme
+        - widget
+        - backend (SDL, window, assets)
+        - app
+        - v0.2 API (ui_*, src/core, src/renderer)
+        - build or CI
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux
+        - Windows
+        - macOS
+        - WebAssembly (browser)
+    validations:
+      required: true
+  - type: textarea
+    id: toolchain
+    attributes:
+      label: Toolchain
+      description: Compiler and version, CMake version, build preset, and the
+        SDL3 revision if a fetched build is involved.
+      placeholder: |
+        GCC 14.2, CMake 3.30, dev preset (Debug), SDL3 release-3.2.20 fetched
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before opening
+      options:
+        - label: I searched the open and closed issues for this
+          required: true
+        - label: "I reproduced it on the current `main`: `cmake --build --preset dev && ctest --preset dev`"
+          required: true

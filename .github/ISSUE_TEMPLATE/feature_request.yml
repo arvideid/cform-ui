@@ -1,0 +1,52 @@
+name: Feature request
+description: A capability the framework does not have yet
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public API is a contract: every added function, enum value or command has
+        to earn its keep on the roadmap, and enum values are append-only because
+        their numbers are ABI. Say what the caller does that they cannot do now.
+  - type: textarea
+    id: gap
+    attributes:
+      label: What can't you write today?
+      description: The program you are trying to build, and where it stops.
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: What would the call look like?
+      description: |
+        Sketch it in C, including which layer owns it. A signature and one
+        sentence of behaviour is enough; no implementation.
+      render: C
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What did you do instead, and why did that not work?
+      description: A workaround that half-works tells us what the feature is for.
+    validations:
+      required: false
+  - type: textarea
+    id: cost
+    attributes:
+      label: Who pays for it?
+      description: |
+        Budget the frame cost, the memory, and the surface area. An idle frame
+        must still do zero layouts, emit zero commands and allocate nothing.
+    validations:
+      required: false
+  - type: checkboxes
+    id: build
+    attributes:
+      label: Interest
+      options:
+        - label: I would send a pull request for this
+          required: false
+        - label: I can review a pull request for this
+          required: false

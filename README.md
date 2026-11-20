@@ -217,9 +217,12 @@ git config commit.template .gitmessage
 
 ## Contributing
 
-Pull requests are welcome; open an issue first for anything substantial. Keep
-the build warning-free (`-Wall -Wextra -Wpedantic` / `/W4`) and make `ctest`
-pass - CI enforces both, plus the WebAssembly compile. A PR template is
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the layer graph, the data rules and
+the git conventions. Pull requests are welcome; open an issue first for anything
+substantial. Keep the build warning-free (`-Wall -Wextra -Wpedantic` / `/W4`) and
+make `ctest` pass - CI enforces that, the formatting and static-analysis gates
+over the 1.0 layers, a sanitizer build, and the WebAssembly compile. Report
+security problems as described in [`SECURITY.md`](SECURITY.md). A PR template is
 provided.
 
 ## License
