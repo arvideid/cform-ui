@@ -208,8 +208,8 @@ if(CFORM_WARNINGS)
 endif()
 
 # The 1.0 layer graph starts here: one target per layer, so a dependency can
-# only be created where the layer graph allows it — the linker is the check.
-# cf_base is libc-only and is what every later layer links.
+# only be created where the layer graph allows it — the linker is the check. A
+# layer target is added when the layer has code, not before.
 add_library(cf_base STATIC
     src/base/arena.c
     src/base/hash.c
@@ -218,14 +218,18 @@ add_library(cf_base STATIC
     src/base/store.c
 )
 
-target_include_directories(cf_base
-    PUBLIC include
-    PRIVATE src
-)
+set(CFORM_LAYER_TARGETS cf_base)
 
-if(CFORM_WARNINGS)
-    target_compile_options(cf_base PRIVATE ${CFORM_WARNINGS})
-endif()
+foreach(layer IN LISTS CFORM_LAYER_TARGETS)
+    target_include_directories(${layer}
+        PUBLIC include
+        PRIVATE src
+    )
+
+    if(CFORM_WARNINGS)
+        target_compile_options(${layer} PRIVATE ${CFORM_WARNINGS})
+    endif()
+endforeach()
 
 # Address and undefined behaviour sanitizers over the 1.0 layers and their
 # tests. Off by default: the pair needs runtime libraries that neither MSVC nor
@@ -254,8 +258,10 @@ if(CFORM_WITH_SANITIZERS)
             "-DCFORM_WITH_SANITIZERS=OFF, or use clang on Linux or macOS.")
     endif()
 
-    target_compile_options(cf_base PRIVATE ${CFORM_SANITIZERS})
-    target_link_options(cf_base PUBLIC ${CFORM_SANITIZERS})
+    foreach(layer IN LISTS CFORM_LAYER_TARGETS)
+        target_compile_options(${layer} PRIVATE ${CFORM_SANITIZERS})
+        target_link_options(${layer} PUBLIC ${CFORM_SANITIZERS})
+    endforeach()
 endif()
 
 option(CFORM_BUILD_EXAMPLES "Build cform-ui example programs" ON)
