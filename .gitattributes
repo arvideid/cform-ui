@@ -12,6 +12,9 @@
 *.json text eol=lf
 *.yml  text eol=lf
 
+# Tooling scripts run from CI and from a shell, where a CR breaks a shebang
+*.py   text eol=lf
+
 # Windows binaries
 *.exe  binary
 *.dll  binary

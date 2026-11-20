@@ -1,10 +1,9 @@
 ---
 # Correctness-focused checks rather than a wall of style warnings.
-# Run with: clang-tidy --p=build/dev src/**/*.c
 #
-# clang-tidy is an optional, deeper analysis layer. The authoritative build
-# warnings come from the compiler (see CMakeLists.txt); clangd gives live
-# editor feedback from the same compile database.
+# CI runs this over the 1.0 layers as a gate. The authoritative build warnings
+# come from the compiler (see CMakeLists.txt); clangd gives live editor feedback
+# from the same compile database.
 Checks: >
   -*,
   bugprone-*,

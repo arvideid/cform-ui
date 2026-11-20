@@ -14,6 +14,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Checks over the 1.0 layers only. The v0.2 tree under src/core and
+  # src/renderer is grandfathered until those layers replace it, so it is kept
+  # out of every pathspec here.
+  quality:
+    name: Format · static analysis · layer graph
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pinned: formatting output depends on the clang-format version, and an
+      # unpinned runner would drift from the version contributors use locally.
+      - name: Install clang tools
+        run: |
+          python3 -m pip install clang-format==19.1.5
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-tidy
+
+      - name: Format
+        run: |
+          mapfile -t sources < <(git ls-files \
+            'include/cf/*.h' 'src/*/*.[ch]' 'tests/unit/*.[ch]' \
+            ':!src/core' ':!src/renderer')
+          clang-format --dry-run --Werror "${sources[@]}"
+
+      - name: Layer graph
+        run: python3 tools/check_includes.py
+
+      - name: Static analysis
+        run: |
+          mapfile -t sources < <(git ls-files \
+            'src/*/*.c' 'tests/unit/*.c' ':!src/core' ':!src/renderer')
+          # No compile database: cf_base includes nothing outside libc, so the
+          # include paths below are the ones the target actually gets.
+          clang-tidy --quiet --warnings-as-errors='*' "${sources[@]}" \
+            -- -std=c17 -Iinclude -Isrc
+
   build:
     name: ${{ matrix.os }} · ${{ matrix.type }}
     runs-on: ${{ matrix.os }}
@@ -45,6 +82,37 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure
+
+  # GCC and Clang are the only toolchains with the ASan/UBSan pair, so this is
+  # one Linux job rather than a matrix row that would have to be excluded
+  # everywhere else.
+  sanitize:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SDL3 build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang libx11-dev libxcursor-dev libxrandr-dev libxss-dev \
+            libxtst-dev libxxf86vm-dev libasound2-dev \
+            mesa-common-dev libgl1-mesa-dev libudev-dev \
+            libfreetype-dev libharfbuzz-dev libcurl4-openssl-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-san -G Ninja -DCMAKE_C_COMPILER=clang \
+            -DCMAKE_BUILD_TYPE=Debug -DCFORM_BUILD_TESTS=ON \
+            -DCFORM_BUILD_EXAMPLES=OFF -DCFORM_WITH_SANITIZERS=ON
+
+      - name: Build
+        run: cmake --build build-san --parallel
+
+      - name: Test
+        run: ctest --test-dir build-san --output-on-failure
 
   web:
     name: WebAssembly
