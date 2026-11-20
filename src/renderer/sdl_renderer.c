@@ -81,6 +81,17 @@ static int g_image_cache_count;
 static float g_display_scale = 1.0f;
 
 #define SCROLLBAR_SIZE 10.0f
+/* Gap between the gutter and the thumb, so the thumb never sits flush against
+ * the frame edge. */
+#define SCROLLBAR_INSET 1.0f
+/* Below this the thumb is harder to land a cursor on than the gutter holding
+ * it, which makes long content unscrollable by dragging. */
+#define SCROLLBAR_THUMB_MIN 24.0f
+/* Distance covered by one wheel notch or one arrow-key press. */
+#define SCROLL_STEP 40.0f
+/* Fraction of the viewport a page jump skips, leaving a strip of the previous
+ * view on screen so the reader keeps their place. */
+#define SCROLL_PAGE_KEEP 0.8f
 
 static const UI_Color default_scrollbar_color = { 0, 0, 0, 48 };
 
@@ -421,6 +432,34 @@ static void scroll_viewport(
     }
 }
 
+/* Thumb size and the room its start has to travel along the track. Both are
+ * zero when the content fits the viewport and the axis has nothing to scroll. */
+static void scrollbar_thumb(float track, float extent, float *length, float *travel) {
+    *length = 0.0f;
+    *travel = 0.0f;
+
+    if (extent <= track) {
+        return;
+    }
+
+    float thumb = track * track / extent;
+
+    if (thumb < SCROLLBAR_THUMB_MIN) {
+        thumb = SCROLLBAR_THUMB_MIN;
+    }
+
+    *length = thumb;
+    *travel = track > thumb ? track - thumb : 0.0f;
+}
+
+static float clamp_fraction(float value) {
+    if (value < 0.0f) {
+        return 0.0f;
+    }
+
+    return value > 1.0f ? 1.0f : value;
+}
+
 /* Geometry for one scroll axis. Writes the gutter the thumb lives in and the
  * thumb itself; the thumb is zero-size when the axis fits. */
 static void scrollbar_geometry(
@@ -435,7 +474,7 @@ static void scrollbar_geometry(
     float extent;
     scroll_viewport(frame, vertical, &origin, &track, &extent);
 
-    float thickness = SCROLLBAR_SIZE - 2.0f;
+    float thickness = SCROLLBAR_SIZE - 2.0f * SCROLLBAR_INSET;
 
     *thumb = (SDL_FRect){ 0.0f, 0.0f, 0.0f, 0.0f };
 
@@ -451,33 +490,23 @@ static void scrollbar_geometry(
         };
     }
 
-    if (extent <= track) {
+    float length;
+    float travel;
+    scrollbar_thumb(track, extent, &length, &travel);
+
+    if (length == 0.0f) {
         return;
     }
 
-    float length = track * track / extent;
-
-    if (length < 24.0f) {
-        length = 24.0f;
-    }
-
-    float frac = scroll / (extent - track);
-
-    if (frac < 0.0f) {
-        frac = 0.0f;
-    } else if (frac > 1.0f) {
-        frac = 1.0f;
-    }
+    float start = origin + clamp_fraction(scroll / (extent - track)) * travel;
 
     if (vertical) {
         *thumb = (SDL_FRect){
-            gutter->x + 1.0f, origin + frac * (track - length),
-            thickness, length
+            gutter->x + SCROLLBAR_INSET, start, thickness, length
         };
     } else {
         *thumb = (SDL_FRect){
-            origin + frac * (track - length), gutter->y + 1.0f,
-            length, thickness
+            start, gutter->y + SCROLLBAR_INSET, length, thickness
         };
     }
 }
@@ -501,31 +530,17 @@ static void scroll_to_cursor(
     float extent;
     scroll_viewport(frame, vertical, &origin, &track, &extent);
 
-    if (extent <= track) {
+    float length;
+    float travel;
+    scrollbar_thumb(track, extent, &length, &travel);
+
+    if (travel == 0.0f) {
         return;
     }
 
-    float length = track * track / extent;
+    float *offset = vertical ? &frame->scroll_y : &frame->scroll_x;
 
-    if (length < 24.0f) {
-        length = 24.0f;
-    }
-
-    float frac = (cursor - origin - grab) / (track - length);
-
-    if (frac < 0.0f) {
-        frac = 0.0f;
-    } else if (frac > 1.0f) {
-        frac = 1.0f;
-    }
-
-    float max_scroll = extent - track;
-
-    if (vertical) {
-        frame->scroll_y = frac * max_scroll;
-    } else {
-        frame->scroll_x = frac * max_scroll;
-    }
+    *offset = clamp_fraction((cursor - origin - grab) / travel) * (extent - track);
 }
 
 /* Nearest scrollable ancestor of the frame under (x, y), or NULL. */
@@ -555,7 +570,7 @@ static void draw_scrollbar(
     }
 
     set_color(renderer, color);
-    fill_round_rect(renderer, thumb, (SCROLLBAR_SIZE - 2.0f) * 0.5f);
+    fill_round_rect(renderer, thumb, (SCROLLBAR_SIZE - 2.0f * SCROLLBAR_INSET) * 0.5f);
 }
 
 /* Recurses into children, clipping to the frame rect when it scrolls and
@@ -1000,8 +1015,8 @@ static void handle_key(
     const SDL_KeyboardEvent *key,
     float viewport
 ) {
-    float step = 40.0f;
-    float page = viewport * 0.8f;
+    float step = SCROLL_STEP;
+    float page = viewport * SCROLL_PAGE_KEEP;
 
     switch (key->key) {
     case SDLK_TAB:
