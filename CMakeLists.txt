@@ -231,6 +231,9 @@ add_library(cf_layout STATIC
     src/layout/layout.c
     src/layout/content.c
     src/layout/flex.c
+    src/layout/flex_item.c
+    src/layout/flex_line.c
+    src/layout/flex_align.c
 )
 
 target_link_libraries(cf_layout PUBLIC cf_style cf_base)

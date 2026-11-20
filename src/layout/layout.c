@@ -15,6 +15,20 @@ float clamp_non_negative(float value) {
     return value < 0.0f ? 0.0f : value;
 }
 
+float clamp_range(float value, float floor_value, float ceiling) {
+    value = clamp_non_negative(value);
+
+    if (value > ceiling) {
+        value = ceiling;
+    }
+
+    return value < floor_value ? floor_value : value;
+}
+
+float larger(float first, float second) {
+    return first > second ? first : second;
+}
+
 uint32_t child_count(const layout_ctx *ctx, uint32_t slot) {
     return ctx->tree->child_start[slot + 1u] - ctx->tree->child_start[slot];
 }
