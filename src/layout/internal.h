@@ -179,11 +179,11 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
                    uint32_t line_count);
 
 /*
- * The children that left the flow: measured against the container's content box
- * and placed there by their insets, in declaration order. Out-of-flow children
- * add nothing to the container's own extent, which is why a box holding only
- * them measures as empty.
+ * The children of `slot` that leave the flow: measured against the content box
+ * `box` and placed from its `origin` by their insets, in declaration order.
+ * Out-of-flow children add nothing to the container's own extent, which is why
+ * a box holding only them measures as empty.
  */
-void place_absolute(const flex_context *f);
+void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_available box, cf_point origin);
 
 #endif

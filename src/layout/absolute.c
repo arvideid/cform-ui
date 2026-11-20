@@ -101,32 +101,31 @@ static float absolute_offset(const absolute_axis *axis, float size) {
     return cf_length_resolve(axis->margin_start, box);
 }
 
-void place_absolute(const flex_context *f) {
-    const layout_ctx *ctx = f->ctx;
-    const uint32_t first = ctx->tree->child_start[f->slot];
-    const uint32_t count = child_count(ctx, f->slot);
+void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_available box, cf_point origin) {
+    const uint32_t first = ctx->tree->child_start[slot];
+    const uint32_t count = child_count(ctx, slot);
 
     for (uint32_t i = 0; i < count; ++i) {
-        const uint32_t slot = ctx->tree->child_slots[first + i];
-        const cf_style *child = &ctx->tree->styles[slot];
+        const uint32_t child_slot = ctx->tree->child_slots[first + i];
+        const cf_style *child = &ctx->tree->styles[child_slot];
 
         if (child->position != CF_POSITION_ABSOLUTE) {
             continue;
         }
 
-        const absolute_axis x_axis = horizontal(child, &f->constraint);
-        const absolute_axis y_axis = vertical(child, &f->constraint);
+        const absolute_axis x_axis = horizontal(child, &box);
+        const absolute_axis y_axis = vertical(child, &box);
 
-        const float width = absolute_size(ctx, slot, f->constraint, &x_axis);
-        const float height = absolute_size(ctx, slot, f->constraint, &y_axis);
+        const float width = absolute_size(ctx, child_slot, box, &x_axis);
+        const float height = absolute_size(ctx, child_slot, box, &y_axis);
 
         const cf_point placed = {
-            .x = f->origin.x + absolute_offset(&x_axis, width),
-            .y = f->origin.y + absolute_offset(&y_axis, height),
+            .x = origin.x + absolute_offset(&x_axis, width),
+            .y = origin.y + absolute_offset(&y_axis, height),
         };
 
         const size_t mark = cf_arena_mark(ctx->scratch);
-        layout_subtree(ctx, slot, f->constraint,
+        layout_subtree(ctx, child_slot, box,
                        (cf_available){.width = CF_PX(width), .height = CF_PX(height)}, placed);
         cf_arena_rewind(ctx->scratch, mark);
     }

@@ -118,7 +118,7 @@ static cf_size flex_resolve(const flex_context *f) {
         extents = size_from_extents(f, main_extent, cross_extent);
     } else {
         arrange_items(ctx, f, items, lines, line_count);
-        place_absolute(f);
+        place_absolute(ctx, f->slot, f->constraint, f->origin);
     }
 
     cf_arena_rewind(ctx->scratch, mark);
