@@ -13,6 +13,10 @@ its lines with align-content flex-start and has no margin. Every row states
 them, so the corpus says what the reference engine was configured with rather
 than what CSS would have inferred.
 
+`YGNodeLayoutGetLeft` and `GetTop` are offsets from the parent node, while a
+corpus row places its box in the root's coordinate space, so the two numbers
+are carried down the tree before a row is written.
+
 A case is left out when it needs something `cf_style` cannot state - a measure
 callback, content-box sizing, `display: none`, an intrinsic or stretch keyword -
 and the summary counts why, so the published percentage is the ported set over
@@ -159,16 +163,22 @@ STYLE_CALL = re.compile(r"YGNodeStyleSet(\w+)\(((?:[^()]|\([^()]*\))*)\)")
 EDGE_SUFFIX = re.compile(r"(Percent|Auto)$")
 
 
-def number(text):
-    """A Yoga literal as a C float, or None when it holds no number.
+def measure(text):
+    """A literal as a float, or None when it holds no number.
 
     The generated sources keep the `f` suffix a float literal needs in C++ and
     write whole numbers without a fraction, so both spellings land here.
     """
     try:
-        return "{:.1f}f".format(float(text.rstrip("fF")))
+        return float(str(text).rstrip("fF"))
     except ValueError:
         return None
+
+
+def number(value):
+    """A measurement as the C float literal a corpus row writes."""
+    measured = measure(value)
+    return None if measured is None else "{:.1f}f".format(measured)
 
 
 def length(kind, text):
@@ -231,6 +241,7 @@ class Fixture:
                         [p.strip() for p in match.group(2).split(",")])
 
         self._first_pass(body)
+        self._absolute_boxes()
 
     def _reject(self, reason):
         if self.reason is None:
@@ -353,6 +364,35 @@ class Fixture:
                 body[passes[0].end():end]):
             if reference in self.slots:
                 self.expected[self.slots[reference]][kind] = number(value)
+
+    def _absolute_boxes(self):
+        """Rewrite each parent-relative offset as a box in the root's space.
+
+        A fixture whose ancestors sit at the origin already reads correctly,
+        which is why the distinction survives unnoticed until a node two
+        levels deep is placed by a margin at the level above it.
+        """
+        children = [[] for _ in self.parents]
+        for slot, parent in enumerate(self.parents):
+            if parent is not None:
+                children[parent].append(slot)
+
+        pending = [(self.slots["root"], 0.0, 0.0)]
+        placed = set()
+        while pending:
+            slot, x, y = pending.pop()
+            if slot in placed:
+                continue
+            placed.add(slot)
+
+            left = measure(self.expected[slot].get("Left"))
+            top = measure(self.expected[slot].get("Top"))
+            if left is not None and top is not None:
+                x, y = x + left, y + top
+                self.expected[slot]["Left"] = number(x)
+                self.expected[slot]["Top"] = number(y)
+
+            pending.extend((child, x, y) for child in children[slot])
 
 
 def box_declaration(field, declared):
