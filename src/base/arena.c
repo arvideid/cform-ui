@@ -64,3 +64,21 @@ void *cf_alloc(cf_arena *arena, size_t size) {
 
     return arena->memory + offset;
 }
+
+size_t cf_arena_mark(const cf_arena *arena) {
+    if (arena == NULL) {
+        return 0;
+    }
+
+    return arena->used;
+}
+
+void cf_arena_rewind(cf_arena *arena, size_t mark) {
+    /* A mark above the high-water point of the live allocation describes a
+     * call that never allocated, so there is nothing to hand back. */
+    if (arena == NULL || mark > arena->used) {
+        return;
+    }
+
+    arena->used = mark;
+}

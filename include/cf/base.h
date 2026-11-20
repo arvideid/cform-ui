@@ -27,6 +27,15 @@ void cf_arena_free(cf_arena *arena);
 void *cf_alloc(cf_arena *arena, size_t size);
 
 /*
+ * Recursion uses the arena as a stack: a mark remembers where a call began, so
+ * its scratch can be handed back once it returns while anything still live
+ * above it stays put. Rewinds must happen in the reverse order of the marks,
+ * which is what a call that marks, recurses and rewinds does by construction.
+ */
+size_t cf_arena_mark(const cf_arena *arena);
+void cf_arena_rewind(cf_arena *arena, size_t mark);
+
+/*
  * Fixed-stride slots addressed by cf_id, growing by capacity doubling so no
  * element is ever relocated one at a time. Element pointers are invalidated by
  * the next cf_store_add — hold cf_id, not void *.
