@@ -7,8 +7,7 @@
             "source": "gcc",
             "fileLocation": [
                 "${workspaceFolder}",
-                "${workspaceFolder}/build/dev",
-                "${workspaceFolder}/build/web"
+                "${workspaceFolder}/build/dev"
             ],
             "pattern": {
                 "regexp": "^(.+?):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
@@ -68,55 +67,16 @@
             ]
         },
         {
-            "label": "Run: demo (dev)",
-            "detail": "Build then run the example",
+            "label": "Test: ctest (dev)",
+            "detail": "ctest --preset dev",
             "type": "shell",
-            "command": "build/dev/bin/cform_demo",
+            "command": "ctest",
+            "args": [
+                "--preset",
+                "dev"
+            ],
             "dependsOn": "CMake: Build (dev)",
-            "problemMatcher": []
-        },
-        {
-            "label": "CMake: Configure (web)",
-            "detail": "cmake --preset web (needs emsdk activated: source ./emsdk_env.sh)",
-            "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--preset",
-                "web"
-            ],
-            "group": "build",
-            "problemMatcher": []
-        },
-        {
-            "label": "CMake: Build (web)",
-            "detail": "cmake --build --preset web",
-            "type": "shell",
-            "command": "cmake",
-            "args": [
-                "--build",
-                "--preset",
-                "web"
-            ],
-            "dependsOn": "CMake: Configure (web)",
-            "group": "build",
-            "problemMatcher": [
-                "$cform-gcc"
-            ]
-        },
-        {
-            "label": "Run: demo (web)",
-            "detail": "Serve build/web/bin at http://localhost:8080/cform_demo.html",
-            "type": "shell",
-            "command": "python",
-            "args": [
-                "-m",
-                "http.server",
-                "8080",
-                "--directory",
-                "build/web/bin"
-            ],
-            "dependsOn": "CMake: Build (web)",
-            "isBackground": true,
+            "group": "test",
             "problemMatcher": []
         },
         {
