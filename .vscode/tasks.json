@@ -1,5 +1,25 @@
 {
     "version": "2.0.0",
+    "problemMatchers": [
+        {
+            "name": "cform-gcc",
+            "owner": "cpp",
+            "source": "gcc",
+            "fileLocation": [
+                "${workspaceFolder}",
+                "${workspaceFolder}/build/dev",
+                "${workspaceFolder}/build/web"
+            ],
+            "pattern": {
+                "regexp": "^(.+?):(\\d+):(\\d+):\\s+(warning|error):\\s+(.*)$",
+                "file": 1,
+                "line": 2,
+                "column": 3,
+                "severity": 4,
+                "message": 5
+            }
+        }
+    ],
     "tasks": [
         {
             "label": "CMake: Configure (dev)",
@@ -29,7 +49,7 @@
                 "isDefault": true
             },
             "problemMatcher": [
-                "$gcc"
+                "$cform-gcc"
             ]
         },
         {
@@ -44,7 +64,7 @@
             ],
             "group": "build",
             "problemMatcher": [
-                "$gcc"
+                "$cform-gcc"
             ]
         },
         {
@@ -80,18 +100,18 @@
             "dependsOn": "CMake: Configure (web)",
             "group": "build",
             "problemMatcher": [
-                "$gcc"
+                "$cform-gcc"
             ]
         },
         {
             "label": "Run: demo (web)",
-            "detail": "Serve build/web/bin at http://localhost:8000/cform_demo.html",
+            "detail": "Serve build/web/bin at http://localhost:8080/cform_demo.html",
             "type": "shell",
             "command": "python",
             "args": [
                 "-m",
                 "http.server",
-                "8000",
+                "8080",
                 "--directory",
                 "build/web/bin"
             ],
