@@ -213,6 +213,50 @@ void ui_layout_frame(
     JustifySpacing justify = justify_spacing(config->justify_content, count,
         clamp_non_negative(track_size - used));
 
+    /* A scrollable frame lays its children out at their natural main-axis
+     * extent instead of squeezing them into the viewport, then shifts the
+     * content origin by the clamped offset so hit-testing follows. */
+    if (config->scrollable) {
+        float natural = config->gap * (float)(count - 1);
+
+        for (int i = 0; i < count; i++) {
+            const UI_FrameConfig *child = &frame->children[i]->config;
+            UI_Size size = main_axis_size(child, direction);
+            float intrinsic;
+
+            if (resolve_intrinsic(size, track_size, &intrinsic)) {
+                natural += clamp_size(intrinsic,
+                    main_axis_min(child, direction),
+                    main_axis_max(child, direction))
+                    + main_margin(child, direction);
+            }
+        }
+
+        if (horizontal) {
+            frame->content_width = natural;
+            frame->content_height = height;
+            float max_scroll = clamp_non_negative(natural - content_width);
+            frame->scroll_x = clamp_non_negative(frame->scroll_x);
+            if (frame->scroll_x > max_scroll) {
+                frame->scroll_x = max_scroll;
+            }
+            content_x -= frame->scroll_x;
+        } else {
+            frame->content_height = natural;
+            frame->content_width = width;
+            float max_scroll = clamp_non_negative(natural - content_height);
+            frame->scroll_y = clamp_non_negative(frame->scroll_y);
+            if (frame->scroll_y > max_scroll) {
+                frame->scroll_y = max_scroll;
+            }
+            content_y -= frame->scroll_y;
+        }
+
+        fill_size = 0.0f;
+        justify.before = 0.0f;
+        justify.between = 0.0f;
+    }
+
     float cursor = justify.before;
 
     for (int i = 0; i < count; i++) {

@@ -2,16 +2,18 @@
 #include <string.h>
 
 #include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include "internal.h"
 
 #define DEFAULT_FONT_SIZE 16.0f
 #define TEXT_CACHE_CAPACITY 64
-#define FONT_CACHE_CAPACITY 8
+#define FONT_CACHE_CAPACITY 16
+#define IMAGE_CACHE_CAPACITY 16
 
 /* Foreground used when a labelled frame leaves text_color unset. */
-static const UI_Color default_text_color = { 250, 250, 250, 255 };
+static const UI_Color default_text_color = { 9, 9, 11, 255 };
 
 /* Probed in order at startup; the first that opens wins. Emscripten has no
  * system font paths, so text silently stays hidden in the browser build. */
@@ -25,6 +27,13 @@ static const char *const font_candidates[] = {
 };
 
 typedef struct {
+    const char *src;
+    SDL_Texture *texture;
+    int width;
+    int height;
+} ImageEntry;
+
+typedef struct {
     float size;
     UI_FontStyle style;
     TTF_Font *font;
@@ -35,6 +44,7 @@ typedef struct {
     float size;
     UI_Color color;
     UI_FontStyle style;
+    int wrap_width;
     SDL_Texture *texture;
     int width;
     int height;
@@ -47,6 +57,18 @@ static FontEntry g_font_cache[FONT_CACHE_CAPACITY];
 static int g_font_cache_count;
 static TextEntry g_text_cache[TEXT_CACHE_CAPACITY];
 static int g_text_cache_count;
+static ImageEntry g_image_cache[IMAGE_CACHE_CAPACITY];
+static int g_image_cache_count;
+
+#define SCROLLBAR_SIZE 10.0f
+
+static const UI_Color default_scrollbar_color = { 0, 0, 0, 48 };
+
+/* Ring drawn around the keyboard-focused frame. Dark enough to read on every
+ * surface the demo uses. */
+static const UI_Color default_focus_color = { 23, 23, 23, 255 };
+
+static void ui_draw_frame(SDL_Renderer *renderer, UI_Frame *frame);
 
 static void set_color(SDL_Renderer *renderer, UI_Color color) {
     SDL_SetRenderDrawColor(
@@ -56,6 +78,56 @@ static void set_color(SDL_Renderer *renderer, UI_Color color) {
         color.b,
         color.a
     );
+}
+
+/* SDL_SetRenderClipRect replaces the active clip instead of intersecting it,
+ * so a nested clip must fold the ancestor's rect in by hand or content escapes
+ * the parent's bounds. Intersects `rect` with the current clip, applies it, and
+ * reports whether a clip was already active for the caller to hand to pop_clip. */
+static bool push_clip(
+    SDL_Renderer *renderer,
+    SDL_Rect rect,
+    SDL_Rect *previous
+) {
+    bool had = SDL_RenderClipEnabled(renderer);
+
+    if (had) {
+        SDL_GetRenderClipRect(renderer, previous);
+
+        int right = rect.x + rect.w;
+        int bottom = rect.y + rect.h;
+
+        if (rect.x < previous->x) {
+            rect.x = previous->x;
+        }
+
+        if (rect.y < previous->y) {
+            rect.y = previous->y;
+        }
+
+        if (right > previous->x + previous->w) {
+            right = previous->x + previous->w;
+        }
+
+        if (bottom > previous->y + previous->h) {
+            bottom = previous->y + previous->h;
+        }
+
+        rect.w = right > rect.x ? right - rect.x : 0;
+        rect.h = bottom > rect.y ? bottom - rect.y : 0;
+    }
+
+    SDL_SetRenderClipRect(renderer, &rect);
+
+    return had;
+}
+
+static void pop_clip(
+    SDL_Renderer *renderer,
+    bool had,
+    const SDL_Rect *previous
+) {
+    SDL_SetRenderClipRect(renderer, had ? previous : NULL);
 }
 
 /* Scanline fill for an axis-aligned rect with rounded corners. Radius is
@@ -117,19 +189,33 @@ static void fill_round_rect(
     }
 }
 
-static TTF_Font *get_font(float size) {
+static TTF_FontStyleFlags ttf_style(UI_FontStyle style) {
+    switch (style) {
+    case UI_FONT_BOLD: return TTF_STYLE_BOLD;
+    case UI_FONT_ITALIC: return TTF_STYLE_ITALIC;
+    case UI_FONT_BOLD_ITALIC: return TTF_STYLE_BOLD | TTF_STYLE_ITALIC;
+    case UI_FONT_NORMAL: break;
+    }
+
+    return TTF_STYLE_NORMAL;
+}
+
+static TTF_Font *get_font(float size, UI_FontStyle style) {
     if (g_font_path == NULL) {
         return NULL;
     }
 
     for (int i = 0; i < g_font_cache_count; i++) {
-        if (g_font_cache[i].size == size) {
+        if (g_font_cache[i].size == size && g_font_cache[i].style == style) {
             return g_font_cache[i].font;
         }
     }
 
     if (g_font_cache_count >= FONT_CACHE_CAPACITY) {
-        return NULL;
+        for (int i = 0; i < g_font_cache_count; i++) {
+            TTF_CloseFont(g_font_cache[i].font);
+        }
+        g_font_cache_count = 0;
     }
 
     TTF_Font *font = TTF_OpenFont(g_font_path, size);
@@ -138,7 +224,10 @@ static TTF_Font *get_font(float size) {
         return NULL;
     }
 
+    TTF_SetFontStyle(font, ttf_style(style));
+
     g_font_cache[g_font_cache_count].size = size;
+    g_font_cache[g_font_cache_count].style = style;
     g_font_cache[g_font_cache_count].font = font;
     g_font_cache_count++;
 
@@ -156,6 +245,7 @@ static void probe_font(void) {
         if (font != NULL) {
             g_font_path = font_candidates[i];
             g_font_cache[0].size = DEFAULT_FONT_SIZE;
+            g_font_cache[0].style = UI_FONT_NORMAL;
             g_font_cache[0].font = font;
             g_font_cache_count = 1;
             return;
@@ -163,20 +253,24 @@ static void probe_font(void) {
     }
 }
 
-/* Returns the cached texture for (text, size, color), rebuilding on any
- * change. Cache exhaustion returns NULL rather than evicting. */
+/* Returns the cached texture for (text, size, color, style, wrap_width),
+ * rebuilding on any change. Wrapped labels get a new entry per width, so a
+ * full cache is flushed and rebuilt rather than silently dropping the text. */
 static SDL_Texture *get_text_texture(
     SDL_Renderer *renderer,
     const char *text,
     float size,
     UI_Color color,
+    UI_FontStyle style,
+    int wrap_width,
     int *out_w,
     int *out_h
 ) {
     for (int i = 0; i < g_text_cache_count; i++) {
         TextEntry *e = &g_text_cache[i];
 
-        if (e->text == text && e->size == size &&
+        if (e->text == text && e->size == size && e->style == style &&
+            e->wrap_width == wrap_width &&
             memcmp(&e->color, &color, sizeof color) == 0) {
             *out_w = e->width;
             *out_h = e->height;
@@ -185,17 +279,22 @@ static SDL_Texture *get_text_texture(
     }
 
     if (g_text_cache_count >= TEXT_CACHE_CAPACITY) {
-        return NULL;
+        for (int i = 0; i < g_text_cache_count; i++) {
+            SDL_DestroyTexture(g_text_cache[i].texture);
+        }
+        g_text_cache_count = 0;
     }
 
-    TTF_Font *font = get_font(size);
+    TTF_Font *font = get_font(size, style);
 
     if (font == NULL) {
         return NULL;
     }
 
     SDL_Color fg = { color.r, color.g, color.b, color.a };
-    SDL_Surface *surface = TTF_RenderText_Blended(font, text, 0, fg);
+    SDL_Surface *surface = wrap_width > 0
+        ? TTF_RenderText_Blended_Wrapped(font, text, 0, fg, wrap_width)
+        : TTF_RenderText_Blended(font, text, 0, fg);
 
     if (surface == NULL) {
         return NULL;
@@ -214,6 +313,8 @@ static SDL_Texture *get_text_texture(
     slot->text = text;
     slot->size = size;
     slot->color = color;
+    slot->style = style;
+    slot->wrap_width = wrap_width;
     slot->texture = texture;
     slot->width = w;
     slot->height = h;
@@ -238,6 +339,316 @@ static UI_Color pick_background(const UI_Frame *frame) {
     return c->background;
 }
 
+/* A scrollable's viewport is its padding-inset box, which is the span the
+ * layout clamps the scroll offset against. The thumb must travel that same
+ * span and start at the same origin, or it paints past the frame's edge once
+ * the content is fully scrolled. */
+static void scroll_viewport(
+    const UI_Frame *frame,
+    bool vertical,
+    float *origin,
+    float *track,
+    float *extent
+) {
+    const UI_Edges *pad = &frame->config.padding;
+
+    if (vertical) {
+        *origin = frame->y + pad->top;
+        *track = frame->height - pad->top - pad->bottom;
+        *extent = frame->content_height;
+    } else {
+        *origin = frame->x + pad->left;
+        *track = frame->width - pad->left - pad->right;
+        *extent = frame->content_width;
+    }
+
+    if (*track < 0.0f) {
+        *track = 0.0f;
+    }
+}
+
+/* Geometry for one scroll axis. Writes the gutter the thumb lives in and the
+ * thumb itself; the thumb is zero-size when the axis fits. */
+static void scrollbar_geometry(
+    const UI_Frame *frame,
+    bool vertical,
+    float scroll,
+    SDL_FRect *gutter,
+    SDL_FRect *thumb
+) {
+    float origin;
+    float track;
+    float extent;
+    scroll_viewport(frame, vertical, &origin, &track, &extent);
+
+    float thickness = SCROLLBAR_SIZE - 2.0f;
+
+    *thumb = (SDL_FRect){ 0.0f, 0.0f, 0.0f, 0.0f };
+
+    if (vertical) {
+        *gutter = (SDL_FRect){
+            frame->x + frame->width - SCROLLBAR_SIZE, origin,
+            SCROLLBAR_SIZE, track
+        };
+    } else {
+        *gutter = (SDL_FRect){
+            origin, frame->y + frame->height - SCROLLBAR_SIZE,
+            track, SCROLLBAR_SIZE
+        };
+    }
+
+    if (extent <= track) {
+        return;
+    }
+
+    float length = track * track / extent;
+
+    if (length < 24.0f) {
+        length = 24.0f;
+    }
+
+    float frac = scroll / (extent - track);
+
+    if (frac < 0.0f) {
+        frac = 0.0f;
+    } else if (frac > 1.0f) {
+        frac = 1.0f;
+    }
+
+    if (vertical) {
+        *thumb = (SDL_FRect){
+            gutter->x + 1.0f, origin + frac * (track - length),
+            thickness, length
+        };
+    } else {
+        *thumb = (SDL_FRect){
+            origin + frac * (track - length), gutter->y + 1.0f,
+            length, thickness
+        };
+    }
+}
+
+static bool point_in(SDL_FRect rect, float x, float y) {
+    return x >= rect.x && x < rect.x + rect.w
+        && y >= rect.y && y < rect.y + rect.h;
+}
+
+/* Sets a scrollable's offset so its thumb sits `grab` px below the cursor on
+ * the given axis. Clamps to the content extent so a click past the ends stops
+ * at the extreme. */
+static void scroll_to_cursor(
+    UI_Frame *frame,
+    bool vertical,
+    float cursor,
+    float grab
+) {
+    float origin;
+    float track;
+    float extent;
+    scroll_viewport(frame, vertical, &origin, &track, &extent);
+
+    if (extent <= track) {
+        return;
+    }
+
+    float length = track * track / extent;
+
+    if (length < 24.0f) {
+        length = 24.0f;
+    }
+
+    float frac = (cursor - origin - grab) / (track - length);
+
+    if (frac < 0.0f) {
+        frac = 0.0f;
+    } else if (frac > 1.0f) {
+        frac = 1.0f;
+    }
+
+    float max_scroll = extent - track;
+
+    if (vertical) {
+        frame->scroll_y = frac * max_scroll;
+    } else {
+        frame->scroll_x = frac * max_scroll;
+    }
+}
+
+/* Nearest scrollable ancestor of the frame under (x, y), or NULL. */
+static UI_Frame *scrollable_under(UI_Context *ctx, float x, float y) {
+    UI_Frame *frame = ui_hit_test(ctx, x, y);
+
+    while (frame != NULL && !frame->config.scrollable) {
+        frame = frame->parent;
+    }
+
+    return frame;
+}
+
+static void draw_scrollbar(
+    SDL_Renderer *renderer,
+    const UI_Frame *frame,
+    bool vertical,
+    float scroll,
+    UI_Color color
+) {
+    SDL_FRect gutter;
+    SDL_FRect thumb;
+    scrollbar_geometry(frame, vertical, scroll, &gutter, &thumb);
+
+    if (thumb.w <= 0.0f || thumb.h <= 0.0f) {
+        return;
+    }
+
+    set_color(renderer, color);
+    fill_round_rect(renderer, thumb, (SCROLLBAR_SIZE - 2.0f) * 0.5f);
+}
+
+/* Recurses into children, clipping to the frame rect when it scrolls and
+ * overlaying a thumb on whichever axis overflows. */
+static void draw_children(SDL_Renderer *renderer, UI_Frame *frame) {
+    const UI_FrameConfig *config = &frame->config;
+
+    if (!config->scrollable) {
+        for (int i = 0; i < frame->child_count; i++) {
+            ui_draw_frame(renderer, frame->children[i]);
+        }
+
+        return;
+    }
+
+    SDL_Rect clip = {
+        (int)frame->x, (int)frame->y, (int)frame->width, (int)frame->height
+    };
+    SDL_Rect previous;
+    bool had_clip = push_clip(renderer, clip, &previous);
+
+    for (int i = 0; i < frame->child_count; i++) {
+        ui_draw_frame(renderer, frame->children[i]);
+    }
+
+    pop_clip(renderer, had_clip, &previous);
+
+    UI_Color thumb_color = config->border_color;
+
+    if (thumb_color.a == 0) {
+        thumb_color = default_scrollbar_color;
+    }
+
+    draw_scrollbar(renderer, frame, true, frame->scroll_y, thumb_color);
+    draw_scrollbar(renderer, frame, false, frame->scroll_x, thumb_color);
+}
+
+static void measure_texture(SDL_Texture *texture, int *width, int *height) {
+    float w = 0.0f;
+    float h = 0.0f;
+
+    *width = 0;
+    *height = 0;
+
+    if (SDL_GetTextureSize(texture, &w, &h)) {
+        *width = (int)w;
+        *height = (int)h;
+    }
+}
+
+/* Decodes a local path, retrying relative paths against the executable
+ * directory before the working directory. */
+static SDL_Texture *texture_from_path(
+    SDL_Renderer *renderer,
+    const char *src,
+    int *width,
+    int *height
+) {
+    SDL_Texture *texture = IMG_LoadTexture(renderer, src);
+
+    if (texture == NULL) {
+        const char *base = SDL_GetBasePath();
+
+        if (base != NULL) {
+            char full[1024];
+            SDL_snprintf(full, sizeof full, "%s%s", base, src);
+            texture = IMG_LoadTexture(renderer, full);
+        }
+    }
+
+    if (texture != NULL) {
+        measure_texture(texture, width, height);
+    }
+
+    return texture;
+}
+
+/* Returns the cached entry for an image source. A failed load keeps a NULL
+ * texture so the path is not retried on every frame. */
+static ImageEntry *get_image(SDL_Renderer *renderer, const char *src) {
+    for (int i = 0; i < g_image_cache_count; i++) {
+        if (g_image_cache[i].src == src) {
+            return &g_image_cache[i];
+        }
+    }
+
+    if (g_image_cache_count >= IMAGE_CACHE_CAPACITY) {
+        return NULL;
+    }
+
+    ImageEntry *slot = &g_image_cache[g_image_cache_count++];
+    slot->src = src;
+    slot->texture = texture_from_path(renderer, src, &slot->width, &slot->height);
+
+    return slot;
+}
+
+static void draw_image(
+    SDL_Renderer *renderer,
+    const UI_Frame *frame,
+    const UI_FrameConfig *config
+) {
+    ImageEntry *img = get_image(renderer, config->image_src);
+
+    if (img == NULL || img->texture == NULL) {
+        return;
+    }
+
+    float cx = frame->x + config->padding.left;
+    float cy = frame->y + config->padding.top;
+    float cw = frame->width - config->padding.left - config->padding.right;
+    float ch = frame->height - config->padding.top - config->padding.bottom;
+
+    if (cw <= 0.0f || ch <= 0.0f) {
+        return;
+    }
+
+    float iw = (float)img->width;
+    float ih = (float)img->height;
+    SDL_FRect dst;
+
+    switch (config->image_fit) {
+    case UI_IMAGE_FILL:
+        dst = (SDL_FRect){ cx, cy, cw, ch };
+        break;
+    case UI_IMAGE_CENTER:
+        dst = (SDL_FRect){ cx + (cw - iw) * 0.5f, cy + (ch - ih) * 0.5f, iw, ih };
+        break;
+    case UI_IMAGE_FIT:
+    default: {
+        float scale = fminf(cw / iw, ch / ih);
+        float w = iw * scale;
+        float h = ih * scale;
+        dst = (SDL_FRect){ cx + (cw - w) * 0.5f, cy + (ch - h) * 0.5f, w, h };
+        break;
+    }
+    }
+
+    SDL_Rect clip = { (int)cx, (int)cy, (int)cw, (int)ch };
+    SDL_Rect previous;
+    bool had_clip = push_clip(renderer, clip, &previous);
+
+    SDL_RenderTexture(renderer, img->texture, NULL, &dst);
+
+    pop_clip(renderer, had_clip, &previous);
+}
+
 static void draw_text(
     SDL_Renderer *renderer,
     const UI_Frame *frame,
@@ -250,26 +661,35 @@ static void draw_text(
         color = default_text_color;
     }
 
-    int w = 0;
-    int h = 0;
-    SDL_Texture *texture = get_text_texture(
-        renderer, config->text, size, color, &w, &h);
-
-    if (texture == NULL) {
-        return;
-    }
-
     float content_x = frame->x + config->padding.left;
     float content_y = frame->y + config->padding.top;
     float content_w = frame->width - config->padding.left - config->padding.right;
     float content_h = frame->height - config->padding.top - config->padding.bottom;
 
-    SDL_FRect dst = {
-        content_x + (content_w - (float)w) * 0.5f,
-        content_y + (content_h - (float)h) * 0.5f,
-        (float)w,
-        (float)h
-    };
+    int wrap_width = config->wrap_text ? (int)content_w : 0;
+
+    int w = 0;
+    int h = 0;
+    SDL_Texture *texture = get_text_texture(
+        renderer, config->text, size, color, config->font_style, wrap_width,
+        &w, &h);
+
+    if (texture == NULL) {
+        return;
+    }
+
+    SDL_FRect dst;
+
+    if (wrap_width > 0) {
+        dst = (SDL_FRect){ content_x, content_y, (float)w, (float)h };
+    } else {
+        dst = (SDL_FRect){
+            content_x + (content_w - (float)w) * 0.5f,
+            content_y + (content_h - (float)h) * 0.5f,
+            (float)w,
+            (float)h
+        };
+    }
 
     SDL_RenderTexture(renderer, texture, NULL, &dst);
 }
@@ -311,12 +731,26 @@ static void ui_draw_frame(
         fill_round_rect(renderer, outer, config->corner_radius);
     }
 
+    if (config->image_src != NULL) {
+        draw_image(renderer, frame, config);
+    }
+
     if (config->text != NULL) {
         draw_text(renderer, frame, config);
     }
 
-    for (int i = 0; i < frame->child_count; i++) {
-        ui_draw_frame(renderer, frame->children[i]);
+    draw_children(renderer, frame);
+
+    if (frame->focused) {
+        set_color(renderer, default_focus_color);
+        SDL_FRect ring = {
+            outer.x - 1.0f, outer.y - 1.0f, outer.w + 2.0f, outer.h + 2.0f
+        };
+        SDL_RenderRect(renderer, &ring);
+        ring = (SDL_FRect){
+            outer.x - 2.0f, outer.y - 2.0f, outer.w + 4.0f, outer.h + 4.0f
+        };
+        SDL_RenderRect(renderer, &ring);
     }
 }
 
@@ -332,7 +766,127 @@ static void shutdown_text(void) {
     g_font_cache_count = 0;
     g_font_path = NULL;
 
+    for (int i = 0; i < g_image_cache_count; i++) {
+        if (g_image_cache[i].texture != NULL) {
+            SDL_DestroyTexture(g_image_cache[i].texture);
+        }
+    }
+    g_image_cache_count = 0;
+
     TTF_Quit();
+}
+
+/* If (x, y) lands on a scrollable's visible scrollbar, start a thumb drag and
+ * return that frame; a click on the gutter (not the thumb) pages toward the
+ * click first. Returns NULL when no scrollbar was hit, so the caller can route
+ * a normal press. */
+static UI_Frame *begin_scrollbar_drag(
+    UI_Context *ctx,
+    float x,
+    float y,
+    bool *out_vertical,
+    float *out_grab
+) {
+    UI_Frame *frame = scrollable_under(ctx, x, y);
+
+    if (frame == NULL) {
+        return NULL;
+    }
+
+    for (int axis = 0; axis < 2; axis++) {
+        bool vertical = axis == 0;
+        float scroll = vertical ? frame->scroll_y : frame->scroll_x;
+        SDL_FRect gutter;
+        SDL_FRect thumb;
+        scrollbar_geometry(frame, vertical, scroll, &gutter, &thumb);
+
+        if (thumb.w <= 0.0f || thumb.h <= 0.0f || !point_in(gutter, x, y)) {
+            continue;
+        }
+
+        float cursor = vertical ? y : x;
+        *out_vertical = vertical;
+
+        if (point_in(thumb, x, y)) {
+            *out_grab = cursor - (vertical ? thumb.y : thumb.x);
+        } else {
+            *out_grab = (vertical ? thumb.h : thumb.w) * 0.5f;
+            scroll_to_cursor(frame, vertical, cursor, *out_grab);
+        }
+
+        return frame;
+    }
+
+    return NULL;
+}
+
+/* Maps a key press to focus movement, activation of the focused frame, or
+ * scrolling of the nearest scrollable region. */
+static void handle_key(
+    UI_Context *ctx,
+    const SDL_KeyboardEvent *key,
+    float viewport
+) {
+    float step = 40.0f;
+    float page = viewport * 0.8f;
+
+    switch (key->key) {
+    case SDLK_TAB:
+        if (!key->repeat) {
+            ui_focus_next(ctx, (key->mod & SDL_KMOD_SHIFT) != 0);
+        }
+        break;
+    case SDLK_RETURN:
+    case SDLK_RETURN2:
+    case SDLK_KP_ENTER:
+    case SDLK_SPACE:
+        if (!key->repeat) {
+            UI_Frame *activated = ui_activate_focused(ctx);
+
+            if (activated != NULL && activated->config.link_url != NULL) {
+                SDL_OpenURL(activated->config.link_url);
+            }
+        }
+        break;
+    /* The navigation cluster and the NumLock-off numpad share these roles. */
+    case SDLK_UP:
+    case SDLK_KP_8:
+        ui_scroll_by(ctx, 0.0f, -step);
+        break;
+    case SDLK_DOWN:
+    case SDLK_KP_2:
+        ui_scroll_by(ctx, 0.0f, step);
+        break;
+    case SDLK_LEFT:
+    case SDLK_KP_4:
+        ui_scroll_by(ctx, -step, 0.0f);
+        break;
+    case SDLK_RIGHT:
+    case SDLK_KP_6:
+        ui_scroll_by(ctx, step, 0.0f);
+        break;
+    case SDLK_PAGEUP:
+    case SDLK_KP_9:
+        ui_scroll_by(ctx, 0.0f, -page);
+        break;
+    case SDLK_PAGEDOWN:
+    case SDLK_KP_3:
+        ui_scroll_by(ctx, 0.0f, page);
+        break;
+    case SDLK_HOME:
+    case SDLK_KP_7:
+        ui_scroll_extreme(ctx, false);
+        break;
+    case SDLK_END:
+    case SDLK_KP_1:
+        ui_scroll_extreme(ctx, true);
+        break;
+    case SDLK_ESCAPE:
+        ui_clear_focus(ctx);
+        break;
+    default:
+        break;
+    }
 }
 
 void ui_render(UI_Context *ctx, UI_Frame *root) {
@@ -347,12 +901,17 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
             "cform-ui",
             ctx->window_width,
             ctx->window_height,
-            0,
+            SDL_WINDOW_RESIZABLE,
             &window,
             &renderer) == false) {
         SDL_Log("Failed to create window/renderer: %s", SDL_GetError());
         return;
     }
+
+    /* Default is BLENDMODE_NONE, which ignores the draw color's alpha and
+     * paints transparent backgrounds solid black. Blending must be on for
+     * zero-alpha frames to stay transparent and for the scrollbar thumb. */
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
     if (TTF_Init() == true) {
         probe_font();
@@ -363,8 +922,15 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
     ctx->root = root;
 
     bool running = true;
+    UI_Frame *drag_frame = NULL;
+    bool drag_vertical = false;
+    float drag_grab = 0.0f;
 
     while (running) {
+        int width = 0;
+        int height = 0;
+        SDL_GetWindowSize(window, &width, &height);
+
         SDL_Event event;
 
         while (SDL_PollEvent(&event) != 0) {
@@ -372,18 +938,44 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
             case SDL_EVENT_QUIT:
                 running = false;
                 break;
+            case SDL_EVENT_KEY_DOWN:
+                handle_key(ctx, &event.key, (float)height);
+                break;
             case SDL_EVENT_MOUSE_MOTION:
-                ui_pointer_move(ctx, event.motion.x, event.motion.y);
+                if (drag_frame != NULL) {
+                    scroll_to_cursor(drag_frame, drag_vertical,
+                        drag_vertical ? event.motion.y : event.motion.x,
+                        drag_grab);
+                } else {
+                    ui_pointer_move(ctx, event.motion.x, event.motion.y);
+                }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 if (event.button.button == SDL_BUTTON_LEFT) {
-                    ui_pointer_down(ctx, event.button.x, event.button.y);
+                    drag_frame = begin_scrollbar_drag(ctx,
+                        event.button.x, event.button.y,
+                        &drag_vertical, &drag_grab);
+
+                    if (drag_frame == NULL) {
+                        ui_pointer_down(ctx, event.button.x, event.button.y);
+                    }
                 }
                 break;
             case SDL_EVENT_MOUSE_BUTTON_UP:
-                if (event.button.button == SDL_BUTTON_LEFT) {
-                    ui_pointer_up(ctx, event.button.x, event.button.y);
+                if (drag_frame != NULL) {
+                    drag_frame = NULL;
+                } else if (event.button.button == SDL_BUTTON_LEFT) {
+                    UI_Frame *clicked =
+                        ui_pointer_up(ctx, event.button.x, event.button.y);
+
+                    if (clicked != NULL && clicked->config.link_url != NULL) {
+                        SDL_OpenURL(clicked->config.link_url);
+                    }
                 }
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                ui_pointer_wheel(ctx, event.wheel.mouse_x, event.wheel.mouse_y,
+                    event.wheel.x, event.wheel.y);
                 break;
             case SDL_EVENT_WINDOW_MOUSE_LEAVE:
                 ui_pointer_leave(ctx);
@@ -393,13 +985,9 @@ void ui_render(UI_Context *ctx, UI_Frame *root) {
             }
         }
 
-        int width = 0;
-        int height = 0;
-        SDL_GetWindowSize(window, &width, &height);
-
         ui_layout_frame(root, 0.0f, 0.0f, (float)width, (float)height);
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_SetRenderDrawColor(renderer, 245, 245, 245, 255);
         SDL_RenderClear(renderer);
         ui_draw_frame(renderer, root);
         SDL_RenderPresent(renderer);

@@ -9,8 +9,8 @@ layout and renders it through SDL3, either in a native window or in a browser.
 
 > **Status:** early development. The layout core, the SDL3 renderer and the
 > WebAssembly port all build and run, but the public API is experimental and
-> may change between releases. Keyboard focus, images and scrolling are on
-> the roadmap, not implemented.
+> may change between releases. Keyboard focus is on the roadmap, not
+> implemented.
 
 ## Features
 
@@ -22,6 +22,9 @@ layout and renders it through SDL3, either in a native window or in a browser.
 - Pointer interaction: hit-testing, hover/pressed background swaps, click
   handlers.
 - Text labels rendered through SDL3_ttf with a system font.
+- Images through SDL3_image: PNG, JPEG, WebP, GIF and SVG, with scaling
+  modes.
+- Scrollable containers that clip overflowing children.
 - One layout implementation, two backends: native SDL3 and WebAssembly.
 - Renderer-agnostic core, verified by a headless test suite.
 - Zero setup: SDL3 and SDL3_ttf are fetched automatically when they are not

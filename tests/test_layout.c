@@ -621,6 +621,91 @@ static void layout_percent_in_overlay_resolves_against_content(void) {
     ui_destroy(ctx);
 }
 
+static void layout_scrollable_stacks_children_at_natural_extent(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(80) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(80) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    /* Two 80-tall children overflow the 100-tall viewport by 60. */
+    CF_NEAR(root->content_height, 160);
+    CF_NEAR(a->y, 0);
+    CF_NEAR(b->y, 80);
+
+    ui_destroy(ctx);
+}
+
+static void layout_scroll_offset_shifts_children_and_clamps(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(80) });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(80) });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    root->scroll_y = 500.0f;
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(root->scroll_y, 60);
+    CF_NEAR(a->y, -60);
+    CF_NEAR(b->y, 20);
+
+    ui_destroy(ctx);
+}
+
+static void layout_scroll_clamps_to_zero_when_content_fits(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FILL, .height = UI_FIXED(40) });
+    ui_add(root, a);
+
+    root->scroll_y = 30.0f;
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(root->content_height, 40);
+    CF_NEAR(root->scroll_y, 0);
+    CF_NEAR(a->y, 0);
+
+    ui_destroy(ctx);
+}
+
+static void layout_horizontal_scroll_offsets_x(void) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_HORIZONTAL, .scrollable = true });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(80), .height = UI_FILL });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(80), .height = UI_FILL });
+    ui_add(root, a);
+    ui_add(root, b);
+
+    root->scroll_x = 30.0f;
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+
+    CF_NEAR(root->content_width, 160);
+    CF_NEAR(a->x, -30);
+    CF_NEAR(b->x, 50);
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_layout\n");
     CF_RUN(layout_fixed_children_pack_left_to_right);
@@ -656,5 +741,9 @@ int main(void) {
     CF_RUN(layout_percent_vertical_main_axis_is_height);
     CF_RUN(layout_percent_clamps_to_min_and_max);
     CF_RUN(layout_percent_in_overlay_resolves_against_content);
+    CF_RUN(layout_scrollable_stacks_children_at_natural_extent);
+    CF_RUN(layout_scroll_offset_shifts_children_and_clamps);
+    CF_RUN(layout_scroll_clamps_to_zero_when_content_fits);
+    CF_RUN(layout_horizontal_scroll_offsets_x);
     return CF_REPORT();
 }

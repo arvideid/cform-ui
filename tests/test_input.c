@@ -250,6 +250,124 @@ static void hit_test_null_before_layout(void) {
     ui_destroy(ctx);
 }
 
+/* root -> a(clickable), b(plain), c(link). Focusables in pre-order: a, c. */
+static UI_Context *make_focus_tree(UI_Frame **out_root,
+                                   UI_Frame **out_a,
+                                   UI_Frame **out_c) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){ .direction = UI_VERTICAL });
+    UI_Frame *a = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(10), .height = UI_FIXED(10), .on_click = record_click });
+    UI_Frame *b = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(10), .height = UI_FIXED(10) });
+    UI_Frame *c = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(10), .height = UI_FIXED(10), .link_url = "https://example.test" });
+    ui_add(root, a);
+    ui_add(root, b);
+    ui_add(root, c);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+    ctx->root = root;
+
+    *out_root = root;
+    *out_a = a;
+    *out_c = c;
+    return ctx;
+}
+
+static void focus_next_walks_focusables_and_wraps(void) {
+    UI_Frame *root;
+    UI_Frame *a;
+    UI_Frame *c;
+    UI_Context *ctx = make_focus_tree(&root, &a, &c);
+
+    CF_CHECK(ui_focus_next(ctx, false) == a, "first Tab focuses first clickable");
+    CF_CHECK(ui_focus_next(ctx, false) == c, "second Tab skips the plain frame");
+    CF_CHECK(ui_focus_next(ctx, false) == a, "third Tab wraps back to the first");
+    CF_CHECK(a->focused && !c->focused, "focus flag follows the current frame");
+
+    ui_destroy(ctx);
+}
+
+static void shift_tab_wraps_to_last_focusable(void) {
+    UI_Frame *root;
+    UI_Frame *a;
+    UI_Frame *c;
+    UI_Context *ctx = make_focus_tree(&root, &a, &c);
+
+    ui_focus_next(ctx, false);
+    CF_CHECK(ui_focus_next(ctx, true) == c, "Shift+Tab from first wraps to last");
+    CF_CHECK(ui_focus_next(ctx, true) == a, "Shift+Tab steps back to first");
+
+    ui_destroy(ctx);
+}
+
+static void activate_focused_runs_click_handler(void) {
+    reset_clicks();
+
+    UI_Frame *root;
+    UI_Frame *a;
+    UI_Frame *c;
+    UI_Context *ctx = make_focus_tree(&root, &a, &c);
+
+    ui_focus_next(ctx, false);
+    UI_Frame *activated = ui_activate_focused(ctx);
+
+    CF_CHECK(activated == a, "activate returns the focused frame");
+    CF_CHECK(click_count == 1, "focused frame's handler ran once");
+
+    ui_clear_focus(ctx);
+    CF_CHECK(ui_activate_focused(ctx) == NULL, "activate with no focus is a no-op");
+
+    ui_destroy(ctx);
+}
+
+/* root scrolls vertically with a 500px child inside a 100px viewport. */
+static UI_Context *make_scroll_tree(UI_Frame **out_root) {
+    UI_Context *ctx = ui_create();
+
+    UI_Frame *root = ui_frame(ctx, (UI_FrameConfig){
+        .direction = UI_VERTICAL, .scrollable = true });
+    UI_Frame *tall = ui_frame(ctx, (UI_FrameConfig){
+        .width = UI_FIXED(100), .height = UI_FIXED(500) });
+    ui_add(root, tall);
+
+    ui_layout_frame(root, 0.0f, 0.0f, 100.0f, 100.0f);
+    ctx->root = root;
+
+    *out_root = root;
+    return ctx;
+}
+
+static void wheel_notch_scrolls_by_pixel_step(void) {
+    UI_Frame *root;
+    UI_Context *ctx = make_scroll_tree(&root);
+
+    ui_pointer_wheel(ctx, 50.0f, 50.0f, 0.0f, -1.0f);
+
+    CF_CHECK(root->scroll_y == 60.0f,
+             "one notch moves 60px, not the raw ±1 delta");
+
+    ui_destroy(ctx);
+}
+
+static void keyboard_scroll_targets_first_scrollable(void) {
+    UI_Frame *root;
+    UI_Context *ctx = make_scroll_tree(&root);
+
+    ui_scroll_by(ctx, 0.0f, 100.0f);
+    CF_CHECK(root->scroll_y == 100.0f, "scroll_by moves the scrollable region");
+
+    ui_scroll_extreme(ctx, true);
+    CF_CHECK(root->scroll_y == root->content_height, "End jumps to the content end");
+
+    ui_scroll_extreme(ctx, false);
+    CF_CHECK(root->scroll_y == 0.0f, "Home returns to the start");
+
+    ui_destroy(ctx);
+}
+
 int main(void) {
     printf("test_input\n");
     CF_RUN(pointer_move_sets_hover_on_deepest_frame);
@@ -265,5 +383,10 @@ int main(void) {
     CF_RUN(hit_test_returns_deepest_frame_containing_point);
     CF_RUN(hit_test_topmost_sibling_wins);
     CF_RUN(hit_test_null_before_layout);
+    CF_RUN(focus_next_walks_focusables_and_wraps);
+    CF_RUN(shift_tab_wraps_to_last_focusable);
+    CF_RUN(activate_focused_runs_click_handler);
+    CF_RUN(wheel_notch_scrolls_by_pixel_step);
+    CF_RUN(keyboard_scroll_targets_first_scrollable);
     return CF_REPORT();
 }

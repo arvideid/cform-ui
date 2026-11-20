@@ -122,8 +122,13 @@ typedef struct {
     float font_size;
     UI_FontStyle font_style;
 
-    /* Raster image drawn in the content box. A filesystem path or an
-     * http(s) URL; NULL hides it. Loading failures are silent. */
+    /* When true the label word-wraps to the content-box width and is drawn
+     * top-left instead of as a single centred line. */
+    bool wrap_text;
+
+    /* Image drawn in the content box, decoded by SDL3_image (PNG, JPEG, WebP,
+     * GIF, SVG and more). A filesystem path; NULL hides it. Loading failures
+     * are silent. */
     const char *image_src;
     UI_ImageFit image_fit;
 
