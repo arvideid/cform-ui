@@ -61,6 +61,13 @@ typedef enum cf_align_content {
 typedef enum cf_position { CF_POSITION_STATIC, CF_POSITION_ABSOLUTE } cf_position;
 
 /*
+ * The formatting context a container gives its children: lines that pack along
+ * a main axis, or tracks that place into a grid. The zero state is a flex
+ * container, so a style written before grids existed keeps its meaning.
+ */
+typedef enum cf_display { CF_DISPLAY_FLEX, CF_DISPLAY_GRID } cf_display;
+
+/*
  * Margin, padding and border as tagged lengths, in the same physical order as
  * cf_edges so a paint pass can read the two side by side. Auto is a real value
  * for margin (§9.5.2 absorbs free space before justify-content gets any) and
@@ -76,6 +83,21 @@ typedef struct cf_box {
 } cf_box;
 
 /*
+ * One grid track, written as CSS's minmax(min, max).
+ *
+ * `min` is the floor the track never drops below: a length fixes it, CF_AUTO
+ * lets the track collapse when space runs short. `max` is the ceiling: a
+ * length fixes it, CF_AUTO grows the track to the content of the items that
+ * fill it alone, and CF_FR(v) claims v shares of whatever the fixed and
+ * content-sized tracks leave over. `auto` is {CF_AUTO, CF_AUTO}, a fixed track
+ * repeats its length in both slots, and minmax(a, b) is {a, b}.
+ */
+typedef struct cf_track {
+    cf_length min;
+    cf_length max;
+} cf_track;
+
+/*
  * The declarations of one node. The zero state is valid: a row container that
  * hugs its content, wraps nothing, stretches its items and never shrinks them.
  * cf_style_default adds the two CSS initial values zero cannot express - a
@@ -86,6 +108,16 @@ typedef struct cf_box {
  * it, and min and max clamp the border box with it. CSS's content-box default
  * is deliberately not inherited - a toolkit box that has to be measured twice
  * to learn its own padding is not worth the spec citation.
+ *
+ * In a grid container the two track arrays describe the explicit grid and are
+ * borrowed for the duration of the pass, like every other array the engine
+ * reads: a track array that dies mid-frame gives the grid whatever its pointer
+ * held. A container with no column tracks has one content-sized column, and
+ * rows the items overflow into are added as content-sized tracks of their own.
+ * Placement is 1-based, as CSS writes it: `column_start` is the line the item
+ * begins at and `column_span` the number of tracks it fills, so a start of 2
+ * and a span of 3 covers the middle three columns. Zero on either is `auto`:
+ * the next free cell the placement cursor reaches, and one track.
  */
 typedef struct cf_style {
     cf_length width;
@@ -99,11 +131,20 @@ typedef struct cf_style {
     cf_box padding;
     cf_box border;
     cf_box inset;
+    const cf_track *column_tracks;
+    const cf_track *row_tracks;
+    uint32_t column_count;
+    uint32_t row_count;
+    uint32_t column_start;
+    uint32_t column_span;
+    uint32_t row_start;
+    uint32_t row_span;
     cf_length column_gap;
     cf_length row_gap;
     float flex_grow;
     float flex_shrink;
     cf_position position;
+    cf_display display;
     cf_direction direction;
     cf_wrap wrap;
     cf_justify justify_content;
@@ -115,6 +156,15 @@ typedef struct cf_style {
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */
 cf_style cf_style_default(void);
+
+/*
+ * `pattern` written into `out` end to end `times`, stopping at `capacity`. The
+ * count returned is what the caller puts in `column_count`: repetition is
+ * construction sugar for the flat array a grid borrows, and the engine never
+ * sees the pattern.
+ */
+uint32_t cf_tracks_repeat(cf_track *out, uint32_t capacity, const cf_track *pattern,
+                          uint32_t pattern_count, uint32_t times);
 
 /*
  * A length read as a plain measurement: auto and fr hold nothing and read as

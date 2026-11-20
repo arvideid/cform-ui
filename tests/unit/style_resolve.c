@@ -127,6 +127,26 @@ static void default_holds_the_css_initial_values_zero_cannot_express(void) {
              "the zero size hugs its content on both axes");
 }
 
+static void repeat_expands_a_pattern_whole_or_not_at_all(void) {
+    const cf_track pattern[] = {
+        {CF_PX(10.0f), CF_PX(10.0f)},
+        {CF_AUTO, CF_FR(1.0f)},
+    };
+    cf_track tracks[5];
+
+    const uint32_t count = cf_tracks_repeat(tracks, 5u, pattern, 2u, 3u);
+
+    /* The fifth slot cannot hold a third pattern, so it holds none of it. */
+    CF_CHECK(count == 2u, "a pattern that does not fit is left out");
+    CF_NEAR(tracks[0].min.value, 10.0f);
+    CF_CHECK(tracks[3].min.kind == CF_LENGTH_AUTO && tracks[3].max.kind == CF_LENGTH_FR,
+             "the pattern repeats in order");
+
+    CF_CHECK(cf_tracks_repeat(tracks, 4u, pattern, 0u, 3u) == 0u,
+             "an empty pattern repeats to nothing");
+    CF_CHECK(cf_tracks_repeat(NULL, 4u, pattern, 2u, 3u) == 0u, "no array writes nothing");
+}
+
 int main(void) {
     printf("style\n");
     CF_RUN(percent_resolves_against_the_reference_it_is_given);
@@ -139,5 +159,6 @@ int main(void) {
     CF_RUN(negative_padding_and_border_read_as_zero);
     CF_RUN(direction_separates_the_axis_from_the_packing_edge);
     CF_RUN(default_holds_the_css_initial_values_zero_cannot_express);
+    CF_RUN(repeat_expands_a_pattern_whole_or_not_at_all);
     return CF_REPORT();
 }

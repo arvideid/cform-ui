@@ -10,6 +10,26 @@ cf_style cf_style_default(void) {
     };
 }
 
+/*
+ * A pattern is repeated whole or not at all: a half-written track would leave
+ * the caller's count and its array disagreeing about where the grid ends.
+ */
+uint32_t cf_tracks_repeat(cf_track *out, uint32_t capacity, const cf_track *pattern,
+                          uint32_t pattern_count, uint32_t times) {
+    if (out == NULL || pattern == NULL || pattern_count == 0u) {
+        return 0u;
+    }
+
+    const uint32_t repeated = capacity / pattern_count;
+    const uint32_t written = times < repeated ? times : repeated;
+
+    for (uint32_t i = 0u; i < written * pattern_count; ++i) {
+        out[i] = pattern[i % pattern_count];
+    }
+
+    return written;
+}
+
 float cf_length_resolve(cf_length length, float reference) {
     /* AUTO holds no length of its own - the flex pass decides - and FR is a
      * share of leftover space rather than a measurement. Both read as zero so
