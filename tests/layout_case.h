@@ -48,6 +48,18 @@
         .margin = ZERO_BOX, .flex_shrink = 1.0f, __VA_ARGS__                                       \
     }
 
+/*
+ * A row from the Yoga corpus states every declaration that node carries,
+ * including the three Yoga starts from and cf_style's zero does not give: a
+ * column container, lines packed from the cross start, and margins of 0.
+ * Nothing is defaulted here, because a generated row is read against the
+ * reference engine's configuration rather than this engine's.
+ */
+#define YOGA_STYLE(...)                                                                            \
+    (cf_style) {                                                                                   \
+        __VA_ARGS__                                                                                \
+    }
+
 /* One node of a case and the border box the pass owes it. */
 typedef struct case_node {
     cf_style style;

@@ -7,6 +7,7 @@ cmake-build-*/
 # --- Generated compilation database / tool caches ---
 compile_commands.json
 .cache/
+__pycache__/
 
 # --- Fetched build dependencies (FetchContent) ---
 _deps/
