@@ -61,10 +61,11 @@
 
 /*
  * A row from the Yoga corpus states every declaration that node carries,
- * including the three Yoga starts from and cf_style's zero does not give: a
- * column container, lines packed from the cross start, and margins of 0.
- * Nothing is defaulted here, because a generated row is read against the
- * reference engine's configuration rather than this engine's.
+ * including the four Yoga starts from and cf_style's zero does not give: a
+ * column container, lines packed from the cross start, margins of 0, and
+ * insets that move the box. Nothing is defaulted here, because a generated row
+ * is read against the reference engine's configuration rather than this
+ * engine's.
  */
 #define YOGA_STYLE(...)                                                                            \
     (cf_style) {                                                                                   \

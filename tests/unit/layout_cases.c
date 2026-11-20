@@ -12,6 +12,7 @@
 #define GROWN(...) STYLE(.flex_grow = 1.0f, __VA_ARGS__)
 #define COLUMN(...) STYLE(.direction = CF_DIRECTION_COLUMN, __VA_ARGS__)
 #define ABSOLUTE(...) STYLE(.position = CF_POSITION_ABSOLUTE, __VA_ARGS__)
+#define RELATIVE(...) STYLE(.position = CF_POSITION_RELATIVE, __VA_ARGS__)
 #define GRID(...) STYLE(.display = CF_DISPLAY_GRID, __VA_ARGS__)
 /* A track is minmax(min, max); a fixed one repeats its length in both slots. */
 #define TRACK(min_length, max_length) {(min_length), (max_length)}

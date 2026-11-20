@@ -543,3 +543,42 @@
                {SIZE(40.0f, 30.0f), 1u, RECT(68.0f, 0.0f, 40.0f, 30.0f)},
                {STYLE(.height = CF_PX(30.0f)), 1u, RECT(0.0f, 38.0f, 60.0f, 30.0f)},
                {STYLE(.height = CF_PX(16.0f)), 0u, RECT(0.0f, 76.0f, 240.0f, 16.0f)}}},
+
+    /* A relative offset moves the box and its content, and leaves the slot the
+     * line gave it: the next sibling packs against where the box would have
+     * been, not where it went. */
+    {.name = "a relative box moves by its insets and takes its content along",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 4u,
+     .nodes = {{SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+               {RELATIVE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
+                         .inset = SIDES(CF_PX(10.0f), CF_PX(10.0f), CF_AUTO, CF_AUTO)),
+                0u, RECT(10.0f, 10.0f, 40.0f, 40.0f)},
+               {SIZE(20.0f, 20.0f), 1u, RECT(10.0f, 10.0f, 20.0f, 20.0f)},
+               {SIZE(30.0f, 40.0f), 0u, RECT(40.0f, 0.0f, 30.0f, 40.0f)}}},
+
+    {.name = "a relative box with only the end insets named moves back",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+               {RELATIVE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
+                         .inset = SIDES(CF_AUTO, CF_AUTO, CF_PX(10.0f), CF_PX(10.0f))),
+                0u, RECT(-10.0f, -10.0f, 40.0f, 40.0f)}}},
+
+    /* An inset written as a percentage is measured against the box the parent
+     * offered, so the axis an edge names decides which extent it divides. */
+    {.name = "a relative percentage inset measures the box the parent offered",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(200.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(100.0f, 200.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 200.0f)},
+               {RELATIVE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
+                         .inset = SIDES(CF_PERCENT(50), CF_PERCENT(25), CF_AUTO, CF_AUTO)),
+                0u, RECT(50.0f, 50.0f, 40.0f, 40.0f)}}},
+
+    {.name = "a static box ignores its insets",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+               {STYLE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
+                      .inset = SIDES(CF_PX(10.0f), CF_PX(10.0f), CF_AUTO, CF_AUTO)),
+                0u, RECT(0.0f, 0.0f, 40.0f, 40.0f)}}},

@@ -70,10 +70,13 @@ FIELD_ORDER = SIZES + BOX_FIELDS + ("column_gap", "row_gap", "flex_grow",
                                     "align_self", "align_content")
 
 # What Yoga starts a node with that cf_style's zero does not give. A margin of
-# 0 is stated in box_declaration, where the other boxes are written.
+# 0 is stated in box_declaration, where the other boxes are written. Yoga's
+# default position type offsets a node by its insets, which is what CSS writes
+# as `position: relative`; cf_style's zero ignores them.
 YOGA_DEFAULTS = {
     "direction": "CF_DIRECTION_COLUMN",
     "align_content": "CF_ALIGN_CONTENT_START",
+    "position": "CF_POSITION_RELATIVE",
 }
 
 # Setters whose argument is named after the enum type, not the property.
@@ -87,9 +90,9 @@ ENUM_SETTERS = {
     "PositionType": ("position", "YGPositionType"),
 }
 
-# A variant that lands on cf_style's zero reads as None, so the row stays quiet
-# about it. Every None here is a value both engines start from; the ones only
-# Yoga starts from live in YOGA_DEFAULTS.
+# A variant that needs no word in the row reads as None: either cf_style's zero
+# already gives it, or YOGA_DEFAULTS states it for every node the fixture stays
+# quiet about.
 ENUM_VARIANTS = {
     "direction": {
         "Column": None,
@@ -136,7 +139,7 @@ ENUM_VARIANTS = {
     },
     "position": {
         "Relative": None,
-        "Static": None,
+        "Static": "CF_POSITION_STATIC",
         "Absolute": "CF_POSITION_ABSOLUTE",
     },
 }
