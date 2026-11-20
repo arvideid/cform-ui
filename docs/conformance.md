@@ -54,8 +54,8 @@ denominator stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-341 of the 485 ported fixtures match, 70% of what was ported and 63% of the
-whole corpus. Measured at `f6a8d76`. The table is the tier's own output, so a
+383 of the 485 ported fixtures match, 79% of what was ported and 71% of the
+whole corpus. Measured at `48c4d2e`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
 The grade is half a pixel. The reference snapped every fixture edge to the
@@ -66,9 +66,9 @@ the rules.
 
 | suite | ported | match | miss |
 |-------|--------|-------|------|
-| absoluteposition | 33 | 18 | 15 |
+| absoluteposition | 33 | 33 | 0 |
 | aligncontent | 64 | 50 | 14 |
-| alignitems | 29 | 11 | 18 |
+| alignitems | 29 | 13 | 16 |
 | alignself | 5 | 4 | 1 |
 | androidnewsfeed | 1 | 1 | 0 |
 | auto | 5 | 5 | 0 |
@@ -77,10 +77,10 @@ the rules.
 | dimension | 2 | 2 | 0 |
 | flex | 10 | 9 | 1 |
 | flexbasisfitcontent | 5 | 4 | 1 |
-| flexdirection | 53 | 32 | 21 |
+| flexdirection | 53 | 53 | 0 |
 | flexwrap | 23 | 5 | 18 |
 | gap | 32 | 24 | 8 |
-| justifycontent | 28 | 22 | 6 |
+| justifycontent | 28 | 26 | 2 |
 | margin | 34 | 29 | 5 |
 | minmaxdimension | 24 | 23 | 1 |
 | padding | 7 | 7 | 0 |
@@ -88,10 +88,10 @@ the rules.
 | rounding | 13 | 3 | 10 |
 | sizeoverflow | 3 | 3 | 0 |
 | staticposition | 62 | 48 | 14 |
-| **total** | **485** | **341** | **144** |
+| **total** | **485** | **383** | **102** |
 
-315 node assertions fail across those 144 cases. Only 12 of them differ from
-the reference by two pixels or less everywhere; 125 differ by more than eight.
+234 node assertions fail across those 102 cases. Only 12 of them differ from
+the reference by two pixels or less everywhere; 80 differ by more than eight.
 The grade is not what is missing - the rules are.
 
 ## What the misses need
@@ -100,30 +100,32 @@ The grade is not what is missing - the rules are.
   then distributed by `align-content`, and `stretch` has to give the leftover
   cross space to the lines. `flexwrap` misses 18 of 23 and `aligncontent` 14 of
   64; 8 of `gap` are `*_wrapping` cases where a percentage row gap resolves
-  against a line box that has not been packed, so wrapping is worth about 41
-  cases in total - the largest single rule left.
-- **The static position a container's alignment gives.** 29
-  cases, `staticposition`'s 14 amalgamations and 15 of `absoluteposition`, all
-  asking for the same thing: the static position is not the content origin but
-  wherever `justify-content` and `align-items` would have put the child had it
-  stayed in the flow - `(container - child) / 2` for a centred container,
-  `container - child - margin` for an end-packed one. The engine places it at
-  the origin plus its own margin and stops there; the containing block itself
-  is the nearest positioned ancestor's padding box now, which is what lifted
-  `staticposition` from 23 to 48.
-- **Reverse directions and their edges.** `row-reverse` and `column-reverse`
-  flip which edge a margin, border or padding offsets from, and every one of
-  `flexdirection`'s 21 remaining misses names a start or end edge of one of
-  those three on a reversed container.
-- **Negative free space.** When the children do not fit, `justify-content`
-  has no slack to distribute and min, max and auto margins all resolve
-  differently: 6 of `justifycontent`, 5 of `margin` (`margin_auto_*` with a
-  child bigger than the parent), 7 of `alignitems` and 1 of `minmaxdimension`.
+  against a line box that has not been packed, and `percentage`'s
+  `percentage_container_in_wrapping_container` needs the same packing before it
+  can resolve its percentage, so wrapping is worth about 41 cases in total - the
+  largest single rule left.
+- **A percentage measured against a box that is not sized yet.** CSS treats the
+  percentage as `auto` while its containing block still depends on the element
+  and resolves it once the layout has settled that block; the engine resolves it
+  against the space the box was measured in. `percentage`'s
+  `percent_within_flex_grow` wants a 100% child to fill the 150 its grown parent
+  settles at rather than the 350 the root offered, and 11 `staticposition`
+  amalgamations want the settled answer for a 21% or 10% width - `133` from the
+  content where the first pass measured `44`, `20` where it measured `14.6`.
+  The other two `percentage` misses are the same shape.
 - **`align-items: baseline`** and the self variant, which need a baseline the
-  engine can only get from a measure callback. 11 cases.
-- **`box-sizing: content-box`.** `cf_style` has no field for it, so the 7
-  `box_sizing_border_box_*` cases that mix the two arrive already misstated -
-  as do the 23 fixtures the port skips for want of it.
+  engine can only get from a measure callback. 12 of `alignitems` and
+  `align_self_baseline`.
+- **Negative free space.** When the children do not fit, `justify-content` has
+  no slack to distribute and min, max and auto margins all resolve
+  differently: 2 of `justifycontent` (`justify_content_overflow_row_*`), 5 of
+  `margin` (`margin_auto_*` with a child bigger than the parent), 4 of
+  `alignitems` and 1 of `minmaxdimension`.
+- **A box smaller than its own padding and border.** A border-box size cannot
+  shrink below the padding and border it has to hold, and the engine lets it:
+  7 of `boxsizing` want `40` where the declared `25` is what came out, and
+  `staticposition`'s 3 `*_child_padding_percentage` want the same floor under a
+  padding percentage of the containing block's width.
 - **Edge rounding.** Rounding a box means rounding both its edges, so its size
   can land a whole pixel from the exact one - `33.333` wide starting at `33.333`
   becomes `34` when the far edge snaps to `67`. That is more than the grade
@@ -133,7 +135,7 @@ The grade is not what is missing - the rules are.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 341 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 383 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
