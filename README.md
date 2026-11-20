@@ -145,32 +145,8 @@ ctest --preset dev -L bench  # the throughput rigs, printing the baseline
 When the renderer returns it will be verified by running the example and looking
 at it, never by mocking the backend or asserting pixels.
 
-## Benchmarks
-
-One layout of a 1280 × 720 offer, `release` preset, GCC on Windows (MSYS2
-UCRT64), reporting the fastest pass of the rig. Three consecutive runs agree
-within 5% on the flex tree; the flat grid spread 240 to 330 ms, which is what a
-quadratic scan makes visible when the machine is not idle.
-
-| rig                                              | nodes  | ms per layout |
-|--------------------------------------------------|--------|---------------|
-| deep flex tree                                   |  1,250 | 1.0           |
-| deep flex tree                                   |  2,500 | 2.3           |
-| deep flex tree                                   |  5,000 | 4.9           |
-| deep flex tree                                   | 10,000 | 10.5          |
-| flat 100-column grid, `fr` columns, content rows  | 10,000 | ~300          |
-
-Neither endpoint meets the 2 ms budget, and both gaps are structural rather than
-incidental:
-
-- Cost per node rises as the deep tree grows - 780 ns at 1,250 nodes, 1,070 ns
-  at 10,000, a log factor. Nothing caches a measured size, so a subtree is
-  measured once at every level above it: `layout_subtree` resolves the node's
-  own border box from its content and then arranges children, each of which
-  measures again. A layout cache invalidated by dirty bits is the node layer's
-  job, and the budget is its exit criterion.
-- The flat grid is quadratic in the cells, because dense placement restarts its
-  row-major scan of the occupancy map at the first cell for every item.
+[`docs/bench.md`](docs/bench.md) publishes the layout baseline: what the rigs
+cost, how the cost grows with the tree, and why no number is asserted in CI.
 
 ## Editor and developer experience
 
