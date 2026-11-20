@@ -186,4 +186,79 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
  */
 void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_available box, cf_point origin);
 
+/*
+ * One in-flow grid item and the cells it holds. Starts are 0-based line
+ * indexes; placement resolves every `auto` before the tracks are sized, so a
+ * start and a span of at least one survive here.
+ */
+typedef struct grid_item {
+    uint32_t slot;
+    uint32_t column_start;
+    uint32_t column_span;
+    uint32_t row_start;
+    uint32_t row_span;
+} grid_item;
+
+/*
+ * A grid container mid-pass. The track arrays are the declared ones widened
+ * to whatever placement needs: implicit rows are content-sized, and a
+ * container that declares no columns gets one. `constraint` is the content box
+ * the grid is measured or laid into, and the size arrays belong to it.
+ */
+typedef struct grid_ctx {
+    const layout_ctx *ctx;
+    const cf_style *style;
+    uint32_t slot;
+    cf_available constraint;
+    cf_intrinsic intrinsic;
+    cf_point origin;
+    float percent_base;
+    float column_gap;
+    float row_gap;
+    const grid_item *items;
+    uint32_t item_count;
+    const cf_track *columns;
+    uint32_t column_count;
+    const cf_track *rows;
+    uint32_t row_count;
+    float *column_sizes;
+    float *row_sizes;
+} grid_ctx;
+
+/*
+ * Where every in-flow child of `slot` sits, in declaration order: explicit
+ * lines claim their cells first, an `auto` item takes the next free cell in
+ * row-major order, and a child that leaves the flow gets no cell. The grid has
+ * `column_count` columns; the rows it needs come back in `rows_out`, which is
+ * never fewer than the declared count. Returns how many items were placed.
+ */
+uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count, grid_item *items,
+                    uint32_t *rows_out);
+
+/* The declared tracks widened to `count`, the rest content-sized; NULL when
+ * scratch refuses. */
+const cf_track *widen_tracks(const layout_ctx *ctx, const cf_track *declared,
+                             uint32_t declared_count, uint32_t count);
+
+/* Sizes read back out of a track array: a span, the offset of a cell, and the
+ * whole axis, gaps included. */
+float span_size(const float *sizes, uint32_t start, uint32_t span, float gap);
+float track_offset(const float *sizes, uint32_t start, float gap);
+float axis_extent(const float *sizes, uint32_t count, float gap);
+
+/*
+ * Grid §12.4 through §12.7 over both axes of `g`, written into the size arrays
+ * it carries. False when scratch refused the solver's own state.
+ */
+bool grid_size_tracks(grid_ctx *g);
+
+/*
+ * The two entries the dispatcher uses. An item that names a size on an axis is
+ * given the cell's start edge on that axis: nothing distributes space inside a
+ * cell, so `justify_content` and `align_content` still belong to flex lines.
+ */
+cf_size grid_extent_of(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
+                       cf_intrinsic mode);
+void grid_arrange(const layout_ctx *ctx, uint32_t slot, cf_available constraint, cf_point origin);
+
 #endif

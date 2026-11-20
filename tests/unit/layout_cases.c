@@ -36,6 +36,14 @@
 #define GROWN(...) STYLE(.flex_grow = 1.0f, __VA_ARGS__)
 #define COLUMN(...) STYLE(.direction = CF_DIRECTION_COLUMN, __VA_ARGS__)
 #define ABSOLUTE(...) STYLE(.position = CF_POSITION_ABSOLUTE, __VA_ARGS__)
+#define GRID(...) STYLE(.display = CF_DISPLAY_GRID, __VA_ARGS__)
+/* A track is minmax(min, max); a fixed one repeats its length in both slots. */
+#define TRACK(min_length, max_length) {(min_length), (max_length)}
+#define TRACKS(...)                                                                                \
+    (const cf_track[]) {                                                                           \
+        __VA_ARGS__                                                                                \
+    }
+#define FIXED(pixels) TRACK(CF_PX(pixels), CF_PX(pixels))
 #define AVAILABLE(offer_width, offer_height)                                                       \
     (cf_available) {                                                                               \
         .width = (offer_width), .height = (offer_height)                                           \
@@ -134,7 +142,8 @@ int main(void) {
 
     /* A case is data: the tree it declares, the box it is offered, and the rect
      * every node must land in. The corpus is the 0.2 layout suite, restated
-     * against the flexbox rules, plus the children that leave the flow. */
+     * against the flexbox rules, the children that leave the flow, and the grid
+     * subset the track solver implements. */
     const layout_case cases[] = {
 #include "layout_cases_data.h"
     };

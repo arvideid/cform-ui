@@ -58,9 +58,18 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
         .height = clamp_non_negative(border.height - inset.top - inset.bottom),
     };
 
+    const cf_available box = {.width = CF_PX(content.width), .height = CF_PX(content.height)};
+    const cf_point content_origin = {.x = origin.x + inset.left, .y = origin.y + inset.top};
+
+    if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
+        grid_arrange(ctx, slot, box, content_origin);
+
+        return;
+    }
+
     const flex_pass pass = {
-        .constraint = {.width = CF_PX(content.width), .height = CF_PX(content.height)},
-        .origin = {.x = origin.x + inset.left, .y = origin.y + inset.top},
+        .constraint = box,
+        .origin = content_origin,
         .mode = FLEX_ARRANGE,
     };
 

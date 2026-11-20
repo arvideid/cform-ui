@@ -45,6 +45,10 @@ cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mod
         return (cf_size){0};
     }
 
+    if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
+        return grid_extent_of(ctx, slot, constraint, mode);
+    }
+
     const flex_pass pass = {.constraint = constraint, .intrinsic = mode, .mode = FLEX_MEASURE};
 
     return flex_extent_of(ctx, slot, &pass);
