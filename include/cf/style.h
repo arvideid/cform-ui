@@ -127,6 +127,8 @@ bool cf_length_is_auto(cf_length length);
 /*
  * A box's four sides as measurements. Auto is zero here even though it means
  * something for margin, which is the caller's to read off the box first.
+ * Negative padding and border read as zero: they are insets, and a negative
+ * one would put a content box outside the frame that paints it.
  */
 cf_edges cf_box_resolve(cf_box box, float reference);
 

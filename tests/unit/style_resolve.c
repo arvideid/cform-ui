@@ -75,6 +75,24 @@ static void a_box_resolves_every_side_against_the_inline_size(void) {
     CF_NEAR(resolved.bottom, 50.0f);
 }
 
+static void negative_padding_and_border_read_as_zero(void) {
+    /* A negative inset would put the content box outside the frame that paints
+     * it. A margin keeps its sign, and reading it is the caller's job. */
+    const cf_box shrunk = {
+        .left = CF_PX(-8.0f),
+        .top = CF_PERCENT(-50.0f),
+        .right = CF_PX(3.0f),
+        .bottom = CF_AUTO,
+    };
+
+    const cf_edges resolved = cf_box_resolve(shrunk, 100.0f);
+
+    CF_NEAR(resolved.left, 0.0f);
+    CF_NEAR(resolved.top, 0.0f);
+    CF_NEAR(resolved.right, 3.0f);
+    CF_NEAR(resolved.bottom, 0.0f);
+}
+
 static void direction_separates_the_axis_from_the_packing_edge(void) {
     CF_CHECK(cf_direction_is_row(CF_DIRECTION_ROW), "row packs horizontally");
     CF_CHECK(cf_direction_is_row(CF_DIRECTION_ROW_REVERSE), "row-reverse still packs horizontally");
@@ -118,6 +136,7 @@ int main(void) {
     CF_RUN(clamp_reads_a_negative_extent_as_zero);
     CF_RUN(a_declaration_holds_a_length_only_when_it_can_be_measured);
     CF_RUN(a_box_resolves_every_side_against_the_inline_size);
+    CF_RUN(negative_padding_and_border_read_as_zero);
     CF_RUN(direction_separates_the_axis_from_the_packing_edge);
     CF_RUN(default_holds_the_css_initial_values_zero_cannot_express);
     return CF_REPORT();

@@ -49,12 +49,20 @@ bool cf_length_of(cf_length declaration, cf_length offer, float *out) {
     return false;
 }
 
+/* A negative padding or border would put the content box outside the frame
+ * that paints it; margins keep their sign, and their caller resolves them. */
+static float box_side(cf_length side, float reference) {
+    const float value = cf_length_resolve(side, reference);
+
+    return value < 0.0f ? 0.0f : value;
+}
+
 cf_edges cf_box_resolve(cf_box box, float reference) {
     return (cf_edges){
-        .left = cf_length_resolve(box.left, reference),
-        .top = cf_length_resolve(box.top, reference),
-        .right = cf_length_resolve(box.right, reference),
-        .bottom = cf_length_resolve(box.bottom, reference),
+        .left = box_side(box.left, reference),
+        .top = box_side(box.top, reference),
+        .right = box_side(box.right, reference),
+        .bottom = box_side(box.bottom, reference),
     };
 }
 
