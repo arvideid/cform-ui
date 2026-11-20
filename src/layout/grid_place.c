@@ -3,6 +3,8 @@
 #include "layout/internal.h"
 
 #define BITS_PER_BYTE 8u
+#define BITS_PER_WORD 64u
+#define BYTES_PER_WORD (BITS_PER_WORD / BITS_PER_BYTE)
 #define AUTO_LINE UINT32_MAX
 
 static bool cell_taken(const uint8_t *cells, uint32_t columns, uint32_t row, uint32_t column) {
@@ -51,30 +53,82 @@ static bool area_free(const uint8_t *cells, uint32_t columns, uint32_t row, uint
 }
 
 /*
+ * The lowest cell nobody holds, found a word at a time. An all-ones word cannot
+ * contain a candidate, so skipping it answers the same question the row-major
+ * scan asks and reads 10,000 cells in 157 words instead of 10,000 tests.
+ */
+static bool first_free_cell(const uint8_t *cells, size_t cell_count, uint32_t columns,
+                            uint32_t *out_row, uint32_t *out_column) {
+    const size_t word_count = (cell_count + BITS_PER_WORD - 1u) / BITS_PER_WORD;
+
+    for (size_t word_index = 0u; word_index < word_count; ++word_index) {
+        uint64_t occupied = 0u;
+
+        for (uint32_t byte = 0u; byte < BYTES_PER_WORD; ++byte) {
+            occupied |= (uint64_t)cells[word_index * BYTES_PER_WORD + byte]
+                        << (byte * BITS_PER_BYTE);
+        }
+
+        uint64_t unoccupied = ~occupied;
+        if (unoccupied == 0u) {
+            continue;
+        }
+
+        uint32_t offset = 0u;
+        while ((unoccupied & 1u) == 0u) {
+            unoccupied >>= 1;
+            ++offset;
+        }
+
+        const size_t cell = word_index * BITS_PER_WORD + offset;
+        if (cell >= cell_count) {
+            return false;
+        }
+
+        *out_row = (uint32_t)(cell / columns);
+        *out_column = (uint32_t)(cell % columns);
+
+        return true;
+    }
+
+    return false;
+}
+
+/*
  * The first cell an item can take, scanning row-major and dense. A line the
  * item fixed is honoured; an item whose fixed row is full moves on to the next
  * free cell instead of overlapping what is already there.
  */
 static bool find_cell(const uint8_t *cells, uint32_t columns, uint32_t rows, const grid_item *item,
                       uint32_t *out_row, uint32_t *out_column) {
-    for (uint32_t cell = 0u; cell < rows * columns; ++cell) {
-        const uint32_t row = cell / columns;
-        const uint32_t column = cell % columns;
+    /* A one-cell item that names no lines wants exactly the lowest free cell,
+     * which is what every implicit placement asks for. */
+    if (item->row_start == AUTO_LINE && item->column_start == AUTO_LINE && item->row_span == 1u &&
+        item->column_span == 1u) {
+        return first_free_cell(cells, (size_t)rows * columns, columns, out_row, out_column);
+    }
 
+    for (uint32_t row = 0u; row < rows; ++row) {
         if (item->row_start != AUTO_LINE && row != item->row_start) {
             continue;
         }
-        if (item->column_start != AUTO_LINE && column != item->column_start) {
-            continue;
+        if (row + item->row_span > rows) {
+            break;
         }
-        if (row + item->row_span > rows || column + item->column_span > columns) {
-            continue;
-        }
-        if (area_free(cells, columns, row, column, item->row_span, item->column_span)) {
-            *out_row = row;
-            *out_column = column;
 
-            return true;
+        for (uint32_t column = 0u; column < columns; ++column) {
+            if (item->column_start != AUTO_LINE && column != item->column_start) {
+                continue;
+            }
+            if (column + item->column_span > columns) {
+                break;
+            }
+            if (area_free(cells, columns, row, column, item->row_span, item->column_span)) {
+                *out_row = row;
+                *out_column = column;
+
+                return true;
+            }
         }
     }
 
@@ -112,7 +166,10 @@ uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count,
      * pushed a row past the last, so this bound is never too small. */
     const uint32_t bound = rows + count;
     const size_t mark = cf_arena_mark(ctx->scratch);
-    const size_t bytes = ((size_t)bound * column_count + 7u) / BITS_PER_BYTE;
+    /* Whole words, so the placement scan may read eight bytes at a time without
+     * running past the map; the padding bits stay clear and read as no cell. */
+    const size_t bytes =
+        (((size_t)bound * column_count + BITS_PER_WORD - 1u) / BITS_PER_WORD) * BYTES_PER_WORD;
     uint8_t *cells = cf_alloc(ctx->scratch, bytes);
 
     if (cells == NULL) {

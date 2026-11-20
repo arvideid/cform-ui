@@ -504,6 +504,19 @@
                {STYLE(.column_start = 1u, .column_span = 2u), 0u, RECT(0.0f, 0.0f, 200.0f, 50.0f)},
                {STYLE(), 0u, RECT(0.0f, 50.0f, 100.0f, 50.0f)}}},
 
+    /* The wide item leaves a hole in the first row. A placement cursor that only
+     * ever moved forward would put the next item in the third row instead. */
+    {.name = "dense placement fills the hole a wide item left behind",
+     .available = AVAILABLE(CF_AUTO, CF_AUTO),
+     .node_count = 4u,
+     .nodes = {{GRID(.width = CF_PX(180.0f), .height = CF_PX(100.0f),
+                     .column_tracks = TRACKS(FIXED(60.0f), FIXED(60.0f), FIXED(60.0f)),
+                     .column_count = 3u),
+                ROOT, RECT(0.0f, 0.0f, 180.0f, 100.0f)},
+               {STYLE(), 0u, RECT(0.0f, 0.0f, 60.0f, 50.0f)},
+               {STYLE(.column_span = 3u), 0u, RECT(0.0f, 50.0f, 180.0f, 50.0f)},
+               {STYLE(), 0u, RECT(60.0f, 0.0f, 60.0f, 50.0f)}}},
+
     {.name = "an absolute child floats over the grid",
      .available = AVAILABLE(CF_AUTO, CF_AUTO),
      .node_count = 3u,
