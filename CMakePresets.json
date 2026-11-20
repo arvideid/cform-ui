@@ -9,13 +9,14 @@
     {
       "name": "dev",
       "displayName": "Development",
-      "description": "Ninja, Debug, with a compile database for clangd and the test suite on.",
+      "description": "Ninja, Debug, with a compile database for clangd, the test suite and the examples on.",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/dev",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CFORM_BUILD_TESTS": "ON"
+        "CFORM_BUILD_TESTS": "ON",
+        "CFORM_BUILD_EXAMPLES": "ON"
       }
     },
     {

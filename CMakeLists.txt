@@ -115,3 +115,12 @@ if(CFORM_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# Off by default so a project that adds these layers as a subdirectory never
+# builds a program it did not ask for; on in the developer preset and in CI,
+# where the standalone-engine claim has to keep compiling.
+option(CFORM_BUILD_EXAMPLES "Build the cform-ui examples" OFF)
+
+if(CFORM_BUILD_EXAMPLES AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    add_subdirectory(examples)
+endif()

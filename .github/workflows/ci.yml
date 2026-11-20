@@ -32,7 +32,7 @@ jobs:
       - name: Format
         run: |
           mapfile -t sources < <(git ls-files \
-            'include/cf/*.h' 'src/*/*.[ch]' 'tests/unit/*.[ch]')
+            'include/cf/*.h' 'src/*/*.[ch]' 'tests/unit/*.[ch]' 'examples/*.c')
           clang-format --dry-run --Werror "${sources[@]}"
 
       - name: Layer graph
@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }} -DCFORM_BUILD_TESTS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.type }} -DCFORM_BUILD_TESTS=ON -DCFORM_BUILD_EXAMPLES=ON
 
       - name: Build
         run: cmake --build build --config ${{ matrix.type }} --parallel
