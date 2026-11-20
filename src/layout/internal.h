@@ -193,6 +193,14 @@ void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *item
                    uint32_t line_count);
 
 /*
+ * The container's `align-content` as its own keywords state it: `auto` means
+ * whatever the wrap does, and a container that cannot wrap has no cross space
+ * to distribute between lines. The line growth §9.6.1 asks for and the packing
+ * §9.6.2 does are both decided from this, so it is read in one place.
+ */
+cf_align_content content_mode(const flex_context *f);
+
+/*
  * The flow an out-of-flow child would have taken had it stayed in the flow: the
  * container that owns it, its content box, and how that container packs a
  * single box. `main` is the container's `justify_content` and `cross` its

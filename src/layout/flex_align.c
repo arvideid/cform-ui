@@ -69,16 +69,20 @@ static line_spacing content_spacing(cf_align_content mode, uint32_t count, float
     return spacing;
 }
 
+cf_align_content content_mode(const flex_context *f) {
+    if (f->style->wrap == CF_NO_WRAP) {
+        return CF_ALIGN_CONTENT_START;
+    }
+
+    if (f->style->align_content == CF_ALIGN_CONTENT_AUTO) {
+        return CF_ALIGN_CONTENT_STRETCH;
+    }
+
+    return f->style->align_content;
+}
+
 static void place_lines(const flex_context *f, flex_line *lines, uint32_t line_count) {
-    /* A container that cannot wrap has nothing to distribute between lines:
-     * align-content behaves as flex-start there. */
-    cf_align_content mode = f->style->align_content;
-    if (mode == CF_ALIGN_CONTENT_AUTO) {
-        mode = CF_ALIGN_CONTENT_STRETCH;
-    }
-    if (line_count == 1u || f->style->wrap == CF_NO_WRAP) {
-        mode = CF_ALIGN_CONTENT_START;
-    }
+    const cf_align_content mode = content_mode(f);
 
     float used = f->gap_cross * (float)(line_count > 1u ? line_count - 1u : 0u);
     for (uint32_t l = 0; l < line_count; ++l) {

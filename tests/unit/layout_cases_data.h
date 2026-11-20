@@ -362,6 +362,18 @@
                {STYLE(.width = CF_PX(30.0f), .height = CF_PX(40.0f)), 0u,
                 RECT(90.0f, 0.0f, 30.0f, 40.0f)}}},
 
+    /* A wrapping container packs even a single line by its align-content, so
+     * the line keeps its content height and the keyword centres that band in
+     * the tall box instead of growing the line to fill it. */
+    {.name = "align-content centres a single wrapped line",
+     .available = AVAILABLE(CF_PX(140.0f), CF_PX(120.0f)),
+     .node_count = 3u,
+     .nodes = {{STYLE(.width = CF_PX(140.0f), .height = CF_PX(120.0f), .wrap = CF_WRAP,
+                      .align_content = CF_ALIGN_CONTENT_CENTER),
+                ROOT, RECT(0.0f, 0.0f, 140.0f, 120.0f)},
+               {SIZE(50.0f, 10.0f), 0u, RECT(0.0f, 55.0f, 50.0f, 10.0f)},
+               {SIZE(50.0f, 10.0f), 0u, RECT(50.0f, 55.0f, 50.0f, 10.0f)}}},
+
     {.name = "order moves an item without moving it in the tree",
      .available = AVAILABLE(CF_PX(100.0f), CF_PX(50.0f)),
      .node_count = 3u,
