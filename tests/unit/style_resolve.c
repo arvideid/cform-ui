@@ -136,8 +136,9 @@ static void repeat_expands_a_pattern_whole_or_not_at_all(void) {
 
     const uint32_t count = cf_tracks_repeat(tracks, 5u, pattern, 2u, 3u);
 
-    /* The fifth slot cannot hold a third pattern, so it holds none of it. */
-    CF_CHECK(count == 2u, "a pattern that does not fit is left out");
+    /* The fifth slot cannot hold a third pattern, so it holds none of it, and
+     * what comes back is tracks rather than repetitions. */
+    CF_CHECK(count == 4u, "a pattern that does not fit is left out");
     CF_NEAR(tracks[0].min.value, 10.0f);
     CF_CHECK(tracks[3].min.kind == CF_LENGTH_AUTO && tracks[3].max.kind == CF_LENGTH_FR,
              "the pattern repeats in order");

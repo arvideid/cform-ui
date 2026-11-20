@@ -159,9 +159,9 @@ cf_style cf_style_default(void);
 
 /*
  * `pattern` written into `out` end to end `times`, stopping at `capacity`. The
- * count returned is what the caller puts in `column_count`: repetition is
- * construction sugar for the flat array a grid borrows, and the engine never
- * sees the pattern.
+ * count returned is how many tracks `out` now holds - what the caller puts in
+ * `column_count`, because the engine reads a flat array and never sees the
+ * pattern.
  */
 uint32_t cf_tracks_repeat(cf_track *out, uint32_t capacity, const cf_track *pattern,
                           uint32_t pattern_count, uint32_t times);

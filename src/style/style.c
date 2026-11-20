@@ -21,13 +21,14 @@ uint32_t cf_tracks_repeat(cf_track *out, uint32_t capacity, const cf_track *patt
     }
 
     const uint32_t repeated = capacity / pattern_count;
-    const uint32_t written = times < repeated ? times : repeated;
+    const uint32_t whole = times < repeated ? times : repeated;
+    const uint32_t count = whole * pattern_count;
 
-    for (uint32_t i = 0u; i < written * pattern_count; ++i) {
+    for (uint32_t i = 0u; i < count; ++i) {
         out[i] = pattern[i % pattern_count];
     }
 
-    return written;
+    return count;
 }
 
 float cf_length_resolve(cf_length length, float reference) {
