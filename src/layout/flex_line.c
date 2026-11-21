@@ -62,11 +62,39 @@ void collect_lines(const flex_context *f, const flex_item *items, uint32_t count
 }
 
 /*
- * §9.7 steps 1-2: grow. An item whose target breaks its maximum is frozen
- * there and the round restarts, so the room it cannot take goes to the rest.
- * Growing can only break a maximum - the base size is already at or above the
- * floor - and each round freezes at least one item, so the line's item count
- * bounds the loop.
+ * The size a grow round books and grows from: the item's base size, or, when it
+ * declared a base of zero, the hypothetical size its bounds settled - there is
+ * nothing in a zero base to grow into, and the line still has to book the floor
+ * the item cannot go under.
+ */
+static float grow_base_size(const flex_item *item) {
+    return item->basis > 0.0f ? item->basis : item->hypothetical_main;
+}
+
+/*
+ * §9.7 step 3: a round books an item already frozen at the size it was clamped
+ * to and an item still flexing at the size it grows from. The minimum an item
+ * declares is a violation the round catches, not a size it starts from - an item
+ * a minimum holds above its base size still owes the line only the base, and the
+ * room between is what the rest grow into.
+ */
+static float grow_outer_main(const flex_context *f, const flex_item *items, const flex_line *line) {
+    float total = f->gap_main * (float)(line->count > 1u ? line->count - 1u : 0u);
+
+    for (uint32_t i = line->first; i < line->first + line->count; ++i) {
+        const float main = items[i].frozen ? items[i].main : grow_base_size(&items[i]);
+        total += main + items[i].margin_main_start + items[i].margin_main_end;
+    }
+
+    return total;
+}
+
+/*
+ * §9.7 steps 1-2: grow. An item whose target breaks a bound is frozen there and
+ * the round restarts, so the room it cannot take goes to the rest. A round with
+ * no room left still runs, because a base size already outside an item's bounds
+ * is a violation the next round has room to hand over. Each round freezes at
+ * least one item, so the line's item count bounds the loop.
  */
 void grow_line(const flex_context *f, flex_item *items, const flex_line *line) {
     const uint32_t end = line->first + line->count;
@@ -76,8 +104,7 @@ void grow_line(const flex_context *f, flex_item *items, const flex_line *line) {
     }
 
     for (uint32_t round = 0; round < line->count; ++round) {
-        const float free_space =
-            clamp_non_negative(f->main_size - line_flexing_outer_main(f, items, line));
+        const float free_space = clamp_non_negative(f->main_size - grow_outer_main(f, items, line));
 
         float pool = 0.0f;
         for (uint32_t i = line->first; i < end; ++i) {
@@ -86,7 +113,7 @@ void grow_line(const flex_context *f, flex_item *items, const flex_line *line) {
             }
         }
 
-        if (free_space <= 0.0f || pool <= 0.0f) {
+        if (pool <= 0.0f) {
             return;
         }
 
@@ -96,8 +123,23 @@ void grow_line(const flex_context *f, flex_item *items, const flex_line *line) {
                 continue;
             }
 
-            const float target = items[i].hypothetical_main + free_space * items[i].grow / pool;
-            if (target >= items[i].max_main) {
+            /* §9.7 step 3: factors that do not add up to one hand each item its
+             * own share of the space and leave the rest of it unused, rather
+             * than normalising the shares until the line is filled. */
+            const float share =
+                pool < 1.0f ? free_space * items[i].grow : free_space * items[i].grow / pool;
+
+            const float target = grow_base_size(&items[i]) + share;
+            /* A size that only reaches a bound is not a violation of it, and
+             * freezing it there would end the rounds early - the item stays
+             * flexing so a later round can hand it the room an item clamped to
+             * its maximum gives up. The floor keeps the last word when a min
+             * and a max contradict. */
+            if (target < items[i].min_main) {
+                items[i].main = items[i].min_main;
+                items[i].frozen = true;
+                refroze = true;
+            } else if (target > items[i].max_main) {
                 items[i].main = items[i].max_main;
                 items[i].frozen = true;
                 refroze = true;

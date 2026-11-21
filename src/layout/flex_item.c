@@ -83,6 +83,14 @@ static void measure_item(const flex_context *f, flex_item *item) {
     item->grow = child->flex_grow;
     item->shrink = child->flex_shrink;
 
+    /* §9.2.1 steps 1-2: padding and border are part of the border box the
+     * item reserves, so no base size is booked smaller than the frame it
+     * carries. The line that books the item advances by the box the child is
+     * really painted at, not the raw number. */
+    const cf_edges inset = content_insets(f->ctx, item->slot, f->percent_base);
+    const float main_frame = f->row ? inset.left + inset.right : inset.top + inset.bottom;
+    const float cross_frame = f->row ? inset.top + inset.bottom : inset.left + inset.right;
+
     /* §9.2.1 steps 3-5: flex-basis, then the declared main size, then the
      * content. Nothing declared means nothing measured yet either. */
     float declared;
@@ -100,12 +108,7 @@ static void measure_item(const flex_context *f, flex_item *item) {
         item->cross = content_cross;
     }
 
-    /* A declared main size is a border box, so it is reserved no smaller than
-     * the padding and border it carries: the line that books the item has to
-     * advance by the box the child is really painted at, not the raw number. */
-    const cf_edges inset = content_insets(f->ctx, item->slot, f->percent_base);
-    const float main_frame = f->row ? inset.left + inset.right : inset.top + inset.bottom;
-    const float cross_frame = f->row ? inset.top + inset.bottom : inset.left + inset.right;
+    item->basis = larger(item->basis, main_frame);
 
     /* The automatic minimum size cannot exceed the base size it is compared
      * against, so clamping here without resolving it loses nothing. */
