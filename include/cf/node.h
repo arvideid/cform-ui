@@ -97,6 +97,53 @@ void cf_frame_begin(cf_ctx *ctx);
 void *cf_state(cf_ctx *ctx, cf_name key, size_t size);
 
 /*
+ * The offset a scroller keeps under its name. The block is the same keyed
+ * memory cf_state serves: a build that declares the same scroller keeps its
+ * offset across rebuilds, and one that stops asking loses the block a frame
+ * later. The offset is measured from the content's start toward its end.
+ */
+typedef struct cf_scroll {
+    float offset;
+} cf_scroll;
+
+/* The scroll block a build keeps under its name, or NULL for a nameless
+ * request - the same refusals cf_state gives. */
+cf_scroll *cf_scroll_of(cf_ctx *ctx, cf_name key);
+
+/*
+ * An offset kept inside the scrollable range: the distance the content
+ * reaches past the viewport, and nothing at all when the content fits.
+ */
+float cf_scroll_clamp(float offset, float viewport, float content);
+
+/*
+ * The geometry one scrollbar does its math on: the viewport it shows, the
+ * content it looks at, and the track it draws in. The thumb rides the
+ * track's y axis.
+ */
+typedef struct cf_scrollbar {
+    float viewport;
+    float content;
+    cf_rect track;
+} cf_scrollbar;
+
+/*
+ * The thumb a scrollbar shows for this offset: sized by the viewport's
+ * share of the content, placed by the offset's share of the range, and
+ * never thinner than a hand can grab. A viewport that already shows the
+ * whole content answers the whole track.
+ */
+cf_rect cf_scrollbar_thumb(cf_scrollbar bar, float offset);
+
+/*
+ * The offset a drag produces: the grab point sat in the thumb at
+ * offset_at_grab, and the pointer has since moved to position. The track's
+ * free length scales the movement, so the thumb follows the pointer and
+ * the offset follows the thumb.
+ */
+float cf_scroll_drag(cf_scrollbar bar, cf_point grab, cf_point position, float offset_at_grab);
+
+/*
  * Reconciles a declaration against the retained tree. A node that declares
  * the same depth and key keeps its slot, wherever it now sits; a node
  * without a key keeps the slot its ordinal held last frame; everything else

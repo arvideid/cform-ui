@@ -47,6 +47,10 @@ cf_add_layer_test(node_rebuild unit/node_rebuild.c cf_node)
 # drive events at it and read which handler saw them.
 cf_add_layer_test(node_input unit/node_input.c cf_node)
 
+# The scroll math is core-owned: these cases drive offsets, thumb geometry
+# and thumb drags through one scrollbar's worth of numbers.
+cf_add_layer_test(node_scroll unit/node_scroll.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against

@@ -85,12 +85,14 @@ target_link_libraries(cf_paint PUBLIC cf_layout)
 
 # cf_node reconciles each frame's declaration into retained slots: identity
 # by depth and key, position for the keyless, and the view cf_layout reads.
-# state.c holds the blocks a build asks for by name across frames. It is
-# the first layer that owns memory across frames.
+# state.c holds the blocks a build asks for by name across frames, scroll.c
+# the offsets a scroller keeps under its name. It is the first layer that
+# owns memory across frames.
 add_library(cf_node STATIC
     src/node/context.c
     src/node/diff.c
     src/node/input.c
+    src/node/scroll.c
     src/node/state.c
     src/node/tree.c
 )
