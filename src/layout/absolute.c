@@ -75,8 +75,15 @@ static float absolute_size(const layout_ctx *ctx, uint32_t slot, cf_available co
             const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
             const cf_size natural =
                 border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, undecided, false);
+            /* Shrink-to-fit is `min(max(preferred minimum, available),
+             * preferred)`: the cap never pushes the box below what the
+             * content cannot break, so an overflowing out-of-flow box keeps
+             * its unbreakable minimum instead of the room it was offered. */
+            const cf_size unbreakable =
+                border_size_of(ctx, slot, CF_INTRINSIC_MIN_CONTENT, constraint, undecided, false);
 
-            size = axis->width_axis ? natural.width : natural.height;
+            size = larger(axis->width_axis ? natural.width : natural.height,
+                          axis->width_axis ? unbreakable.width : unbreakable.height);
         }
     }
 
