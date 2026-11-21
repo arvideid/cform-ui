@@ -60,6 +60,10 @@ cf_add_layer_test(node_scroll unit/node_scroll.c cf_node)
 # durations, eases and rebuilds.
 cf_add_layer_test(node_anim unit/node_anim.c cf_node)
 
+# The widgets are the first layer a build composes: these cases drive a
+# button through the dispatch it configures and read the click it fires.
+cf_add_layer_test(widget_button unit/widget_button.c cf_widget cf_theme)
+
 # The dirty bit answers one question per frame: did this node's declaration
 # move? These cases read it against the frame before it.
 cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)

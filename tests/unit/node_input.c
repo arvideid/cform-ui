@@ -83,14 +83,18 @@ static void lay_out(cf_ctx *ctx, float width, float height) {
                     (cf_point){.x = 0.0f, .y = 0.0f});
 }
 
-static uint32_t child_slot(const cf_ctx *ctx, uint32_t index) {
+static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
     const cf_tree *tree = cf_frame_tree(ctx);
 
-    if (tree == NULL || ctx->root_slot == CF_NO_LINK) {
+    if (tree == NULL || slot == CF_NO_LINK) {
         return CF_NO_LINK;
     }
 
-    return tree->child_slots[tree->child_start[ctx->root_slot] + index];
+    return tree->child_slots[tree->child_start[slot] + index];
+}
+
+static uint32_t child_slot(const cf_ctx *ctx, uint32_t index) {
+    return child_of(ctx, ctx->root_slot, index);
 }
 
 static void a_move_hovers_the_topmost_child_at_the_point(void) {
@@ -154,7 +158,7 @@ static void the_cursor_names_the_pointer_only_over_a_handler(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(cf_hovered(&ctx, child_slot(&ctx, 0u)), "the plain child still hovers");
+    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "a box that acts on nothing books no hover");
     CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "no handler, no pointer cursor");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
@@ -263,6 +267,119 @@ static void a_stopping_handler_keeps_the_event_off_the_ancestors(void) {
 
     CF_CHECK(child_log.moves == 2 && root_log.moves == 1,
              "an unstopped event climbs to the container");
+
+    cf_ctx_free(&ctx);
+}
+
+/* A plain box under the pointer reads through to whoever acts on it: the
+ * climb books hover and press on the nearest handler or themed family, so
+ * the widget a build composed owns the state its children sit in. */
+static void a_press_on_a_plain_child_lands_on_the_button_around_it(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder button_log = {0};
+    cf_node label = box(40.0f, 40.0f, NULL, NULL);
+    const cf_node children[] = {label};
+    cf_node button = box(80.0f, 80.0f, on_pointer, &button_log);
+    button.children = children;
+    button.child_count = 1u;
+    const cf_node roots[] = {button};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = roots;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t button_slot = child_slot(&ctx, 0u);
+    const uint32_t label_slot = child_of(&ctx, button_slot, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(cf_pressed(&ctx, button_slot), "the press lands on the button the label sits in");
+    CF_CHECK(!cf_pressed(&ctx, label_slot), "the label itself holds none of it");
+    CF_CHECK(button_log.downs == 1 && button_log.last_target == button_slot,
+             "the button's handler still sees the press the label took");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(!cf_pressed(&ctx, button_slot), "the release clears the press");
+    CF_CHECK(button_log.ups == 1, "the release reaches the button too");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_disabled_button_takes_no_press_and_silences_its_handlers(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder button_log = {0};
+    cf_node label = box(40.0f, 40.0f, NULL, NULL);
+    const cf_node children[] = {label};
+    cf_node button = box(80.0f, 80.0f, on_pointer, &button_log);
+    button.disabled = true;
+    button.children = children;
+    button.child_count = 1u;
+    const cf_node roots[] = {button};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = roots;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(button_log.downs == 0, "a switched-off node runs no handler");
+    CF_CHECK(!cf_pressed(&ctx, child_slot(&ctx, 0u)), "the press books nothing on it");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "the hover skips it as well");
+    CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "and asks for no pointer cursor");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_role_stops_the_climb_where_a_handler_would(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_node leaf = box(40.0f, 40.0f, NULL, NULL);
+    const cf_node children[] = {leaf};
+    cf_node row = box(100.0f, 100.0f, NULL, NULL);
+    row.role = CF_ROLE_LIST;
+    row.children = children;
+    row.child_count = 1u;
+    const cf_node roots[] = {row};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = roots;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t row_slot = child_slot(&ctx, 0u);
+    const uint32_t leaf_slot = child_of(&ctx, row_slot, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(cf_hovered(&ctx, row_slot), "the themed family holds the hover for its states");
+    CF_CHECK(!cf_hovered(&ctx, leaf_slot), "the leaf inside holds none of it");
+    CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "no handler, no pointer cursor");
 
     cf_ctx_free(&ctx);
 }
@@ -501,6 +618,9 @@ int main(void) {
     CF_RUN(the_cursor_names_the_pointer_only_over_a_handler);
     CF_RUN(a_press_marks_and_focuses_the_node_it_hit);
     CF_RUN(a_release_off_the_pressed_node_still_reaches_it);
+    CF_RUN(a_press_on_a_plain_child_lands_on_the_button_around_it);
+    CF_RUN(a_disabled_button_takes_no_press_and_silences_its_handlers);
+    CF_RUN(a_role_stops_the_climb_where_a_handler_would);
     CF_RUN(a_stopping_handler_keeps_the_event_off_the_ancestors);
     CF_RUN(a_captured_pointer_keeps_its_events_until_the_release);
     CF_RUN(a_key_reaches_the_focused_node_and_bubbles);

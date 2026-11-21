@@ -26,6 +26,25 @@ static bool holds_slot(const cf_ctx *ctx, cf_id id, uint32_t slot) {
 }
 
 /*
+ * The node an interaction books its state on: the nearest record that acts on
+ * the pointer - its own handler, or a themed family the resolver paints by
+ * state - skipping the ones switched off. A label inside a button presses the
+ * button; a disabled button presses nothing.
+ */
+static uint32_t interactive_of(const cf_ctx *ctx, uint32_t slot) {
+    for (uint32_t at = slot; at != CF_NO_LINK; at = record_of(ctx, at)->parent) {
+        const node_record *record = record_of(ctx, at);
+
+        if (!record->disabled &&
+            (record->handlers.pointer != NULL || record->role != CF_ROLE_NONE)) {
+            return at;
+        }
+    }
+
+    return CF_NO_LINK;
+}
+
+/*
  * Later siblings paint above earlier ones and children above the parent, so
  * the walk keeps the last hit and answers the topmost node. Records cannot
  * cycle - depth increases along every parent chain - which bounds the
@@ -69,6 +88,13 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
 static void deliver(cf_ctx *ctx, cf_event *event, bool pointer, uint32_t slot) {
     for (uint32_t at = slot; at != CF_NO_LINK; at = record_of(ctx, at)->parent) {
         const node_record *record = record_of(ctx, at);
+
+        /* A switched-off node stands out of the walk: its handlers stay
+         * silent and the event keeps climbing to whoever is still on. */
+        if (record->disabled) {
+            continue;
+        }
+
         cf_event_fn handler = pointer ? record->handlers.pointer : record->handlers.key;
 
         if (handler == NULL) {
@@ -110,7 +136,9 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         const uint32_t hit = cf_hit_test(ctx, event.position);
 
         /* A move over nothing leaves the pointer hovering nothing. */
-        ctx->hover_id = hit != CF_NO_LINK ? cf_store_id(&ctx->nodes, hit) : CF_NO_ID;
+        const uint32_t hover = hit != CF_NO_LINK ? interactive_of(ctx, hit) : CF_NO_LINK;
+
+        ctx->hover_id = hover != CF_NO_LINK ? cf_store_id(&ctx->nodes, hover) : CF_NO_ID;
 
         if (hit != CF_NO_LINK) {
             deliver(ctx, &event, true, hit);
@@ -133,7 +161,13 @@ void cf_input(cf_ctx *ctx, cf_event event) {
 
         /* The press takes focus with it: a click lands on what the keyboard
          * should be talking to. */
-        ctx->press_id = cf_store_id(&ctx->nodes, hit);
+        const uint32_t interactive = interactive_of(ctx, hit);
+
+        if (interactive == CF_NO_LINK) {
+            return;
+        }
+
+        ctx->press_id = cf_store_id(&ctx->nodes, interactive);
         ctx->focus_id = ctx->press_id;
         deliver(ctx, &event, true, hit);
         return;
@@ -157,7 +191,9 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         ctx->press_id = CF_NO_ID;
 
         const uint32_t hit = cf_hit_test(ctx, event.position);
-        ctx->hover_id = hit != CF_NO_LINK ? cf_store_id(&ctx->nodes, hit) : CF_NO_ID;
+        const uint32_t hover = hit != CF_NO_LINK ? interactive_of(ctx, hit) : CF_NO_LINK;
+
+        ctx->hover_id = hover != CF_NO_LINK ? cf_store_id(&ctx->nodes, hover) : CF_NO_ID;
         return;
     }
 
@@ -220,6 +256,7 @@ cf_cursor cf_frame_cursor(const cf_ctx *ctx) {
         return CF_CURSOR_DEFAULT;
     }
 
-    return record_of(ctx, hovered)->handlers.pointer != NULL ? CF_CURSOR_POINTER
-                                                             : CF_CURSOR_DEFAULT;
+    return record_of(ctx, hovered)->handlers.pointer != NULL && !record_of(ctx, hovered)->disabled
+               ? CF_CURSOR_POINTER
+               : CF_CURSOR_DEFAULT;
 }

@@ -113,6 +113,17 @@ add_library(cf_node STATIC
 
 target_link_libraries(cf_node PUBLIC cf_layout)
 
+# cf_widget fills declarations: each widget states the fields a build would
+# otherwise spell by hand - a label's text and measure, a button's role and
+# press handler - out of the context's frame arena. Text, fonts and tones
+# stay arguments, so the layer owns no loading and stays headless.
+add_library(cf_widget STATIC
+    src/widget/button.c
+    src/widget/label.c
+)
+
+target_link_libraries(cf_widget PUBLIC cf_node cf_text)
+
 # cf_backend_headless is the reference backend: it copies the submitted stream
 # into its arena so tests read what a device would have drawn. It opens no
 # window and touches no device pixels - the draw is everywhere else.
@@ -155,7 +166,7 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_backend_headless)
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_widget cf_backend_headless)
 
 if(CFORM_WITH_SDL_BACKEND)
     list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)
