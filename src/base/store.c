@@ -105,7 +105,7 @@ void *cf_store_add(cf_store *store, cf_id *out_id) {
     return element;
 }
 
-void *cf_store_get(cf_store *store, cf_id id) {
+void *cf_store_get(const cf_store *store, cf_id id) {
     if (store == NULL || id.index >= store->extent) {
         return NULL;
     }
@@ -128,7 +128,7 @@ void cf_store_remove(cf_store *store, cf_id id) {
     store->alive--;
 }
 
-void *cf_store_at(cf_store *store, size_t slot) {
+void *cf_store_at(const cf_store *store, size_t slot) {
     if (store == NULL || slot >= store->extent) {
         return NULL;
     }

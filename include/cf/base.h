@@ -59,11 +59,11 @@ void cf_store_free(cf_store *store);
 void *cf_store_add(cf_store *store, cf_id *out_id);
 
 /* NULL for a slot that is free, recycled or never was. */
-void *cf_store_get(cf_store *store, cf_id id);
+void *cf_store_get(const cf_store *store, cf_id id);
 void cf_store_remove(cf_store *store, cf_id id);
 
 /* Iteration walks live slots in index order; live[] is the predicate. */
-void *cf_store_at(cf_store *store, size_t slot);
+void *cf_store_at(const cf_store *store, size_t slot);
 cf_id cf_store_id(const cf_store *store, size_t slot);
 
 uint32_t cf_hash_bytes(const void *bytes, size_t length);
