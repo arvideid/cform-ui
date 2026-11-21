@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "cf/paint.h"
+#include "cf/text.h"
 
 /*
  * The one boundary a renderer crosses to draw a frame. `abi_version` names
@@ -56,5 +57,15 @@ typedef struct cf_sdl_config {
 /* A backend drawing to a new window. A window that cannot open is a backend
  * that draws nothing, reported once on CF_LOG_BACKEND. */
 cf_backend cf_backend_sdl(const cf_sdl_config *config);
+
+/*
+ * The SDL font table over a TrueType or OpenType file, built when
+ * CFORM_WITH_SDL_BACKEND is on. Measuring never rasterizes: the file is
+ * read for its metrics alone, and the pen distances it answers are the ones
+ * cf_text walks read. A font lives as long as its owner - the theme that
+ * resolves it - does, and one that will not open measures nothing,
+ * reported once on CF_LOG_BACKEND.
+ */
+cf_font cf_font_sdl(const char *file_path, float point_size);
 
 #endif

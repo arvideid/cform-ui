@@ -105,13 +105,24 @@ if(CFORM_WITH_SDL_BACKEND)
     )
     FetchContent_MakeAvailable(sdl3)
 
+    # Text metrics come from the same family: the font file is read for its
+    # numbers alone, and a glyph is priced, never rasterized, until the
+    # widgets draw one.
+    FetchContent_Declare(sdl3_ttf
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+        GIT_TAG release-3.2.2
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(sdl3_ttf)
+
     # The stream's first real draw path: it owns the window until the app shell
     # exists, and every layer above it stays window-free.
     add_library(cf_backend_sdl STATIC
         src/backend/sdl/gpu.c
+        src/backend/sdl/font.c
     )
 
-    target_link_libraries(cf_backend_sdl PUBLIC cf_paint SDL3::SDL3)
+    target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()
 
 set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_text cf_paint cf_backend_headless)
