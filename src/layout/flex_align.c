@@ -152,10 +152,12 @@ static cf_align align_of(const flex_context *f, const flex_item *item) {
 
 /*
  * Where an item sits across its line. Baseline alignment needs a first-baseline
- * measurement the text layer has not reported yet, so it behaves as start.
+ * measurement the text layer has not reported yet, so it behaves as start. An
+ * item wider than its line leaves a shortfall, which §9.5 has centre and end
+ * still read: the box overflows both edges instead of crowding one.
  */
 static float cross_offset(const flex_context *f, const flex_line *line, flex_item *item) {
-    const float extra = clamp_non_negative(line->cross - item_outer_cross(item));
+    const float extra = line->cross - item_outer_cross(item);
     const uint32_t auto_margins =
         (item->auto_margin_cross_start ? 1u : 0u) + (item->auto_margin_cross_end ? 1u : 0u);
 
@@ -163,7 +165,7 @@ static float cross_offset(const flex_context *f, const flex_line *line, flex_ite
      * claim sits on the side that made it: an item whose cross-end margin is
      * the auto one stays against cross-start, with the room left behind it. */
     if (auto_margins > 0u) {
-        const float absorbed = extra / (float)auto_margins;
+        const float absorbed = clamp_non_negative(extra) / (float)auto_margins;
         return item->auto_margin_cross_start ? absorbed : item->margin_cross_start;
     }
 
