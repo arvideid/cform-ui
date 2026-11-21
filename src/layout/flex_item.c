@@ -94,8 +94,13 @@ static void measure_item(const flex_context *f, flex_item *item) {
     /* §9.2.1 steps 3-5: flex-basis, then the declared main size, then the
      * content. Nothing declared means nothing measured yet either. */
     float declared;
-    if (declared_size(f, child->flex_basis, f->main_offer, &declared) ||
-        declared_size(f, main_declared, f->main_offer, &declared)) {
+    const bool main_is_declared = declared_size(f, child->flex_basis, f->main_offer, &declared) ||
+                                  declared_size(f, main_declared, f->main_offer, &declared);
+
+    float cross_settled;
+    item->cross_is_auto = !declared_size(f, cross_declared, f->cross_offer, &cross_settled);
+
+    if (main_is_declared) {
         item->basis = clamp_non_negative(declared);
     } else {
         float content_main;
@@ -116,8 +121,16 @@ static void measure_item(const flex_context *f, flex_item *item) {
         larger(clamp_range(item->basis, item->min_main, item->max_main), main_frame);
     item->main = item->hypothetical_main;
 
-    float cross_settled;
-    item->cross_is_auto = !declared_size(f, cross_declared, f->cross_offer, &cross_settled);
+    /* §9.2.1 steps 16-18: an item whose main size a declaration settled has
+     * never been measured across it, and the line it joins needs the extent its
+     * content asks for at the size the item will have. */
+    if (main_is_declared && item->cross_is_auto) {
+        float content_main;
+        axes_of_size(f,
+                     border_size_of(f->ctx, item->slot, f->intrinsic, f->constraint,
+                                    verdict_for(f, CF_PX(item->main), CF_AUTO), f->measuring),
+                     &content_main, &item->cross);
+    }
 
     if (!item->cross_is_auto) {
         item->cross =
