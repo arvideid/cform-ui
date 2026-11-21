@@ -72,7 +72,16 @@ add_library(cf_paint STATIC
 
 target_link_libraries(cf_paint PUBLIC cf_layout)
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_paint)
+# cf_backend_headless is the reference backend: it copies the submitted stream
+# into its arena so tests read what a device would have drawn. It opens no
+# window and touches no device pixels - the draw is everywhere else.
+add_library(cf_backend_headless STATIC
+    src/backend/headless/record.c
+)
+
+target_link_libraries(cf_backend_headless PUBLIC cf_paint)
+
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_paint cf_backend_headless)
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}

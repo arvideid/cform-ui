@@ -24,6 +24,7 @@ cf_add_layer_test(style_resolve unit/style_resolve.c cf_style)
 cf_add_layer_test(layout_flex unit/layout_flex.c cf_layout)
 cf_add_layer_test(layout_cases unit/layout_cases.c cf_layout)
 cf_add_layer_test(paint_emit unit/paint_emit.c cf_paint)
+cf_add_layer_test(backend_record unit/backend_record.c cf_backend_headless)
 
 # Yoga's fixtures, ported by tools/gentest: the flexbox suite as data, with the
 # box a reference browser measured beside it. This is the tier the ≥95%
