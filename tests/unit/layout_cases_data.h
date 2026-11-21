@@ -332,6 +332,23 @@
                {MARGIN(BOX(10.0f), .height = CF_PX(40.0f)), 0u, RECT(16.0f, 16.0f, 68.0f, 40.0f)},
                {MARGIN(BOX(10.0f), .height = CF_PX(40.0f)), 0u, RECT(16.0f, 84.0f, 68.0f, 40.0f)}}},
 
+    {.name = "a row gap written as a percentage resolves against the height",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(200.0f)),
+     .node_count = 3u,
+     .nodes = {{COLUMN(.width = CF_PX(100.0f), .height = CF_PX(200.0f),
+                       .row_gap = CF_PERCENT(10.0f)),
+                ROOT, RECT(0.0f, 0.0f, 100.0f, 200.0f)},
+               {SIZE(100.0f, 40.0f), 0u, RECT(0.0f, 0.0f, 100.0f, 40.0f)},
+               {SIZE(100.0f, 40.0f), 0u, RECT(0.0f, 60.0f, 100.0f, 40.0f)}}},
+
+    {.name = "a row gap percentage against an auto height reads as zero",
+     .available = AVAILABLE(CF_PX(100.0f), CF_AUTO),
+     .node_count = 3u,
+     .nodes = {{COLUMN(.width = CF_PX(100.0f), .row_gap = CF_PERCENT(10.0f)), ROOT,
+                RECT(0.0f, 0.0f, 100.0f, 80.0f)},
+               {SIZE(100.0f, 40.0f), 0u, RECT(0.0f, 0.0f, 100.0f, 40.0f)},
+               {SIZE(100.0f, 40.0f), 0u, RECT(0.0f, 40.0f, 100.0f, 40.0f)}}},
+
     /* Lines and the order items reach them in. */
     {.name = "wrap breaks between items at the container edge",
      .available = AVAILABLE(CF_PX(100.0f), CF_PX(50.0f)),

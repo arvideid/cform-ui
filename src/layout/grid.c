@@ -210,11 +210,20 @@ static grid_ctx grid_context_of(const layout_ctx *ctx, uint32_t slot, cf_availab
         .containing = containing,
     };
 
-    /* Gaps and percentage tracks resolve against the container's own content
-     * box, the reference a percentage margin uses too. */
+    /* Percentage margins, padding and column gaps resolve against the inline
+     * size; a row gap resolves against the block size, and an axis the grid
+     * did not declare is indefinite so a percentage against it reads as zero. */
     definite_offer(constraint.width, &g.percent_base);
     g.column_gap = cf_length_resolve(style->column_gap, g.percent_base);
-    g.row_gap = cf_length_resolve(style->row_gap, g.percent_base);
+
+    float declared_block;
+    float block_base = 0.0f;
+    if (definite_offer(style->height, &declared_block)) {
+        const cf_edges frame = content_insets(ctx, slot, g.percent_base);
+        block_base = clamp_non_negative(declared_block - frame.top - frame.bottom);
+    }
+
+    g.row_gap = cf_length_resolve(style->row_gap, block_base);
 
     return g;
 }

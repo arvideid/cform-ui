@@ -54,12 +54,25 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
     f.main_definite = definite_offer(f.main_offer, &f.main_size);
     f.cross_definite = definite_offer(f.cross_offer, &f.cross_size);
 
-    /* Margins, padding and gaps written as percentages all resolve against the
-     * container's inline size, which is its width in either direction. */
+    /* Margins, padding and column gaps written as percentages resolve against
+     * the container's inline size. A row gap resolves against its block size,
+     * and an axis the container did not declare is indefinite for the
+     * percentage: the row gap reads as zero rather than against a height the
+     * pass went on to measure from the content. */
     definite_offer(pass->constraint.width, &f.percent_base);
 
-    f.gap_main = cf_length_resolve(f.row ? style->column_gap : style->row_gap, f.percent_base);
-    f.gap_cross = cf_length_resolve(f.row ? style->row_gap : style->column_gap, f.percent_base);
+    float declared_block;
+    float block_base = 0.0f;
+    if (definite_offer(style->height, &declared_block)) {
+        const cf_edges frame = content_insets(ctx, slot, f.percent_base);
+        block_base = clamp_non_negative(declared_block - frame.top - frame.bottom);
+    }
+
+    const float column_gap_px = cf_length_resolve(style->column_gap, f.percent_base);
+    const float row_gap_px = cf_length_resolve(style->row_gap, block_base);
+
+    f.gap_main = f.row ? column_gap_px : row_gap_px;
+    f.gap_cross = f.row ? row_gap_px : column_gap_px;
 
     return f;
 }
