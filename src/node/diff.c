@@ -77,6 +77,29 @@ static uint32_t identity_hash(cf_name key, uint32_t depth) {
     return cf_hash_bytes(&pair, sizeof pair);
 }
 
+/* What a change dirties: the style, the measure and handlers the build
+ * attached, and the shape of the child list. The measure's data is
+ * borrowed and unread, so it is none of the comparison's business, and
+ * the staging bytes start zeroed so the alignment gaps ride the same
+ * hash every frame. */
+static uint32_t signature_of(const cf_node *decl) {
+    struct {
+        cf_style style;
+        cf_measure_fn measure;
+        cf_handlers handlers;
+        uint32_t child_count;
+    } declared;
+
+    memset(&declared, 0, sizeof declared);
+
+    declared.style = decl->style;
+    declared.measure = decl->measure;
+    declared.handlers = decl->handlers;
+    declared.child_count = decl->child_count;
+
+    return cf_hash_bytes(&declared, sizeof declared);
+}
+
 static bool table_init(cf_ctx *ctx, match_table *table) {
     uint32_t buckets = 16u;
 
@@ -245,6 +268,9 @@ static uint32_t claim_fresh(cf_ctx *ctx, const cf_node *decl, uint32_t depth, ui
     record->next_sibling = CF_NO_LINK;
     record->subtree_size = 1u;
     record->touched = ctx->frame_id;
+    /* A slot the store just handed out was not there last frame; whatever
+     * sits at it now is new to every system that reads dirty bits. */
+    record->dirty = true;
 
     return id.index;
 }
@@ -417,6 +443,11 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->touched = ctx->frame_id;
     root_record->handlers = root->handlers;
 
+    const uint32_t root_signature = signature_of(root);
+
+    root_record->dirty = root_record->dirty || root_record->signature != root_signature;
+    root_record->signature = root_signature;
+
     claim_chunk *claimed = NULL;
     walk_stack stack = {0};
 
@@ -457,6 +488,13 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->ordinal = ordinal;
         record->touched = ctx->frame_id;
         record->handlers = decl->handlers;
+
+        const uint32_t signature = signature_of(decl);
+
+        /* A mark made earlier this frame survives an unchanged claim, and
+         * a fresh slot arrives dirty from the claim itself. */
+        record->dirty = record->dirty || record->signature != signature;
+        record->signature = signature;
 
         if (!claim_push(ctx, &claimed, slot, decl)) {
             cf_logf(CF_LOG_CORE, "node: the frame arena cannot record the declaration");

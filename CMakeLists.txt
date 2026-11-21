@@ -89,6 +89,7 @@ target_link_libraries(cf_paint PUBLIC cf_layout)
 # the offsets a scroller keeps under its name. It is the first layer that
 # owns memory across frames.
 add_library(cf_node STATIC
+    src/node/anim.c
     src/node/context.c
     src/node/diff.c
     src/node/input.c

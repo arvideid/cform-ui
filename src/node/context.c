@@ -77,6 +77,12 @@ void cf_frame_begin(cf_ctx *ctx) {
     ctx->layout_ready = false;
     /* The rects lived in the arena just cleared. */
     ctx->rects = NULL;
+
+    /* The dirty bits answer one frame's changes; the coming build's diff
+     * sets them again where the declaration moved. */
+    for (uint32_t slot = 0; slot < ctx->nodes.extent; ++slot) {
+        record_of(ctx, slot)->dirty = false;
+    }
 }
 
 const cf_tree *cf_frame_tree(const cf_ctx *ctx) {
@@ -103,4 +109,35 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
 
     cf_layout(&ctx->frame, &ctx->layout, ctx->root_slot, available, origin, rects);
     ctx->rects = rects;
+}
+
+bool cf_dirty(const cf_ctx *ctx, uint32_t slot) {
+    if (ctx == NULL) {
+        return false;
+    }
+
+    const node_record *record = cf_store_get(&ctx->nodes, cf_store_id(&ctx->nodes, slot));
+
+    return record != NULL && record->dirty;
+}
+
+/* Marks the subtree under the slot; records cannot cycle, so the walk
+ * visits each descendant once. */
+static void dirty_walk(cf_ctx *ctx, uint32_t slot) {
+    node_record *record = record_of(ctx, slot);
+
+    record->dirty = true;
+
+    for (uint32_t child = record->child_first; child != CF_NO_LINK;
+         child = record_of(ctx, child)->next_sibling) {
+        dirty_walk(ctx, child);
+    }
+}
+
+void cf_dirty_subtree(cf_ctx *ctx, uint32_t slot) {
+    if (ctx == NULL || cf_store_get(&ctx->nodes, cf_store_id(&ctx->nodes, slot)) == NULL) {
+        return;
+    }
+
+    dirty_walk(ctx, slot);
 }

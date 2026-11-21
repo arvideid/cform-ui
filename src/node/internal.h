@@ -21,6 +21,11 @@
  *
  * `handlers` is the declaration's current pair, refreshed by every diff
  * that claims the slot and read by dispatch alone.
+ *
+ * `signature` hashes what the last claim declared - style, measure, handler
+ * pointers and the child count - so a diff sees a change without keeping
+ * the declaration. `dirty` says this frame changed the node, by that
+ * comparison or by hand, and lives until the next frame begins.
  */
 typedef struct node_record {
     cf_name key;
@@ -31,6 +36,8 @@ typedef struct node_record {
     uint32_t subtree_size;
     uint32_t ordinal;
     uint32_t touched;
+    uint32_t signature;
+    bool dirty;
     cf_handlers handlers;
 } node_record;
 

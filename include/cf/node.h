@@ -144,6 +144,55 @@ cf_rect cf_scrollbar_thumb(cf_scrollbar bar, float offset);
 float cf_scroll_drag(cf_scrollbar bar, cf_point grab, cf_point position, float offset_at_grab);
 
 /*
+ * A value driven from one number to another over a duration, kept in the
+ * same keyed block memory cf_state serves. `from` is where the value sat
+ * when it was last aimed; step answers where it sits now.
+ */
+typedef enum cf_ease { CF_EASE_LINEAR, CF_EASE_OUT, CF_EASE_IN_OUT } cf_ease;
+
+typedef struct cf_tween {
+    float from;
+    float to;
+    float elapsed;
+    float duration;
+    cf_ease ease;
+} cf_tween;
+
+/* The tween block a build keeps under its name, or NULL for a nameless
+ * request - the same refusals cf_state gives. */
+cf_tween *cf_tween_of(cf_ctx *ctx, cf_name key);
+
+/*
+ * Aims the tween at `to` over `duration` seconds from wherever the value
+ * sits now, so an aim while running restarts from the middle. A duration
+ * the frames cannot divide snaps straight to `to`.
+ */
+void cf_tween_to(cf_tween *tween, float to, float duration, cf_ease ease);
+
+/*
+ * Advances the tween by `seconds` and answers the value it now holds. A
+ * tween that has run out keeps answering its end until it is aimed again.
+ */
+float cf_tween_step(cf_tween *tween, float seconds);
+
+/*
+ * Whether this frame changed the node - a fresh slot, or a declaration
+ * whose style, measure, handlers or child count differs from the one the
+ * slot held. The bit lives one frame: the next begin clears it, whether
+ * or not anything read it. The bytes behind measure_data are borrowed and
+ * unread, so a change behind them is the callback's to report, by changing
+ * what it answers rather than by setting bits.
+ */
+bool cf_dirty(const cf_ctx *ctx, uint32_t slot);
+
+/*
+ * Marks a node's whole subtree dirty by hand, the way a change behind a
+ * measure callback asks for. The walk follows the child chains, so it
+ * costs the subtree it marks.
+ */
+void cf_dirty_subtree(cf_ctx *ctx, uint32_t slot);
+
+/*
  * Reconciles a declaration against the retained tree. A node that declares
  * the same depth and key keeps its slot, wherever it now sits; a node
  * without a key keeps the slot its ordinal held last frame; everything else

@@ -51,6 +51,14 @@ cf_add_layer_test(node_input unit/node_input.c cf_node)
 # and thumb drags through one scrollbar's worth of numbers.
 cf_add_layer_test(node_scroll unit/node_scroll.c cf_node)
 
+# Tweens live in the same keyed blocks: these cases step values through
+# durations, eases and rebuilds.
+cf_add_layer_test(node_anim unit/node_anim.c cf_node)
+
+# The dirty bit answers one question per frame: did this node's declaration
+# move? These cases read it against the frame before it.
+cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
@@ -102,3 +110,19 @@ endif()
 
 add_test(NAME bench_layout COMMAND bench_layout)
 set_tests_properties(bench_layout PROPERTIES LABELS bench)
+
+# The node layer's own budget: a 10k-node declaration reconciled frame
+# after frame, cold and idle, beside the layout pass it feeds.
+add_executable(bench_node bench/bench_node.c)
+
+target_include_directories(bench_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bench_node PRIVATE cf_node)
+
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(bench_node PRIVATE -Wall -Wextra)
+elseif(MSVC)
+    target_compile_options(bench_node PRIVATE /W4)
+endif()
+
+add_test(NAME bench_node COMMAND bench_node)
+set_tests_properties(bench_node PROPERTIES LABELS bench)
