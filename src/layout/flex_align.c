@@ -159,9 +159,12 @@ static float cross_offset(const flex_context *f, const flex_line *line, flex_ite
     const uint32_t auto_margins =
         (item->auto_margin_cross_start ? 1u : 0u) + (item->auto_margin_cross_end ? 1u : 0u);
 
-    /* Auto margins claim the space before alignment sees it (§9.6.3). */
+    /* Auto margins claim the space before alignment sees it (§9.6.3), and a
+     * claim sits on the side that made it: an item whose cross-end margin is
+     * the auto one stays against cross-start, with the room left behind it. */
     if (auto_margins > 0u) {
-        return item->margin_cross_start + extra / (float)auto_margins;
+        const float absorbed = extra / (float)auto_margins;
+        return item->auto_margin_cross_start ? absorbed : item->margin_cross_start;
     }
 
     const cf_align alignment = align_of(f, item);
