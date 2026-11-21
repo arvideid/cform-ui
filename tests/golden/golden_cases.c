@@ -270,7 +270,7 @@ static const scene_def scenes[] = {
     {"idle_frame", {0.0f, 0.0f, 100.0f, 100.0f}, idle_frame},
 };
 
-static cf_tree tree_of(const scene *s, uint32_t *child_start, uint32_t *child_slots) {
+static cf_tree tree_of(scene *s, uint32_t *child_start, uint32_t *child_slots) {
     uint32_t edge = 0u;
 
     for (uint32_t slot = 0u; slot < s->node_count; ++slot) {
