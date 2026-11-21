@@ -416,6 +416,91 @@ static void a_tree_or_list_that_is_not_there_paints_nothing(void) {
     CF_CHECK(list.count == 0u, "an input that is not there paints nothing");
 }
 
+static void a_box_that_clips_cuts_its_children_fills(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = painted((cf_color){0u, 0u, 0u, 255u});
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(50.0f, 50.0f, 100.0f, 100.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 2u, "the scroller fills whole and the child fills clipped");
+    CF_NEAR(list.commands[0].rect.width, 100.0f);
+    CF_NEAR(list.commands[1].rect.x, 50.0f);
+    CF_NEAR(list.commands[1].rect.y, 50.0f);
+    CF_NEAR(list.commands[1].rect.width, 50.0f);
+    CF_NEAR(list.commands[1].rect.height, 50.0f);
+}
+
+static void a_child_outside_a_clipping_box_paints_nothing(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = painted((cf_color){0u, 0u, 0u, 255u});
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(150.0f, 150.0f, 40.0f, 40.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the child past the clip leaves only the scroller's fill");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "and that fill is the scroller's own");
+}
+
+static void a_clip_narrows_as_it_descends(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    const uint32_t middle = append(&f, 0, cf_style_default());
+    f.styles[middle].clips_content = true;
+    f.rects[middle] = box_at(50.0f, 0.0f, 100.0f, 100.0f);
+    const uint32_t leaf = append(&f, middle, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[leaf] = box_at(60.0f, 10.0f, 200.0f, 200.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the leaf fills against both clips");
+    CF_NEAR(list.commands[0].rect.x, 60.0f);
+    CF_NEAR(list.commands[0].rect.y, 10.0f);
+    CF_NEAR(list.commands[0].rect.width, 40.0f);
+    CF_NEAR(list.commands[0].rect.height, 90.0f);
+}
+
+static void text_culls_per_line_inside_a_clip(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    const uint32_t label = append(&f, 0, cf_style_default());
+    f.styles[label].color = (cf_opt_color){.present = true, .value = CF_COLOR(0, 0, 0)};
+    f.measures[label] = cf_text_measure;
+    f.measure_data[label] = (void *)&label_text;
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 50.0f);
+    f.rects[label] = box_at(0.0f, 100.0f, 100.0f, 20.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+    CF_CHECK(list.count == 0u, "the line below the clip is culled with its box");
+
+    f.rects[label] = box_at(0.0f, 10.0f, 100.0f, 20.0f);
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the line inside it paints");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_TEXT, "and the command is text");
+}
+
 int main(void) {
     printf("paint emit\n");
     CF_CHECK(cf_arena_init(&scratch, 65536u), "paint needs scratch");
@@ -431,6 +516,10 @@ int main(void) {
     CF_RUN(a_text_node_without_a_color_paints_nothing);
     CF_RUN(a_capped_text_node_flags_the_line_the_ellipsis_closes);
     CF_RUN(text_lines_cull_like_their_box_does);
+    CF_RUN(a_box_that_clips_cuts_its_children_fills);
+    CF_RUN(a_child_outside_a_clipping_box_paints_nothing);
+    CF_RUN(a_clip_narrows_as_it_descends);
+    CF_RUN(text_culls_per_line_inside_a_clip);
     CF_RUN(an_exhausted_scratch_paints_nothing_and_says_so);
     CF_RUN(a_truncated_list_keeps_the_commands_that_fit);
     CF_RUN(a_tree_or_list_that_is_not_there_paints_nothing);

@@ -178,6 +178,13 @@ typedef struct cf_style {
      * ink; the widget that owns a box decides which theme tone it carries.
      */
     cf_opt_color color;
+
+    /*
+     * Whether the box's children paint only inside its own rect - the
+     * scroller's contract. The zero state lets a child overhang, as a
+     * relative box always has.
+     */
+    bool clips_content;
 } cf_style;
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */

@@ -9,10 +9,25 @@
  */
 #define PAINT_FIRST_CAPACITY 64u
 
-/* Whether the box reaches the viewport at all. A zero-extent box does not. */
+/* Whether the box reaches the clip at all. A zero-extent box does not. */
 static bool reaches_viewport(cf_rect box, cf_rect viewport) {
     return box.x < viewport.x + viewport.width && viewport.x < box.x + box.width &&
            box.y < viewport.y + viewport.height && viewport.y < box.y + box.height;
+}
+
+/* The part of the box that survives the clip. The walk never asks for a
+ * disjoint pair - it has already refused the box outright. */
+static cf_rect clipped_to(cf_rect box, cf_rect clip) {
+    const float left = box.x > clip.x ? box.x : clip.x;
+    const float top = box.y > clip.y ? box.y : clip.y;
+    const float box_right = box.x + box.width;
+    const float box_bottom = box.y + box.height;
+    const float clip_right = clip.x + clip.width;
+    const float clip_bottom = clip.y + clip.height;
+    const float right = box_right < clip_right ? box_right : clip_right;
+    const float bottom = box_bottom < clip_bottom ? box_bottom : clip_bottom;
+
+    return (cf_rect){.x = left, .y = top, .width = right - left, .height = bottom - top};
 }
 
 /*
@@ -33,7 +48,11 @@ typedef struct paint_walk {
     cf_arena *scratch;
     const cf_tree *tree;
     const cf_rect *rects;
-    cf_rect viewport;
+    /* The active clip: the screen until a box that clips its content is
+     * entered, then that box's own rect. Inside it, fills cut to the clip -
+     * the screen itself is no clip, the device already bounds it. */
+    cf_rect clip;
+    bool clipping;
     cf_command_list *out;
     bool truncated;
 } paint_walk;
@@ -115,11 +134,11 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
     for (uint32_t i = 0u; i < count; ++i) {
         const float y = box.y + top + (float)i * line_height;
 
-        if (y + line_height <= walk->viewport.y) {
-            continue; /* wholly above the viewport */
+        if (y + line_height <= walk->clip.y) {
+            continue; /* wholly above the clip */
         }
 
-        if (y >= walk->viewport.y + walk->viewport.height) {
+        if (y >= walk->clip.y + walk->clip.height) {
             break; /* the lines only descend */
         }
 
@@ -151,7 +170,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     const cf_style *style = &walk->tree->styles[slot];
     const cf_rect box = walk->rects[slot];
 
-    if (!reaches_viewport(box, walk->viewport)) {
+    if (!reaches_viewport(box, walk->clip)) {
         return;
     }
 
@@ -165,7 +184,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
         }
 
         *fill = (cf_command){.kind = CF_COMMAND_FILL,
-                             .rect = box,
+                             .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
                              .color = style->background.value,
                              .radius = radius};
     }
@@ -193,12 +212,27 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
 
     emit_text(walk, slot, style, box);
 
+    /* A box that clips its content bounds the descent: the children see the
+     * box's rect as their clip, narrowed by whatever clipped their parent.
+     * A border strokes its true edges - a clipped one would grow lines the
+     * box never declared at the cut - so borders reach-check only. */
+    const cf_rect outer_clip = walk->clip;
+    const bool outer_clipping = walk->clipping;
+
+    if (style->clips_content) {
+        walk->clip = clipped_to(box, walk->clip);
+        walk->clipping = true;
+    }
+
     const uint32_t first = walk->tree->child_start[slot];
     const uint32_t end = walk->tree->child_start[slot + 1u];
 
     for (uint32_t i = first; i < end; ++i) {
         emit_box(walk, walk->tree->child_slots[i]);
     }
+
+    walk->clip = outer_clip;
+    walk->clipping = outer_clipping;
 }
 
 void cf_paint(cf_arena *scratch, const cf_tree *tree, const cf_rect *rects, uint32_t root,
@@ -209,7 +243,7 @@ void cf_paint(cf_arena *scratch, const cf_tree *tree, const cf_rect *rects, uint
     }
 
     paint_walk walk = {
-        .scratch = scratch, .tree = tree, .rects = rects, .viewport = viewport, .out = out};
+        .scratch = scratch, .tree = tree, .rects = rects, .clip = viewport, .out = out};
 
     emit_box(&walk, root);
 
