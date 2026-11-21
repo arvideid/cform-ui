@@ -16,6 +16,14 @@
  * WCAG-AA against its label: #0a0a0a on #fafafa is 19:1, #fafafa on #171717
  * is 16:1, #525252 on #fafafa is 7.9:1.
  */
+
+/*
+ * A resting box states its margins: the zero length reads as auto, and auto
+ * margins absorb the container's free space, which would center the widget
+ * instead of letting its container place it.
+ */
+#define MARGINS {PX(0.0f), PX(0.0f), PX(0.0f), PX(0.0f)}
+
 static const cf_theme
     theme =
         {
@@ -36,6 +44,8 @@ static const cf_theme
                                   .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
                                   .padding =
                                       {PX(12.0f), PX(8.0f), PX(12.0f), PX(8.0f)},
+                                  .margin =
+                                      MARGINS,
                                   .radius =
                                       6.0f},
                          .hovered =
@@ -48,26 +58,31 @@ static const cf_theme
                                       .border_color = {.present = true,
                                                        .value = RGBA(212, 212, 212)}}},
                     [CF_ROLE_FIELD] =
-                        {.base = {.background = {.present = true, .value = RGBA(250, 250, 250)},
-                                  .border_color = {.present = true, .value = RGBA(212, 212, 212)},
-                                  .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
-                                  .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
-                                  .radius =
-                                      6.0f},
-                         .hovered = {.border_color = {.present = true,
-                                                      .value = RGBA(163, 163, 163)}},
-                         .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)}},
-                         .disabled =
-                             {.background = {.present = true, .value = RGBA(229, 229, 229)}}},
+                        {
+                            .base = {.background = {.present = true, .value = RGBA(250, 250, 250)},
+                                     .border_color = {.present = true,
+                                                      .value = RGBA(212, 212, 212)},
+                                     .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
+                                     .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
+                                     .margin = MARGINS,
+                                     .radius = 6.0f},
+                            .hovered = {.border_color = {.present = true,
+                                                         .value = RGBA(163, 163, 163)}},
+                            .focused = {.border_color = {.present = true,
+                                                         .value = RGBA(10, 10, 10)}},
+                            .disabled = {.background = {.present = true,
+                                                        .value = RGBA(229, 229, 229)}}},
                     [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,
                                                                  .value = RGBA(229, 229, 229)}}},
                     [CF_ROLE_SCROLL] =
                         {.base = {.background = {.present = true, .value = RGBA(212, 212, 212)},
+                                  .margin = MARGINS,
                                   .radius = 3.0f},
                          .hovered = {.background = {.present = true, .value = RGBA(163, 163, 163)}},
                          .pressed = {.background = {.present = true, .value = RGBA(82, 82, 82)}}},
                     [CF_ROLE_IMAGE] = {.base = {.background = {.present = true,
-                                                               .value = RGBA(229, 229, 229)}}},
+                                                               .value = RGBA(229, 229, 229)},
+                                                .margin = MARGINS}},
                 },
 };
 

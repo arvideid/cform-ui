@@ -97,6 +97,10 @@ static void the_default_theme_reads_the_neutral_scale(void) {
     CF_CHECK(theme != NULL && color_is(theme->body.background, 250), "the body is the card");
     CF_CHECK(theme != NULL && color_is(theme->variants[CF_ROLE_BUTTON].base.background, 23),
              "the button rests on the accent");
+    CF_CHECK(theme != NULL &&
+                 (theme->variants[CF_ROLE_BUTTON].base.margin.left.kind == CF_LENGTH_PX &&
+                  theme->variants[CF_ROLE_BUTTON].base.margin.left.value == 0.0f),
+             "the resting box leaves its placing to the container");
     CF_CHECK(theme != NULL && color_is(theme->variants[CF_ROLE_BUTTON].disabled.background, 229),
              "a disabled button drops to the well");
 }
