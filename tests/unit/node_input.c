@@ -35,6 +35,7 @@ static void on_pointer(cf_event *event, void *user_data) {
         break;
     case CF_EVENT_KEY_DOWN:
     case CF_EVENT_KEY_UP:
+    case CF_EVENT_QUIT:
         break;
     }
 

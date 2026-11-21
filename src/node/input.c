@@ -222,6 +222,11 @@ void cf_input(cf_ctx *ctx, cf_event event) {
 
         return;
     }
+
+    case CF_EVENT_QUIT:
+        /* The device's quit never dispatches; the shell that owns the loop
+         * reads it and stops. */
+        break;
     }
 }
 
