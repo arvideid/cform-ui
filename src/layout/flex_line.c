@@ -256,15 +256,16 @@ void collect_line_cross(const flex_context *f, const flex_item *items, flex_line
         }
     }
 
-    /* §9.6.1: a single line in a container whose cross size is settled takes
-     * that size, which is what lets align-items centre or stretch an item in a
-     * tall box. A wrapping container packed by any other align-content keyword
-     * keeps the line at its content size and moves the whole line instead. An
-     * intrinsic measure has no settled cross size to take. */
+    /* §9.6.1: a single line in a container whose cross size is settled is that
+     * size, whatever its items measured - which is what lets align-items
+     * centre or stretch an item in a tall box, and what keeps a line that
+     * overflows the box no wider than the box its items stretch across. A
+     * wrapping container packed by any other align-content keyword keeps the
+     * line at its content size and moves the whole line instead. An intrinsic
+     * measure has no settled cross size to take. */
     const bool packed_apart =
         f->style->wrap != CF_NO_WRAP && content_mode(f) != CF_ALIGN_CONTENT_STRETCH;
-    if (line_count == 1u && !packed_apart && !f->measuring && f->cross_definite &&
-        lines[0].cross < f->cross_size) {
+    if (line_count == 1u && !packed_apart && !f->measuring && f->cross_definite) {
         lines[0].cross = f->cross_size;
     }
 }

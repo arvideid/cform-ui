@@ -115,13 +115,15 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
         }
 
         /* Shrink-to-fit, and only on the inline axis: content with no verdict
-         * takes the width it was offered rather than pushing past it. CSS caps
-         * no auto height against an offered height, so overflowing vertically
-         * stays legal. */
+         * takes the width it was offered rather than pushing past it, but never
+         * the width below what the content cannot break. CSS caps no auto height
+         * against an offered height, so overflowing vertically stays legal. */
         float offered_width;
         if (!has_width && mode == CF_INTRINSIC_MAX_CONTENT &&
             definite_offer(constraint.width, &offered_width) && width > offered_width) {
-            width = offered_width;
+            const cf_size unbreakable =
+                border_size_of(ctx, slot, CF_INTRINSIC_MIN_CONTENT, constraint, verdict, measuring);
+            width = larger(offered_width, unbreakable.width);
         }
     }
 
