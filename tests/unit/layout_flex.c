@@ -158,6 +158,50 @@ static void a_floored_item_hands_the_space_it_cannot_give_back(void) {
     CF_NEAR(f.rects[capped].x, 260.0f);
 }
 
+static void an_item_clamped_up_by_its_minimum_gives_its_growth_to_the_rest(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 200.0f, 100.0f);
+
+    cf_style child = cf_style_default();
+    child.width = CF_PX(30.0f);
+    child.min_width = CF_PX(120.0f);
+    child.flex_grow = 1.0f;
+    const uint32_t raised = append(&f, root, child);
+
+    child.width = CF_PX(20.0f);
+    child.min_width = CF_PX(40.0f);
+    child.flex_grow = 4.0f;
+    const uint32_t flexing = append(&f, root, child);
+
+    arrange_in(&f, 200.0f, 100.0f);
+
+    /* A round books the 30 and 20 the items based on, not the 120 and 40 their
+     * minima impose: the first round breaks the first item's floor, freezes it
+     * there and the restart hands the rest of the line the room left over. */
+    CF_NEAR(f.rects[raised].width, 120.0f);
+    CF_NEAR(f.rects[flexing].width, 80.0f);
+    CF_NEAR(f.rects[flexing].x, 120.0f);
+}
+
+static void grow_factors_below_one_leave_their_space_undistributed(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 50.0f);
+
+    for (uint32_t i = 0u; i < 2u; ++i) {
+        cf_style child = cf_style_default();
+        child.width = CF_PX(0.0f);
+        child.flex_grow = 0.2f;
+        append(&f, root, child);
+    }
+    arrange_in(&f, 100.0f, 50.0f);
+
+    /* Each item takes its 20% of the 100 pixels and the line stops there,
+     * rather than normalising the two factors until the box is full. */
+    CF_NEAR(f.rects[1].width, 20.0f);
+    CF_NEAR(f.rects[2].width, 20.0f);
+    CF_NEAR(f.rects[2].x, 20.0f);
+}
+
 static void the_automatic_minimum_size_stops_a_shrink_at_the_content(void) {
     foreign_content text = {
         .min_content = {.width = 40.0f, .height = 20.0f},
@@ -268,6 +312,39 @@ static void an_auto_margin_claims_the_space_before_justify_content_does(void) {
     CF_NEAR(f.rects[2].x, 200.0f);
 }
 
+static void a_cross_end_auto_margin_leaves_the_item_at_cross_start(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 200.0f, 200.0f);
+    f.styles[root].direction = CF_DIRECTION_COLUMN;
+    f.styles[root].align_items = CF_ALIGN_CENTER;
+
+    cf_style pushed = fixed_box(50.0f, 50.0f);
+    pushed.margin.right = CF_AUTO;
+    const uint32_t item = append(&f, root, pushed);
+    arrange_in(&f, 200.0f, 200.0f);
+
+    /* The claim sits on the side that made it, so the 150 pixels the column
+     * leaves over stay behind the box instead of pushing it across the line. */
+    CF_NEAR(f.rects[item].x, 0.0f);
+    CF_NEAR(f.rects[item].width, 50.0f);
+}
+
+static void an_item_wider_than_its_line_overflows_both_edges(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+    f.styles[root].direction = CF_DIRECTION_COLUMN;
+    f.styles[root].align_items = CF_ALIGN_CENTER;
+
+    const uint32_t wide = append(&f, root, fixed_box(140.0f, 20.0f));
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* A single line is the cross size the container settled on, and centring
+     * reads the shortfall against it: the 40 pixels the item outgrows by split
+     * across both edges, the way an over-long item splits along the line. */
+    CF_NEAR(f.rects[wide].x, -20.0f);
+    CF_NEAR(f.rects[wide].width, 140.0f);
+}
+
 static void order_moves_items_without_moving_them_in_the_tree(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 300.0f, 100.0f);
@@ -366,6 +443,39 @@ static void padding_and_border_inset_the_content_box(void) {
     CF_NEAR(f.rects[2].height, 20.0f);
 }
 
+static void a_declared_main_size_still_measures_its_cross_from_the_content(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 200.0f, 100.0f);
+    f.styles[root].align_items = CF_ALIGN_START;
+
+    cf_style panel = cf_style_default();
+    panel.width = CF_PX(60.0f);
+    const uint32_t framed = append(&f, root, panel);
+    append(&f, framed, fixed_box(40.0f, 30.0f));
+    arrange_in(&f, 200.0f, 100.0f);
+
+    /* The panel declared its main size and left the other axis to its content,
+     * which still has to be measured before the line it joins has a size
+     * across. Nothing stretches here, so the 30 is the content's own answer. */
+    CF_NEAR(f.rects[framed].width, 60.0f);
+    CF_NEAR(f.rects[framed].height, 30.0f);
+}
+
+static void an_auto_box_keeps_the_width_its_content_cannot_break(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+
+    const uint32_t unwrappable = append(&f, root, cf_style_default());
+    append(&f, unwrappable, fixed_box(140.0f, 20.0f));
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* Shrink-to-fit caps the box at the width it was offered, but never below
+     * what the content cannot break: the 140 child overflows instead of being
+     * clipped, and the automatic minimum size keeps it there. */
+    CF_NEAR(f.rects[unwrappable].width, 140.0f);
+    CF_NEAR(f.rects[unwrappable].x, 0.0f);
+}
+
 static void a_gap_sits_between_items_only(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 300.0f, 100.0f);
@@ -438,15 +548,21 @@ int main(void) {
     CF_RUN(free_space_splits_between_items_by_their_grow_factors);
     CF_RUN(items_shrink_by_their_weighted_base_sizes);
     CF_RUN(a_floored_item_hands_the_space_it_cannot_give_back);
+    CF_RUN(an_item_clamped_up_by_its_minimum_gives_its_growth_to_the_rest);
+    CF_RUN(grow_factors_below_one_leave_their_space_undistributed);
     CF_RUN(the_automatic_minimum_size_stops_a_shrink_at_the_content);
     CF_RUN(a_column_stacks_its_items_vertically);
     CF_RUN(wrap_breaks_between_items_at_the_container_edge);
     CF_RUN(justify_content_distributes_the_leftover_main_space);
     CF_RUN(an_auto_margin_claims_the_space_before_justify_content_does);
+    CF_RUN(a_cross_end_auto_margin_leaves_the_item_at_cross_start);
+    CF_RUN(an_item_wider_than_its_line_overflows_both_edges);
     CF_RUN(order_moves_items_without_moving_them_in_the_tree);
     CF_RUN(a_measure_callback_sizes_content_the_engine_cannot_see);
     CF_RUN(a_tree_that_carries_no_measure_tables_still_lays_out);
     CF_RUN(padding_and_border_inset_the_content_box);
+    CF_RUN(a_declared_main_size_still_measures_its_cross_from_the_content);
+    CF_RUN(an_auto_box_keeps_the_width_its_content_cannot_break);
     CF_RUN(a_gap_sits_between_items_only);
     CF_RUN(refused_scratch_leaves_the_subtree_as_it_was);
     CF_RUN(a_tree_or_rect_array_that_is_not_there_changes_nothing);
