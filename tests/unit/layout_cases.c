@@ -5,7 +5,7 @@
 #define EDGES(left, top, right, bottom) {CF_PX(left), CF_PX(top), CF_PX(right), CF_PX(bottom)}
 #define MARGIN(margin_box, ...)                                                                    \
     (cf_style) {                                                                                   \
-        .margin = margin_box, .flex_shrink = 1.0f, __VA_ARGS__                                     \
+        .margin = margin_box, __VA_ARGS__                                                          \
     }
 #define SIZE(box_width, box_height) STYLE(.width = CF_PX(box_width), .height = CF_PX(box_height))
 #define FILL STYLE(.flex_grow = 1.0f)

@@ -49,14 +49,16 @@
     }
 
 /*
- * A style as it reads after cf_style_default(), whose two non-initial-zero
- * fields a constant initializer cannot state: margins of 0 rather than margins
- * that auto-absorb every bit of leftover space, and a flex-shrink of 1. A
- * corpus row is static data, so it writes those two out rather than calling.
+ * A style as it reads after cf_style_default(), whose margins of 0 rather than
+ * auto-absorbing margins a constant initializer cannot state. A corpus row is
+ * static data, so it writes that one field out rather than calling.
+ * flex-shrink is left at zero so a row that wants CSS's initial of 1 states it
+ * directly and a row that wants no shrink does not override a default hidden
+ * behind the macro.
  */
 #define STYLE(...)                                                                                 \
     (cf_style) {                                                                                   \
-        .margin = ZERO_BOX, .flex_shrink = 1.0f, __VA_ARGS__                                       \
+        .margin = ZERO_BOX, __VA_ARGS__                                                            \
     }
 
 /*
