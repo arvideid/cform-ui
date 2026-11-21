@@ -39,6 +39,10 @@ cf_add_layer_test(node_tree unit/node_tree.c cf_node)
 # name through frames that keep it, skip it and outgrow it.
 cf_add_layer_test(node_state unit/node_state.c cf_node)
 
+# The rebuild rig drives random declarations through one context: the same
+# seed rebuilds the same sequence, so a failure names its seed and frame.
+cf_add_layer_test(node_rebuild unit/node_rebuild.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against

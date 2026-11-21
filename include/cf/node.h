@@ -76,8 +76,9 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size);
  * the same depth and key keeps its slot, wherever it now sits; a node
  * without a key keeps the slot its ordinal held last frame; everything else
  * is created, and every retained slot the declaration does not reach is
- * retired. Two nodes that share a depth and a key are two nodes: the second
- * is new.
+ * retired. Nodes that share a depth and a key match in declaration order
+ * against the slots they share, so duplicates keep the slots they kept and
+ * one beyond them is new.
  *
  * Returns the root's slot, CF_NO_LINK when nothing was declared or the
  * frame arena could not serve the walk - the frame then yields no view.

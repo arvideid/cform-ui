@@ -10,6 +10,11 @@
  * cycle would need a depth that does not increase, which this tree cannot
  * express.
  *
+ * `ordinal` is the slot's place among the records that share its depth and
+ * key, fixed when the slot joined the group: a declaration's n-th occurrence
+ * meets the member with ordinal n, so duplicates keep the slots they kept
+ * however the group grows.
+ *
  * `touched` is the frame id of the last diff that claimed the slot. A slot
  * the current frame did not claim is dead or stale, and the store makes
  * removing either a no-op.
@@ -21,6 +26,7 @@ typedef struct node_record {
     uint32_t child_first;
     uint32_t next_sibling;
     uint32_t subtree_size;
+    uint32_t ordinal;
     uint32_t touched;
 } node_record;
 

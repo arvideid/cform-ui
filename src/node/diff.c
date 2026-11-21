@@ -45,13 +45,27 @@ typedef struct walk_stack {
 
 /*
  * The retained slots indexed by (depth, key), rebuilt from the store at the
- * start of every diff. A cell holds slot + 1, so zero ends a probe.
+ * start of every diff. A bucket chains the live slots whose (depth, key)
+ * landed in it; which of them a declaration's occurrence meets is the
+ * records' ordinals, not the chain's order, so a member that joins late
+ * never reshuffles the group. The consumed count per (depth, key) lives in
+ * its own probed array - a group with no members yet has no cell to keep
+ * it on - and every take consumes one ordinal, hit or miss.
  */
+typedef struct match_cell {
+    uint32_t slot;
+    uint32_t next;
+} match_cell;
+
 typedef struct match_table {
-    uint32_t capacity;
-    uint32_t *slots;
-    uint32_t *depths;
-    cf_name *keys;
+    uint32_t bucket_count;
+    uint32_t *heads; /* cell index + 1, zero ends a chain */
+    match_cell *cells;
+    uint32_t counter_capacity;
+    uint32_t counter_used;
+    cf_name *counter_keys; /* CF_NO_NAME ends a probe */
+    uint32_t *counter_depths;
+    uint32_t *counter_consumed;
 } match_table;
 
 static bool slot_is_live(cf_ctx *ctx, uint32_t slot) {
@@ -64,22 +78,31 @@ static uint32_t identity_hash(cf_name key, uint32_t depth) {
 }
 
 static bool table_init(cf_ctx *ctx, match_table *table) {
-    uint32_t capacity = 16u;
+    uint32_t buckets = 16u;
 
-    while ((uint64_t)capacity < (uint64_t)ctx->nodes.alive * 2u) {
-        capacity *= 2u;
+    while ((uint64_t)buckets < (uint64_t)ctx->nodes.alive * 2u) {
+        buckets *= 2u;
     }
 
-    uint32_t *slots = cf_alloc(&ctx->frame, capacity * sizeof *slots);
-    uint32_t *depths = cf_alloc(&ctx->frame, capacity * sizeof *depths);
-    cf_name *keys = cf_alloc(&ctx->frame, capacity * sizeof *keys);
+    uint32_t *heads = cf_alloc(&ctx->frame, buckets * sizeof *heads);
+    match_cell *cells =
+        cf_alloc(&ctx->frame, (ctx->nodes.alive > 0u ? ctx->nodes.alive : 1u) * sizeof *cells);
+    cf_name *counter_keys = cf_alloc(&ctx->frame, buckets * sizeof *counter_keys);
+    uint32_t *counter_depths = cf_alloc(&ctx->frame, buckets * sizeof *counter_depths);
+    uint32_t *counter_consumed = cf_alloc(&ctx->frame, buckets * sizeof *counter_consumed);
 
-    if (slots == NULL || depths == NULL || keys == NULL) {
+    if (heads == NULL || cells == NULL || counter_keys == NULL || counter_depths == NULL ||
+        counter_consumed == NULL) {
         return false;
     }
 
-    /* Zeroed cells read as empty, and the load stays under half. */
-    memset(slots, 0, capacity * sizeof *slots);
+    /* Zeroed heads read as empty; counter keys start at CF_NO_NAME so a
+     * group's count begins at its first take, and the counts at zero. */
+    memset(heads, 0, buckets * sizeof *heads);
+    memset(counter_keys, 0xFF, buckets * sizeof *counter_keys);
+    memset(counter_consumed, 0, buckets * sizeof *counter_consumed);
+
+    uint32_t inserted = 0u;
 
     for (uint32_t slot = 0; slot < ctx->nodes.extent; ++slot) {
         const node_record *record = record_of(ctx, slot);
@@ -88,38 +111,124 @@ static bool table_init(cf_ctx *ctx, match_table *table) {
             continue;
         }
 
-        uint32_t at = identity_hash(record->key, record->depth) & (capacity - 1u);
+        const uint32_t bucket = identity_hash(record->key, record->depth) & (buckets - 1u);
 
-        while (slots[at] != 0u) {
-            at = (at + 1u) & (capacity - 1u);
+        cells[inserted] = (match_cell){.slot = slot, .next = 0u};
+
+        if (heads[bucket] == 0u) {
+            heads[bucket] = inserted + 1u;
+        } else {
+            uint32_t tail = heads[bucket];
+
+            while (cells[tail - 1u].next != 0u) {
+                tail = cells[tail - 1u].next;
+            }
+
+            cells[tail - 1u].next = inserted + 1u;
         }
 
-        slots[at] = slot + 1u;
-        depths[at] = record->depth;
-        keys[at] = record->key;
+        inserted++;
     }
 
-    *table = (match_table){.capacity = capacity, .slots = slots, .depths = depths, .keys = keys};
+    *table = (match_table){.bucket_count = buckets,
+                           .heads = heads,
+                           .cells = cells,
+                           .counter_capacity = buckets,
+                           .counter_used = 0u,
+                           .counter_keys = counter_keys,
+                           .counter_depths = counter_depths,
+                           .counter_consumed = counter_consumed};
     return true;
 }
 
-static uint32_t table_find(const match_table *table, cf_name key, uint32_t depth) {
-    uint32_t at = identity_hash(key, depth) & (table->capacity - 1u);
+/* A frame may declare groups the store has never held, so the counter
+ * array grows with them instead of sizing from the retained tree. */
+static bool counters_grow(cf_ctx *ctx, match_table *table) {
+    const uint32_t capacity = table->counter_capacity * 2u;
 
-    while (table->slots[at] != 0u) {
-        if (table->keys[at] == key && table->depths[at] == depth) {
-            return table->slots[at] - 1u;
-        }
+    cf_name *keys = cf_alloc(&ctx->frame, capacity * sizeof *keys);
+    uint32_t *depths = cf_alloc(&ctx->frame, capacity * sizeof *depths);
+    uint32_t *consumed = cf_alloc(&ctx->frame, capacity * sizeof *consumed);
 
-        at = (at + 1u) & (table->capacity - 1u);
+    if (keys == NULL || depths == NULL || consumed == NULL) {
+        return false;
     }
 
-    return CF_NO_LINK;
+    memset(keys, 0xFF, capacity * sizeof *keys);
+    memset(consumed, 0, capacity * sizeof *consumed);
+
+    for (uint32_t from = 0u; from < table->counter_capacity; ++from) {
+        if (table->counter_keys[from] == CF_NO_NAME) {
+            continue;
+        }
+
+        uint32_t into =
+            identity_hash(table->counter_keys[from], table->counter_depths[from]) & (capacity - 1u);
+
+        while (keys[into] != CF_NO_NAME) {
+            into = (into + 1u) & (capacity - 1u);
+        }
+
+        keys[into] = table->counter_keys[from];
+        depths[into] = table->counter_depths[from];
+        consumed[into] = table->counter_consumed[from];
+    }
+
+    table->counter_keys = keys;
+    table->counter_depths = depths;
+    table->counter_consumed = consumed;
+    table->counter_capacity = capacity;
+    return true;
+}
+
+/* The slot a declaration of this depth and key matches: the kept member
+ * whose ordinal is the group's consumed count, or CF_NO_LINK - the caller
+ * then claims a fresh member at that ordinal. */
+static uint32_t table_take(cf_ctx *ctx, match_table *table, cf_name key, uint32_t depth,
+                           uint32_t *out_ordinal) {
+    if ((uint64_t)table->counter_used * 2u >= table->counter_capacity &&
+        !counters_grow(ctx, table)) {
+        cf_logf(CF_LOG_CORE, "node: the frame arena cannot index the declaration's keys");
+        *out_ordinal = 0u;
+        return CF_NO_LINK;
+    }
+
+    const uint32_t hash = identity_hash(key, depth);
+    const uint32_t bucket = hash & (table->bucket_count - 1u);
+    uint32_t at = hash & (table->counter_capacity - 1u);
+
+    while (table->counter_keys[at] != CF_NO_NAME &&
+           !(table->counter_keys[at] == key && table->counter_depths[at] == depth)) {
+        at = (at + 1u) & (table->counter_capacity - 1u);
+    }
+
+    if (table->counter_keys[at] == CF_NO_NAME) {
+        table->counter_keys[at] = key;
+        table->counter_depths[at] = depth;
+        table->counter_used++;
+    }
+
+    const uint32_t taken = table->counter_consumed[at];
+    uint32_t candidate = CF_NO_LINK;
+
+    for (uint32_t cell = table->heads[bucket]; cell != 0u; cell = table->cells[cell - 1u].next) {
+        const node_record *record = record_of(ctx, table->cells[cell - 1u].slot);
+
+        if (record->key == key && record->depth == depth && record->ordinal == taken) {
+            candidate = table->cells[cell - 1u].slot;
+            break;
+        }
+    }
+
+    table->counter_consumed[at] = taken + 1u;
+    *out_ordinal = taken;
+    return candidate;
 }
 
 /* A slot the store hands out that nothing declared yet. CF_NO_LINK when the
  * store cannot grow - the frame is abandoned, reported once. */
-static uint32_t claim_fresh(cf_ctx *ctx, const cf_node *decl, uint32_t depth, uint32_t parent) {
+static uint32_t claim_fresh(cf_ctx *ctx, const cf_node *decl, uint32_t depth, uint32_t parent,
+                            uint32_t ordinal) {
     cf_id id;
     node_record *record = cf_store_add(&ctx->nodes, &id);
 
@@ -131,6 +240,7 @@ static uint32_t claim_fresh(cf_ctx *ctx, const cf_node *decl, uint32_t depth, ui
     record->key = decl->key;
     record->depth = depth;
     record->parent = parent;
+    record->ordinal = ordinal;
     record->child_first = CF_NO_LINK;
     record->next_sibling = CF_NO_LINK;
     record->subtree_size = 1u;
@@ -230,17 +340,14 @@ static void retire_untouched(cf_ctx *ctx) {
 }
 
 /* One retained slot for a declared node: the keyed match, or the ordinal's
- * old occupant, or nothing - the caller claims a fresh slot then. */
-static uint32_t resolve_slot(cf_ctx *ctx, const match_table *table, const walk_frame *frame,
-                             const cf_node *decl) {
+ * old occupant, or nothing - the caller claims a fresh slot then. The
+ * ordinal of a keyed match rides out for the fresh claim to reuse. */
+static uint32_t resolve_slot(cf_ctx *ctx, match_table *table, const walk_frame *frame,
+                             const cf_node *decl, uint32_t *out_ordinal) {
+    *out_ordinal = 0u;
+
     if (decl->key != CF_NO_NAME) {
-        const uint32_t found = table_find(table, decl->key, frame->depth);
-
-        if (found != CF_NO_LINK && record_of(ctx, found)->touched != ctx->frame_id) {
-            return found;
-        }
-
-        return CF_NO_LINK;
+        return table_take(ctx, table, decl->key, frame->depth, out_ordinal);
     }
 
     if (frame->cursor == CF_NO_LINK) {
@@ -281,9 +388,10 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     /* The root matches by key at depth zero, or by its own last slot when
      * neither root declared a key. */
     uint32_t root_slot = CF_NO_LINK;
+    uint32_t root_ordinal = 0u;
 
     if (root->key != CF_NO_NAME) {
-        root_slot = table_find(&table, root->key, 0u);
+        root_slot = table_take(ctx, &table, root->key, 0u, &root_ordinal);
     } else if (ctx->root_slot != CF_NO_LINK && slot_is_live(ctx, ctx->root_slot)) {
         const node_record *record = record_of(ctx, ctx->root_slot);
 
@@ -293,7 +401,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     }
 
     if (root_slot == CF_NO_LINK) {
-        root_slot = claim_fresh(ctx, root, 0u, CF_NO_LINK);
+        root_slot = claim_fresh(ctx, root, 0u, CF_NO_LINK, root_ordinal);
 
         if (root_slot == CF_NO_LINK) {
             return CF_NO_LINK;
@@ -305,6 +413,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->key = root->key;
     root_record->depth = 0u;
     root_record->parent = CF_NO_LINK;
+    root_record->ordinal = root_ordinal;
     root_record->touched = ctx->frame_id;
 
     claim_chunk *claimed = NULL;
@@ -328,10 +437,11 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         const cf_node *decl = &frame->parent->children[frame->next_child];
         frame->next_child++;
 
-        uint32_t slot = resolve_slot(ctx, &table, frame, decl);
+        uint32_t ordinal = 0u;
+        uint32_t slot = resolve_slot(ctx, &table, frame, decl, &ordinal);
 
         if (slot == CF_NO_LINK) {
-            slot = claim_fresh(ctx, decl, frame->depth, frame->slot);
+            slot = claim_fresh(ctx, decl, frame->depth, frame->slot, ordinal);
 
             if (slot == CF_NO_LINK) {
                 return CF_NO_LINK;
@@ -343,6 +453,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->key = decl->key;
         record->depth = frame->depth;
         record->parent = frame->slot;
+        record->ordinal = ordinal;
         record->touched = ctx->frame_id;
 
         if (!claim_push(ctx, &claimed, slot, decl)) {
