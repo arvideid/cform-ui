@@ -19,24 +19,25 @@ than the engine.
 
 | rig                    | nodes  | ms per layout | ns per node |
 |------------------------|--------|---------------|-------------|
-| deep flex tree         |  1,250 | 1.2           | 930         |
-| deep flex tree         |  2,500 | 2.7           | 1,060       |
-| deep flex tree         |  5,000 | 5.8           | 1,170       |
-| deep flex tree         | 10,000 | 13.1          | 1,310       |
-| flat 100-column grid    | 10,000 | 6.5           | 650         |
+| deep flex tree         |  1,250 | 1.1           | 920         |
+| deep flex tree         |  2,500 | 2.5           | 1,010       |
+| deep flex tree         |  5,000 | 5.6           | 1,110       |
+| deep flex tree         | 10,000 | 13.0          | 1,300       |
+| flat 100-column grid    | 10,000 | 6.0           | 600         |
 
 The deep rig is a complete binary tree of alternating rows and columns with a
 third of the branches growing into the leftover space and a seventh claiming half
-the width. The flat rig is one grid container of `fr` columns and content rows,
-every cell a leaf. Both are 10,000 nodes because that is the size the budget
-names.
+the width. The root declares the offer it is given, so no branch measures
+against a box that is itself still being measured. The flat rig is one grid
+container of `fr` columns and content rows, every cell a leaf. Both are 10,000
+nodes because that is the size the budget names.
 
 ## What the gap means
 
 2 ms at 10,000 nodes is the budget. The flat grid is within a factor of four of
 it; the deep flex tree is not, and the reason is structural:
 
-- **Cost per node rises with the tree** - 930 ns at 1,250 nodes against 1,310 ns
+- **Cost per node rises with the tree** - 920 ns at 1,250 nodes against 1,300 ns
   at 10,000, a log factor. Nothing caches a measured size, so a subtree is
   measured once at every level above it: `layout_subtree` resolves a node's own
   border box from its content and then arranges children, each of which measures
@@ -44,7 +45,7 @@ it; the deep flex tree is not, and the reason is structural:
 
 The other structural gap closed with the placement scan: dense auto-placement
 used to restart at the first cell of the occupancy map for every item, which
-cost a 10,000-cell grid roughly 300 ms - the same rig now costs 6.5 ms.
+cost a 10,000-cell grid roughly 300 ms - the same rig now costs 6 ms.
 
 ## Why no number is asserted
 
