@@ -85,12 +85,14 @@ add_library(cf_text STATIC
 target_link_libraries(cf_text PUBLIC cf_base)
 
 # cf_paint turns placed boxes into the flat command stream backends read: no
-# window, no device pixels, no backend - the stream is the whole contract.
+# window, no device pixels, no backend - the stream is the whole contract. A
+# text node's lines come off the same walk its measure answered from, so the
+# stream carries text as a dependency of layout, not of any font.
 add_library(cf_paint STATIC
     src/paint/emit.c
 )
 
-target_link_libraries(cf_paint PUBLIC cf_layout)
+target_link_libraries(cf_paint PUBLIC cf_layout cf_text)
 
 # cf_node reconciles each frame's declaration into retained slots: identity
 # by depth and key, position for the keyless, and the view cf_layout reads.

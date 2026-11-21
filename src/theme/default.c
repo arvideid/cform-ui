@@ -25,6 +25,9 @@ static const cf_theme
                      .border_color = {.present = true, .value = RGBA(212, 212, 212)},
                      .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
                      .radius = 8.0f},
+            .ink = RGBA(10, 10, 10),
+            .muted = RGBA(82, 82, 82),
+            .on_ink = RGBA(250, 250, 250),
             .variants =
                 {
                     [CF_ROLE_BUTTON] =

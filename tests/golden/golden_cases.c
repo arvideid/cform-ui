@@ -15,6 +15,8 @@
 
 typedef struct scene {
     cf_style styles[MAX_NODES];
+    cf_measure_fn measures[MAX_NODES];
+    void *measure_data[MAX_NODES];
     uint32_t children[MAX_NODES][MAX_NODES];
     uint32_t child_counts[MAX_NODES];
     uint32_t node_count;
@@ -49,6 +51,55 @@ static cf_style filled(cf_opt_color color) {
     cf_style style = cf_style_default();
     style.background = color;
     return style;
+}
+
+/*
+ * The font the text scenes read: ten points per codepoint, twenty per line,
+ * so every line a snapshot pins is arithmetic.
+ */
+static cf_text_metrics mono_metrics(void *font) {
+    (void)font;
+    return (cf_text_metrics){.line_height = 20.0f};
+}
+
+static float mono_advance(void *font, uint32_t codepoint, uint32_t previous) {
+    (void)font;
+    (void)codepoint;
+    (void)previous;
+    return 10.0f;
+}
+
+static bool mono_has_glyph(void *font, uint32_t codepoint) {
+    (void)font;
+    (void)codepoint;
+    return true;
+}
+
+static const cf_text_ops mono_ops = {
+    .metrics = mono_metrics, .advance = mono_advance, .has_glyph = mono_has_glyph};
+static const cf_font mono_stack[] = {{.handle = NULL, .ops = &mono_ops}};
+
+static const char wrap_bytes[] = "the quick brown fox jumps over the lazy dog";
+static const char capped_bytes[] = "click one of the panels to switch its view";
+
+static const cf_text_content wrapped_text = {
+    .stack = {.fonts = mono_stack, .count = 1u},
+    .text = {wrap_bytes, (uint32_t)(sizeof wrap_bytes - 1u)}};
+
+static const cf_text_content capped_text = {
+    .stack = {.fonts = mono_stack, .count = 1u},
+    .text = {capped_bytes, (uint32_t)(sizeof capped_bytes - 1u)},
+    .max_lines = {.present = true, .value = 2u},
+    .ellipsis = true};
+
+static uint32_t add_text(scene *s, uint32_t parent, cf_style style,
+                         const cf_text_content *content) {
+    const uint32_t slot = s->node_count++;
+    s->styles[slot] = style;
+    s->measures[slot] = cf_text_measure;
+    s->measure_data[slot] = (void *)content;
+    s->children[parent][s->child_counts[parent]++] = slot;
+    return slot;
 }
 
 /*
@@ -186,11 +237,36 @@ static void idle_frame(scene *s) {
     (void)add_node(s, 0u, child);
 }
 
+/*
+ * Text a walk laid: a paragraph wraps at the content box its parent's
+ * padding leaves, a capped caption closes with the ellipsis, and every line
+ * lands where the measure that sized its box counted it.
+ */
+static void text_wrap(scene *s) {
+    *s = (scene){0};
+
+    cf_style root = cf_style_default();
+    root.width = CF_PX(200.0f);
+    root.height = CF_PX(120.0f);
+    root.direction = CF_DIRECTION_COLUMN;
+    root.padding = (cf_box){CF_PX(10.0f), CF_PX(10.0f), CF_PX(10.0f), CF_PX(10.0f)};
+    (void)root_node(s, root);
+
+    cf_style paragraph = cf_style_default();
+    paragraph.color = stated(10u, 10u, 10u);
+    (void)add_text(s, 0u, paragraph, &wrapped_text);
+
+    cf_style caption = cf_style_default();
+    caption.color = stated(82u, 82u, 82u);
+    (void)add_text(s, 0u, caption, &capped_text);
+}
+
 static const scene_def scenes[] = {
     {"solid_panel", {0.0f, 0.0f, 200.0f, 150.0f}, solid_panel},
     {"borders_and_corners", {0.0f, 0.0f, 200.0f, 240.0f}, borders_and_corners},
     {"viewport_culling", {0.0f, 0.0f, 150.0f, 90.0f}, viewport_culling},
     {"nested_depth", {0.0f, 0.0f, 120.0f, 120.0f}, nested_depth},
+    {"text_wrap", {0.0f, 0.0f, 200.0f, 120.0f}, text_wrap},
     {"idle_frame", {0.0f, 0.0f, 100.0f, 100.0f}, idle_frame},
 };
 
@@ -208,6 +284,8 @@ static cf_tree tree_of(const scene *s, uint32_t *child_start, uint32_t *child_sl
     child_start[s->node_count] = edge;
 
     return (cf_tree){.styles = s->styles,
+                     .measures = s->measures,
+                     .measure_data = s->measure_data,
                      .child_start = child_start,
                      .child_slots = child_slots,
                      .node_count = s->node_count};
@@ -228,13 +306,21 @@ static void format_stream(const cf_recorder *recorder, char *text) {
                                "fill %.2f %.2f %.2f %.2f #%02x%02x%02x%02x radius=%.2f\n", rect.x,
                                rect.y, rect.width, rect.height, color.red, color.green, color.blue,
                                color.alpha, command->radius);
-        } else {
+        } else if (command->kind == CF_COMMAND_BORDER) {
             written = snprintf(text + used, TEXT_SIZE - used,
                                "border %.2f %.2f %.2f %.2f #%02x%02x%02x%02x l=%.2f t=%.2f r=%.2f "
                                "b=%.2f radius=%.2f\n",
                                rect.x, rect.y, rect.width, rect.height, color.red, color.green,
                                color.blue, color.alpha, command->widths.left, command->widths.top,
                                command->widths.right, command->widths.bottom, command->radius);
+        } else {
+            written =
+                snprintf(text + used, TEXT_SIZE - used,
+                         "text %.2f %.2f %.2f %.2f #%02x%02x%02x%02x len=%u ellipsis=%d "
+                         "\"%.*s\"\n",
+                         rect.x, rect.y, rect.width, rect.height, color.red, color.green,
+                         color.blue, color.alpha, command->text.length, command->ellipsis ? 1 : 0,
+                         (int)command->text.length, command->text.chars);
         }
 
         if (written > 0 && (size_t)written < TEXT_SIZE - used) {

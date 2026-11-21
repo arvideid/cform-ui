@@ -223,6 +223,63 @@ static void a_walk_without_a_font_measures_nothing(void) {
     CF_NEAR(size.height, 0.0f);
 }
 
+static void lines_carry_the_bytes_and_widths_the_walk_laid(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc dd ee"));
+    cf_text_line lines[8u];
+
+    const uint32_t count = cf_text_lines(&content, 30.0f, lines, 8u);
+
+    CF_CHECK(count == 5u, "five runs, one line each at that width");
+    CF_CHECK(lines[0].text.length == 2u, "a line's bytes are its own");
+    CF_CHECK(lines[0].text.chars[0] == 'a' && lines[0].text.chars[1] == 'a', "the first run first");
+    CF_NEAR(lines[3].width, 20.0f);
+    CF_CHECK(lines[3].text.chars[0] == 'd', "the fourth run is dd");
+    CF_CHECK(lines[4].text.chars[0] == 'e', "the last run is ee");
+    CF_CHECK(lines[0].ellipsis == false, "an uncapped walk closes nothing");
+}
+
+static void the_lines_the_walk_laid_close_with_the_ellipsis(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc dd ee ff gg hh"));
+    content.max_lines = (cf_opt_u32){.present = true, .value = 2u};
+    content.ellipsis = true;
+
+    cf_text_line lines[8u];
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 8u);
+
+    CF_CHECK(count == 2u, "the cap holds the line count");
+    CF_CHECK(lines[0].ellipsis == false, "only the last line closes");
+    CF_CHECK(lines[1].ellipsis, "the capped walk closes its last line");
+    CF_NEAR(lines[1].width, 90.0f); /* dd ee ff, the ellipsis inside its own width */
+    CF_CHECK(lines[1].text.length == 8u, "the closed line ends at the glyphs it kept");
+    CF_CHECK(lines[1].text.chars[7] == 'f', "dd ee ff");
+
+    const cf_size size = wrapped(content, 100.0f);
+    CF_NEAR(size.width, 90.0f);
+    CF_NEAR(size.height, 40.0f);
+}
+
+static void a_capacity_smaller_than_the_walk_only_fills_what_fits(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc"));
+    cf_text_line lines[1u];
+
+    const uint32_t count = cf_text_lines(&content, 30.0f, lines, 1u);
+
+    CF_CHECK(count == 3u, "the count is what the walk laid, not what it filled");
+    CF_CHECK(lines[0].text.length == 2u && lines[0].text.chars[1] == 'a', "the first line filled");
+}
+
+static void a_forced_break_ends_its_line_before_the_break(void) {
+    cf_text_content content = content_of(cf_string_of("aa\nbb"));
+    cf_text_line lines[4u];
+
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 4u);
+
+    CF_CHECK(count == 2u, "the text's own break splits the walk");
+    CF_CHECK(lines[0].text.length == 2u, "the break byte belongs to no line");
+    CF_NEAR(lines[0].width, 20.0f);
+    CF_CHECK(lines[1].text.chars[0] == 'b', "the next line follows the break");
+}
+
 int main(void) {
     printf("text measure\n");
 
@@ -241,6 +298,10 @@ int main(void) {
     CF_RUN(kerning_rides_along_a_run);
     CF_RUN(a_zero_line_cap_leaves_nothing);
     CF_RUN(a_walk_without_a_font_measures_nothing);
+    CF_RUN(lines_carry_the_bytes_and_widths_the_walk_laid);
+    CF_RUN(the_lines_the_walk_laid_close_with_the_ellipsis);
+    CF_RUN(a_capacity_smaller_than_the_walk_only_fills_what_fits);
+    CF_RUN(a_forced_break_ends_its_line_before_the_break);
 
     return CF_REPORT();
 }

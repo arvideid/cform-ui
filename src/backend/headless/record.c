@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "cf/backend.h"
 
 /*
@@ -27,6 +29,24 @@ static void record_submit(void *user_data, const cf_command *commands, uint32_t 
     }
 
     for (uint32_t i = 0u; i < count; ++i) {
+        cf_command stored = commands[i];
+
+        /* A text command's bytes live in the arena the stream was built in;
+         * the store outlives that arena's clear, so the bytes move into the
+         * arena the store itself is carved from. */
+        if (stored.kind == CF_COMMAND_TEXT && stored.text.length > 0u) {
+            char *bytes = cf_alloc(recorder->arena, stored.text.length);
+
+            if (bytes == NULL) {
+                cf_logf(CF_LOG_BACKEND, "backend: recorder refused the stream at %u commands",
+                        recorder->count);
+                return;
+            }
+
+            memcpy(bytes, stored.text.chars, stored.text.length);
+            stored.text.chars = bytes;
+        }
+
         if (recorder->count == recorder->capacity) {
             const uint32_t capacity = recorder->capacity < RECORDER_FIRST_CAPACITY
                                           ? RECORDER_FIRST_CAPACITY
@@ -43,7 +63,7 @@ static void record_submit(void *user_data, const cf_command *commands, uint32_t 
             recorder->capacity = capacity;
         }
 
-        recorder->commands[recorder->count++] = commands[i];
+        recorder->commands[recorder->count++] = stored;
     }
 }
 

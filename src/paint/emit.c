@@ -1,6 +1,7 @@
 #include <string.h>
 
 #include "cf/paint.h"
+#include "cf/text.h"
 
 /*
  * The list's first allocation. A frame's command count is unknown ahead of the
@@ -64,6 +65,80 @@ static cf_command *next_command(paint_walk *walk) {
 }
 
 /*
+ * A box whose measure slot is the text walk paints its own lines. The wrap
+ * width is the content box the style insets from the rect - percentages
+ * resolved against the box's own width, the reference the paint input
+ * carries - and each line lands one line_height below the last, where the
+ * measure that sized the box counted it. A color that is not stated leaves
+ * the box without text, which is why the check reads the color first.
+ */
+static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf_rect box) {
+    if (!style->color.present || walk->tree->measures == NULL ||
+        walk->tree->measures[slot] != cf_text_measure) {
+        return;
+    }
+
+    const cf_text_content *content =
+        walk->tree->measure_data == NULL ? NULL : walk->tree->measure_data[slot];
+    const cf_edges insets = cf_box_resolve(style->padding, box.width);
+    const cf_edges stroke = cf_box_resolve(style->border, box.width);
+    const float left = insets.left + stroke.left;
+    const float top = insets.top + stroke.top;
+    const float wrap = box.width - left - insets.right - stroke.right;
+
+    if (wrap <= 0.0f) {
+        return;
+    }
+
+    /* The walk answers the count first: a stack that cannot measure lays no
+     * lines, and the usable-stack check inside it is the one paint borrows
+     * before it reads the primary font's rhythm. The walk is deterministic,
+     * so the second pass fills every slot the count names. */
+    const uint32_t count = cf_text_lines(content, wrap, NULL, 0u);
+
+    if (count == 0u) {
+        return;
+    }
+
+    cf_text_line *lines = cf_alloc(walk->scratch, (size_t)count * sizeof *lines);
+
+    if (lines == NULL) {
+        walk->truncated = true;
+        return;
+    }
+
+    (void)cf_text_lines(content, wrap, lines, count);
+
+    const cf_font font = content->stack.fonts[0];
+    const float line_height = font.ops->metrics(font.handle).line_height;
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        const float y = box.y + top + (float)i * line_height;
+
+        if (y + line_height <= walk->viewport.y) {
+            continue; /* wholly above the viewport */
+        }
+
+        if (y >= walk->viewport.y + walk->viewport.height) {
+            break; /* the lines only descend */
+        }
+
+        cf_command *command = next_command(walk);
+
+        if (command == NULL) {
+            return;
+        }
+
+        *command = (cf_command){.kind = CF_COMMAND_TEXT,
+                                .rect = {box.x + left, y, lines[i].width, line_height},
+                                .color = style->color.value,
+                                .text = lines[i].text,
+                                .font = font,
+                                .ellipsis = lines[i].ellipsis};
+    }
+}
+
+/*
  * One box: fill first, then its own border, then the children that paint over
  * both. A border with a color but no width, or widths but no color, paints
  * nothing - half a border is not a border.
@@ -115,6 +190,8 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
                                .widths = widths,
                                .radius = radius};
     }
+
+    emit_text(walk, slot, style, box);
 
     const uint32_t first = walk->tree->child_start[slot];
     const uint32_t end = walk->tree->child_start[slot + 1u];

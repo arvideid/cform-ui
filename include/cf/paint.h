@@ -4,6 +4,7 @@
 #include "cf/base.h"
 #include "cf/layout.h"
 #include "cf/style.h"
+#include "cf/text.h"
 
 /*
  * The stream a backend draws. One kind per box the style states, in paint
@@ -13,8 +14,11 @@
  * snapshots it as data and the backend ABI (cf/backend.h) carries it whole.
  */
 typedef enum cf_command_kind {
-    CF_COMMAND_FILL,  /* rect filled with color, corners rounded by radius */
-    CF_COMMAND_BORDER /* rect stroked by widths, inside rect, rounded by radius */
+    CF_COMMAND_FILL,   /* rect filled with color, corners rounded by radius */
+    CF_COMMAND_BORDER, /* rect stroked by widths, inside rect, rounded by radius */
+    /* One laid line of text, drawn from rect's left edge in the font's own
+     * rhythm; the ellipsis glyph follows the bytes when the flag says so. */
+    CF_COMMAND_TEXT
 } cf_command_kind;
 
 typedef struct cf_command {
@@ -25,6 +29,12 @@ typedef struct cf_command {
      * a side with no width paints nothing. Zero for a fill. */
     cf_edges widths;
     float radius;
+    /* The line's own bytes and the font that draws them, on a text command.
+     * The bytes are borrowed for the submit alone; the font's handle and ops
+     * point at objects that outlive the frame they paint. */
+    cf_string text;
+    cf_font font;
+    bool ellipsis;
 } cf_command;
 
 /*
@@ -41,14 +51,17 @@ typedef struct cf_command_list {
 
 /*
  * Walks the subtree rooted at `root` in paint order and appends what each box
- * paints: a stated background fills the box layout placed at `rects[slot]`,
- * and a stated border color with a width strokes it. A box that does not
+ * paints: a stated background fills the box layout placed at `rects[slot]`, a
+ * stated border color with a width strokes it, and a box whose measure slot is
+ * cf_text_measure lays its content's lines over its own paint, one command per
+ * line, where the measure that sized the box counted them. A box that does not
  * reach `viewport` paints nothing; one that straddles it keeps its whole rect,
  * because cutting it is the backend's scissor decision, not the stream's.
  *
- * `scratch` holds the command array. The walk visits a node once and does not
- * allocate per node beyond the commands it emits, so a caller that clears the
- * arena once per frame keeps paint allocation-free overall.
+ * `scratch` holds the command array and the line table a text node asks for.
+ * The walk visits a node once and does not allocate per node beyond the
+ * commands it emits, so a caller that clears the arena once per frame keeps
+ * paint allocation-free overall.
  *
  * Failure policy, identical to cf_layout's: when the arena cannot serve the
  * list, the commands that fit are kept, the walk stops there, and the

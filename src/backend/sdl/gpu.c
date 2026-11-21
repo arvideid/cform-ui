@@ -175,10 +175,25 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
 
     const float scale = SDL_GetWindowPixelDensity(state->window);
 
-    if (commands != NULL) {
-        for (uint32_t i = 0u; i < count; ++i) {
-            draw_command(state, &commands[i], scale);
+    if (commands == NULL) {
+        return;
+    }
+
+    uint32_t skipped = 0u;
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        /* Glyphs are the font layer's raster work, not built here yet; the
+         * lines the stream carries are named once per submit, not per line. */
+        if (commands[i].kind == CF_COMMAND_TEXT) {
+            skipped++;
+            continue;
         }
+
+        draw_command(state, &commands[i], scale);
+    }
+
+    if (skipped > 0u) {
+        cf_logf(CF_LOG_BACKEND, "backend: %u text lines have no glyphs to draw them yet", skipped);
     }
 }
 

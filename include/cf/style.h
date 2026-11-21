@@ -171,6 +171,13 @@ typedef struct cf_style {
     cf_opt_color background;
     cf_opt_color border_color;
     float radius;
+
+    /*
+     * The tone this box's own text paints with. A box that states none has
+     * no text to paint, so the color is the text's on-switch as well as its
+     * ink; the widget that owns a box decides which theme tone it carries.
+     */
+    cf_opt_color color;
 } cf_style;
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */
@@ -285,9 +292,12 @@ typedef struct cf_variants {
  * by field.
  */
 typedef struct cf_theme {
-    cf_style page; /* the field everything sits on */
-    cf_style bar;  /* wells and bars that lift off the page */
-    cf_style body; /* card surfaces */
+    cf_style page;   /* the field everything sits on */
+    cf_style bar;    /* wells and bars that lift off the page */
+    cf_style body;   /* card surfaces */
+    cf_color ink;    /* the tone a body of text reads in */
+    cf_color muted;  /* the tone secondary text reads in */
+    cf_color on_ink; /* the tone text carries over the accent */
     cf_variants variants[CF_ROLE_COUNT];
 } cf_theme;
 

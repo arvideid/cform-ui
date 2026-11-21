@@ -69,4 +69,26 @@ typedef struct cf_text_content {
  */
 cf_size cf_text_measure(void *content, cf_available available, cf_intrinsic kind);
 
+/*
+ * One line a walk laid: the line's own bytes inside the content's text, the
+ * width its glyphs measure, and whether the walk closed it with the
+ * ellipsis. The bytes borrow the content's, so they live as long as the
+ * content's text does.
+ */
+typedef struct cf_text_line {
+    cf_string text;
+    float width;
+    bool ellipsis;
+} cf_text_line;
+
+/*
+ * The lines a definite width wraps the content into - the same walk
+ * cf_text_measure answers from, so paint places exactly what measure
+ * counted. Lines fill `out` up to `capacity`; the count returned is how
+ * many the walk laid out altogether, so a caller that sized its buffer
+ * from the measure's height can trust the count over the fill.
+ */
+uint32_t cf_text_lines(const cf_text_content *content, float max_width, cf_text_line *out,
+                       uint32_t capacity);
+
 #endif

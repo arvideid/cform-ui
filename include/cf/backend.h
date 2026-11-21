@@ -12,7 +12,7 @@
  * submit, because a stream the backend does not understand draws wrong rather
  * than failing.
  */
-#define CF_BACKEND_ABI_VERSION 1u
+#define CF_BACKEND_ABI_VERSION 2u
 
 typedef struct cf_backend {
     uint32_t abi_version;

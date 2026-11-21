@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "cf/backend.h"
 #include "cform_test.h"
@@ -82,6 +83,27 @@ static void a_recorder_grows_its_store_by_doubling(void) {
              "the end of the stream rode the growth");
 }
 
+static void a_text_commands_bytes_move_into_the_recorders_arena(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = cf_backend_recorder(&recorder);
+
+    char bytes[] = "held line";
+    const cf_command stream[] = {{.kind = CF_COMMAND_TEXT,
+                                  .rect = {.x = 0.0f, .y = 0.0f, .width = 40.0f, .height = 20.0f},
+                                  .color = {1u, 2u, 3u, 255u},
+                                  .text = {bytes, 9u},
+                                  .font = {0},
+                                  .ellipsis = false}};
+    backend.submit(backend.user_data, stream, 1u);
+
+    bytes[0] = 'x'; /* the source dies with the frame that borrowed it */
+
+    CF_CHECK(recorder.count == 1u, "the text command is held");
+    CF_CHECK(recorder.commands[0].text.length == 9u, "the line's length rode the copy");
+    CF_CHECK(recorder.commands[0].text.chars[0] == 'h', "the bytes were copied, not borrowed");
+    CF_CHECK(recorder.commands[0].text.chars[8] == 'e', "the whole line moved");
+}
+
 static void a_stream_that_does_not_fit_is_truncated_and_said_so(void) {
     cf_recorder recorder = {0};
     const cf_backend backend = cf_backend_recorder(&recorder);
@@ -132,6 +154,7 @@ int main(void) {
     CF_RUN(a_recorder_holds_the_last_submitted_stream);
     CF_RUN(an_idle_frame_leaves_the_recorder_empty);
     CF_RUN(a_recorder_grows_its_store_by_doubling);
+    CF_RUN(a_text_commands_bytes_move_into_the_recorders_arena);
     CF_RUN(a_stream_that_does_not_fit_is_truncated_and_said_so);
     CF_RUN(a_backend_that_is_not_there_submits_nothing);
 
