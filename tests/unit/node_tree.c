@@ -50,7 +50,7 @@ static cf_size fixed_measure(void *user_data, cf_available available, cf_intrins
 /* Every case builds in its own context so a leak or a bad state in one does
  * not dress up as a diff bug in another. */
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

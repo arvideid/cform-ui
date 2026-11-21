@@ -44,4 +44,19 @@ typedef struct claim_entry {
  */
 bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared);
 
+/*
+ * One state block, addressed by store slot. The block's bytes sit in the
+ * persistent arena and are orphaned when the entry retires; the record is
+ * what retires, and the store hands its slot to the next request.
+ */
+typedef struct state_entry {
+    cf_name key;
+    void *block;
+    size_t size;
+    uint32_t touched;
+} state_entry;
+
+/* Drops every entry the frame that just ended did not request. */
+void state_gc(cf_ctx *ctx);
+
 #endif

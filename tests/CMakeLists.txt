@@ -35,6 +35,10 @@ cf_add_layer_test(backend_record unit/backend_record.c cf_backend_headless)
 # declarations through one context and read which slot each node kept.
 cf_add_layer_test(node_tree unit/node_tree.c cf_node)
 
+# cf_state is the memory a build asks for by name: these cases drive one
+# name through frames that keep it, skip it and outgrow it.
+cf_add_layer_test(node_state unit/node_state.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
