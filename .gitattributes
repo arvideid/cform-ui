@@ -8,6 +8,10 @@
 *.cmake text eol=lf
 *.md   text eol=lf
 
+# Golden snapshots are judged byte for byte against what the recorder held; a
+# newline rewritten on checkout would fail every compare
+*.golden -text
+
 # JSON / YAML
 *.json text eol=lf
 *.yml  text eol=lf

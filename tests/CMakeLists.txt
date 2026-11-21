@@ -26,6 +26,15 @@ cf_add_layer_test(layout_cases unit/layout_cases.c cf_layout)
 cf_add_layer_test(paint_emit unit/paint_emit.c cf_paint)
 cf_add_layer_test(backend_record unit/backend_record.c cf_backend_headless)
 
+# The golden tier snapshots the command stream the recorder backend receives:
+# each scene lays out, paints and submits, and the text one command per line is
+# the diff surface a paint change is judged on. A plain run compares against
+# the snapshots; `golden_cases --update` rewrites them after an intentional
+# change.
+cf_add_layer_test(golden_cases golden/golden_cases.c cf_backend_headless)
+target_compile_definitions(golden_cases PRIVATE
+    CFORM_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/golden/snapshots")
+
 # Yoga's fixtures, ported by tools/gentest: the flexbox suite as data, with the
 # box a reference browser measured beside it. This is the tier the ≥95%
 # conformance claim is checked against, so it runs with the unit tests rather
