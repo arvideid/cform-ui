@@ -47,6 +47,11 @@ cf_add_layer_test(node_rebuild unit/node_rebuild.c cf_node)
 # drive events at it and read which handler saw them.
 cf_add_layer_test(node_input unit/node_input.c cf_node)
 
+# The resolver is the seam the frame driver owns: these cases play that
+# driver, linking the node layer that walks the view and the theme layer
+# that supplies the variants.
+cf_add_layer_test(theme_resolve unit/theme_resolve.c cf_node cf_theme)
+
 # The scroll math is core-owned: these cases drive offsets, thumb geometry
 # and thumb drags through one scrollbar's worth of numbers.
 cf_add_layer_test(node_scroll unit/node_scroll.c cf_node)

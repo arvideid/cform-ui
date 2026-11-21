@@ -56,6 +56,10 @@ typedef struct cf_color {
     uint8_t alpha;
 } cf_color;
 
+/* An opaque color, the alpha a fill or stroke almost always wants. */
+#define CF_COLOR(red, green, blue)                                                                 \
+    ((cf_color){(uint8_t)(red), (uint8_t)(green), (uint8_t)(blue), 255u})
+
 /*
  * A length that knows what it means. CF_LENGTH_AUTO is the zero state, so a
  * zero-initialized field means "hug the content", never "zero pixels" and never

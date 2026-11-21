@@ -227,4 +227,82 @@ bool cf_direction_is_reverse(cf_direction direction);
 /* True when children are packed along the horizontal axis. */
 bool cf_direction_is_row(cf_direction direction);
 
+/*
+ * The interaction states a node styles across, one bit each so a resolver
+ * reads one mask. The node layer books hovered, pressed and focused from
+ * the pointer and the keyboard; disabled is the widget's own declaration.
+ */
+typedef enum cf_interact {
+    CF_INTERACT_NONE = 0,
+    CF_INTERACT_HOVERED = 1 << 0,
+    CF_INTERACT_PRESSED = 1 << 1,
+    CF_INTERACT_FOCUSED = 1 << 2,
+    CF_INTERACT_DISABLED = 1 << 3
+} cf_interact;
+
+/*
+ * The widget family a node belongs to. The resolver reads it to pick the
+ * theme's variant set; CF_ROLE_NONE means the declared style is the whole
+ * truth and nothing resolves over it.
+ */
+typedef enum cf_role {
+    CF_ROLE_NONE,
+    CF_ROLE_BUTTON,
+    CF_ROLE_FIELD,
+    CF_ROLE_LIST,
+    CF_ROLE_SCROLL,
+    CF_ROLE_IMAGE,
+    CF_ROLE_COUNT
+} cf_role;
+
+/*
+ * What one interaction state paints differently. Every field is optional:
+ * a field the variant leaves unstated inherits the declared style, so a
+ * variant states only its differences from the resting box.
+ */
+typedef struct cf_variant {
+    cf_opt_color background;
+    cf_opt_color border_color;
+} cf_variant;
+
+/*
+ * One widget family's paint: the resting box a widget starts its
+ * declaration from, and the differences each state applies over whatever
+ * the declaration ended up stating.
+ */
+typedef struct cf_variants {
+    cf_style base;
+    cf_variant hovered;
+    cf_variant pressed;
+    cf_variant focused;
+    cf_variant disabled;
+} cf_variants;
+
+/*
+ * The design system a build reads its surfaces from: the resting boxes of
+ * the page's regions, and one variant set per widget family. The zero
+ * state paints nothing and hugs its content, so a theme may be built field
+ * by field.
+ */
+typedef struct cf_theme {
+    cf_style page; /* the field everything sits on */
+    cf_style bar;  /* wells and bars that lift off the page */
+    cf_style body; /* card surfaces */
+    cf_variants variants[CF_ROLE_COUNT];
+} cf_theme;
+
+/*
+ * The base style with the states' differences applied over it, in enum
+ * order so the later bits overwrite the earlier: a disabled box reads
+ * disabled whatever else it is. A NULL variant set answers the base whole.
+ */
+cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states);
+
+/*
+ * The neutral scale the gallery reads: a 60-30-10 field of near-whites with
+ * one dark accent reserved for the primary action, every fill clearing
+ * WCAG-AA against the text tone it carries.
+ */
+const cf_theme *cf_theme_default(void);
+
 #endif

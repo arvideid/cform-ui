@@ -114,3 +114,35 @@ bool cf_direction_is_row(cf_direction direction) {
 bool cf_direction_is_reverse(cf_direction direction) {
     return direction == CF_DIRECTION_ROW_REVERSE || direction == CF_DIRECTION_COLUMN_REVERSE;
 }
+
+/* One state's differences, written over the style the role declared. */
+static void variant_apply(const cf_variant *variant, cf_style *style) {
+    if (variant->background.present) {
+        style->background = variant->background;
+    }
+
+    if (variant->border_color.present) {
+        style->border_color = variant->border_color;
+    }
+}
+
+cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states) {
+    if (variants == NULL) {
+        return base;
+    }
+
+    /* Enum order is application order, so the last stated bit wins: a
+     * disabled box keeps its disabled paint however it is hovered. */
+    const cf_variant *const order[] = {&variants->hovered, &variants->pressed, &variants->focused,
+                                       &variants->disabled};
+    const uint32_t bits[] = {(uint32_t)CF_INTERACT_HOVERED, (uint32_t)CF_INTERACT_PRESSED,
+                             (uint32_t)CF_INTERACT_FOCUSED, (uint32_t)CF_INTERACT_DISABLED};
+
+    for (uint32_t i = 0u; i < sizeof order / sizeof *order; ++i) {
+        if ((states & bits[i]) != 0u) {
+            variant_apply(order[i], &base);
+        }
+    }
+
+    return base;
+}

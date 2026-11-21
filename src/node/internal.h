@@ -22,10 +22,14 @@
  * `handlers` is the declaration's current pair, refreshed by every diff
  * that claims the slot and read by dispatch alone.
  *
+ * `role` and `disabled` ride the same refresh: the theme resolver reads
+ * them off the retained record after the diff, when the declaration that
+ * stated them is already gone.
+ *
  * `signature` hashes what the last claim declared - style, measure, handler
- * pointers and the child count - so a diff sees a change without keeping
- * the declaration. `dirty` says this frame changed the node, by that
- * comparison or by hand, and lives until the next frame begins.
+ * pointers, role, disabled and the child count - so a diff sees a change
+ * without keeping the declaration. `dirty` says this frame changed the node,
+ * by that comparison or by hand, and lives until the next frame begins.
  */
 typedef struct node_record {
     cf_name key;
@@ -39,6 +43,8 @@ typedef struct node_record {
     uint32_t signature;
     bool dirty;
     cf_handlers handlers;
+    cf_role role;
+    bool disabled;
 } node_record;
 
 /* The record a store slot holds. Slots below the store's extent always

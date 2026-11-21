@@ -32,6 +32,13 @@ typedef struct cf_node {
     cf_measure_fn measure;
     void *measure_data;
     cf_handlers handlers;
+
+    /* The widget family the theme styles this node as, and whether it is
+     * switched off. CF_ROLE_NONE leaves the style whole; the resolver reads
+     * both after the diff and before the layout. */
+    cf_role role;
+    bool disabled;
+
     const struct cf_node *children;
     uint32_t child_count;
 } cf_node;
@@ -59,6 +66,9 @@ typedef struct cf_ctx {
     cf_interner names;
     cf_store nodes;
     cf_store states;
+    /* The design system cf_frame_resolve reads. Borrowed, never copied; a
+     * build that styles every box itself leaves it NULL. */
+    const cf_theme *theme;
     /* The view cf_layout reads, rebuilt by every diff into the frame arena. */
     cf_tree layout;
     cf_id hover_id;
@@ -208,6 +218,18 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root);
 
 /* The view cf_layout reads, or NULL before this frame's diff has built one. */
 const cf_tree *cf_frame_tree(const cf_ctx *ctx);
+
+/*
+ * Applies the theme to this frame's view: a node that declares a role reads
+ * the theme's variant set for that family, its current interaction state
+ * picks the variant, and the view's style becomes the declared style with
+ * those differences applied. A node without a role, a build without a
+ * theme, or a frame without a view keeps every style as declared.
+ *
+ * Runs between the diff and the layout: the diff built the view this
+ * rewrites, and the layout lays out the styles it leaves.
+ */
+void cf_frame_resolve(cf_ctx *ctx);
 
 /*
  * Lays this frame's tree out into rect storage the context owns: the

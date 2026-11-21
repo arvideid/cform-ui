@@ -46,6 +46,15 @@ add_library(cf_style STATIC
 
 target_link_libraries(cf_style PUBLIC cf_base)
 
+# cf_theme is the design system over the style vocabulary: the neutral scale
+# a build reads its surfaces from, and the per-state paint each widget family
+# resolves by. It is data, and the layers above it are its only readers.
+add_library(cf_theme STATIC
+    src/theme/default.c
+)
+
+target_link_libraries(cf_theme PUBLIC cf_style)
+
 # cf_layout reads styles and lengths only: no windowing, no text metrics, no
 # backend. Content it cannot see arrives through a measure callback.
 add_library(cf_layout STATIC
@@ -86,13 +95,15 @@ target_link_libraries(cf_paint PUBLIC cf_layout)
 # cf_node reconciles each frame's declaration into retained slots: identity
 # by depth and key, position for the keyless, and the view cf_layout reads.
 # state.c holds the blocks a build asks for by name across frames, scroll.c
-# the offsets a scroller keeps under its name. It is the first layer that
-# owns memory across frames.
+# the offsets a scroller keeps under its name, resolve.c the theme's per-state
+# paint applied to the view the diff built. It is the first layer that owns
+# memory across frames.
 add_library(cf_node STATIC
     src/node/anim.c
     src/node/context.c
     src/node/diff.c
     src/node/input.c
+    src/node/resolve.c
     src/node/scroll.c
     src/node/state.c
     src/node/tree.c
@@ -142,7 +153,7 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_text cf_paint cf_node cf_backend_headless)
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_backend_headless)
 
 if(CFORM_WITH_SDL_BACKEND)
     list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)

@@ -96,16 +96,18 @@ static uint32_t member_hash(cf_name key, uint32_t depth, uint32_t ordinal) {
 }
 
 /* What a change dirties: the style, the measure and handlers the build
- * attached, and the shape of the child list. The measure's data is
- * borrowed and unread, so it is none of the comparison's business, and
- * the staging bytes start zeroed so the alignment gaps ride the same
- * hash every frame. */
+ * attached, the family and switch the resolver reads, and the shape of the
+ * child list. The measure's data is borrowed and unread, so it is none of
+ * the comparison's business, and the staging bytes start zeroed so the
+ * alignment gaps ride the same hash every frame. */
 static uint32_t signature_of(const cf_node *decl) {
     struct {
         cf_style style;
         cf_measure_fn measure;
         cf_handlers handlers;
         uint32_t child_count;
+        cf_role role;
+        bool disabled;
     } declared;
 
     memset(&declared, 0, sizeof declared);
@@ -114,6 +116,8 @@ static uint32_t signature_of(const cf_node *decl) {
     declared.measure = decl->measure;
     declared.handlers = decl->handlers;
     declared.child_count = decl->child_count;
+    declared.role = decl->role;
+    declared.disabled = decl->disabled;
 
     return cf_hash_bytes(&declared, sizeof declared);
 }
@@ -449,6 +453,8 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->ordinal = root_ordinal;
     root_record->touched = ctx->frame_id;
     root_record->handlers = root->handlers;
+    root_record->role = root->role;
+    root_record->disabled = root->disabled;
 
     const uint32_t root_signature = signature_of(root);
 
@@ -495,6 +501,8 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->ordinal = ordinal;
         record->touched = ctx->frame_id;
         record->handlers = decl->handlers;
+        record->role = decl->role;
+        record->disabled = decl->disabled;
 
         const uint32_t signature = signature_of(decl);
 
