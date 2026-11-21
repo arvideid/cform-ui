@@ -6,7 +6,7 @@
  * Negative free space - more content than box - leaves the spreading keywords
  * nothing to spread, and they pack from the start edge; centre and end still
  * read the shortfall, which overflows the far edge (§9.5). */
-static line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra) {
+line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra) {
     const float boxes = (float)count;
     const bool room = extra >= 0.0f;
     line_spacing spacing = {0.0f, 0.0f};
@@ -136,7 +136,7 @@ static void place_lines(const flex_context *f, flex_line *lines, uint32_t line_c
 
 /* §9.6.3: an item's own alignment wins. Auto on the item means whatever the
  * container does, and auto on the container means stretch. */
-static cf_align align_of(const flex_context *f, const flex_item *item) {
+cf_align align_of(const flex_context *f, const flex_item *item) {
     const cf_align self = f->ctx->tree->styles[item->slot].align_self;
 
     if (self != CF_ALIGN_AUTO) {
@@ -151,10 +151,9 @@ static cf_align align_of(const flex_context *f, const flex_item *item) {
 }
 
 /*
- * Where an item sits across its line. Baseline alignment needs a first-baseline
- * measurement the text layer has not reported yet, so it behaves as start. An
- * item wider than its line leaves a shortfall, which §9.5 has centre and end
- * still read: the box overflows both edges instead of crowding one.
+ * Where an item sits across its line. An item wider than its line leaves a
+ * shortfall, which §9.5 has centre and end still read: the box overflows both
+ * edges instead of crowding one.
  */
 static float cross_offset(const flex_context *f, const flex_line *line, flex_item *item) {
     const float extra = line->cross - item_outer_cross(item);
@@ -170,6 +169,14 @@ static float cross_offset(const flex_context *f, const flex_line *line, flex_ite
     }
 
     const cf_align alignment = align_of(f, item);
+
+    /* §9.8: a baseline group hangs every member from the baseline the line
+     * shares, each as far below it as its own ascent stops short of the
+     * group's. The margin is part of that ascent, so it drops back out here. A
+     * column has no cross-axis baseline and reads baseline as start. */
+    if (alignment == CF_ALIGN_BASELINE && f->row) {
+        return line->baseline - item_ascent(f, item) + item->margin_cross_start;
+    }
 
     if (alignment == CF_ALIGN_STRETCH && item->cross_is_auto) {
         item->cross = clamp_range(line->cross - item->margin_cross_start - item->margin_cross_end,

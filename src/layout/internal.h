@@ -21,7 +21,9 @@ typedef struct layout_ctx {
 /*
  * What a pass over a container's children is for, seen from the container.
  * `origin` and `containing` belong to arranging, the only pass that places
- * anything: a measured container has no box for a child to land in.
+ * anything: a measured container has no box for a child to land in. A
+ * non-NULL `baseline` asks the pass where the container's own first baseline
+ * sits, which is the question a parent that aligns on a baseline has about it.
  */
 typedef struct flex_pass {
     cf_available constraint;
@@ -29,6 +31,7 @@ typedef struct flex_pass {
     cf_rect containing;
     cf_intrinsic intrinsic;
     flex_mode mode;
+    float *baseline;
 } flex_pass;
 
 /*
@@ -58,6 +61,7 @@ typedef struct flex_context {
     bool reverse;
     bool cross_reverse;
     bool measuring;
+    float *baseline;
 } flex_context;
 
 /*
@@ -91,12 +95,15 @@ typedef struct flex_item {
     bool frozen;
 } flex_item;
 
-/* A run of consecutive items, packed along the main axis. */
+/* A run of consecutive items, packed along the main axis. `baseline` is where
+ * the items that align on a baseline sit across the line, and zero when none
+ * of them does. */
 typedef struct flex_line {
     uint32_t first;
     uint32_t count;
     float outer_main;
     float cross;
+    float baseline;
     float offset_main;
     float offset_cross;
 } flex_line;
@@ -189,6 +196,40 @@ void grow_line(const flex_context *f, flex_item *items, const flex_line *line);
 void shrink_line(const flex_context *f, flex_item *items, const flex_line *line);
 void collect_line_cross(const flex_context *f, const flex_item *items, flex_line *lines,
                         uint32_t line_count);
+
+/*
+ * §9.6.3: an item's own cross-axis alignment, an `auto` align-self read through
+ * the container's `align-items` and settled on stretch. The baseline group and
+ * the placement keywords both read it.
+ */
+cf_align align_of(const flex_context *f, const flex_item *item);
+
+/*
+ * How a distribution mode spreads `extra` before the first box and between the
+ * rest. §9.8 needs the same answer for the column whose baseline counts its
+ * first item down the main axis, so it reads this too.
+ */
+line_spacing justify_spacing(cf_justify mode, uint32_t count, float extra);
+
+/*
+ * §9.8: the distance from the top edge of an item's margin box down to the
+ * baseline its content establishes, and whether the line it sits in has a
+ * baseline group at all - the tallest such distance among the items that align
+ * on the line's shared baseline, with how far the group's lowest bottom edge
+ * reaches below it.
+ */
+float item_ascent(const flex_context *f, const flex_item *item);
+bool line_baseline(const flex_context *f, const flex_item *items, const flex_line *line,
+                   float *ascent, float *descent);
+
+/*
+ * §9.8: the distance from a container's content-box top to the baseline it
+ * hands the line it sits on. A row's first line carries it - the baseline group
+ * the line shares, or the first item's own when nobody aligns on one - and a
+ * column counts its first item down the main axis, which is where its baseline
+ * physically sits.
+ */
+float flow_baseline(const flex_context *f, const flex_item *items, const flex_line *lines);
 
 /* §9.5.2 and §9.6: place the lines, then every item inside them. */
 void arrange_items(const layout_ctx *ctx, const flex_context *f, flex_item *items, flex_line *lines,

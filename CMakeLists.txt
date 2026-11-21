@@ -56,6 +56,7 @@ add_library(cf_layout STATIC
     src/layout/flex_item.c
     src/layout/flex_line.c
     src/layout/flex_align.c
+    src/layout/flex_baseline.c
     src/layout/grid.c
     src/layout/grid_place.c
     src/layout/grid_track.c

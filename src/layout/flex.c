@@ -46,6 +46,7 @@ static flex_context context_of(const layout_ctx *ctx, uint32_t slot, const flex_
         .reverse = cf_direction_is_reverse(style->direction),
         .cross_reverse = style->wrap == CF_WRAP_REVERSE,
         .measuring = pass->mode == FLEX_MEASURE,
+        .baseline = pass->baseline,
         .intrinsic = pass->mode == FLEX_MEASURE ? pass->intrinsic : CF_INTRINSIC_MAX_CONTENT,
     };
 
@@ -134,6 +135,10 @@ static cf_size flex_resolve(const flex_context *f) {
 
     remeasure_item_cross(f, items, count);
     collect_line_cross(f, items, lines, line_count);
+
+    if (f->baseline != NULL) {
+        *f->baseline = flow_baseline(f, items, lines);
+    }
 
     cf_size extents = {0.0f, 0.0f};
 

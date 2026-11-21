@@ -541,6 +541,88 @@ static void a_tree_or_rect_array_that_is_not_there_changes_nothing(void) {
     CF_NEAR(f.rects[0].width, 3.0f);
 }
 
+static void baseline_group_aligns_on_the_tallest_members_baseline(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+    f.styles[root].align_items = CF_ALIGN_BASELINE;
+
+    append(&f, root, fixed_box(50.0f, 50.0f));
+    append(&f, root, fixed_box(50.0f, 20.0f));
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* Both hang from the shared baseline: the taller member's bottom edge is
+     * the baseline, and the short one drops below it by the difference. */
+    CF_NEAR(f.rects[1].y, 0.0f);
+    CF_NEAR(f.rects[2].y, 30.0f);
+}
+
+static void a_column_hands_the_baseline_its_first_item_sits_at(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+    f.styles[root].align_items = CF_ALIGN_BASELINE;
+
+    append(&f, root, fixed_box(50.0f, 50.0f));
+    const uint32_t column = append(&f, root, fixed_box(50.0f, 20.0f));
+    append(&f, column, fixed_box(50.0f, 10.0f));
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* The column's baseline is where its first item's sits, so the column
+     * drops until that baseline meets the leaf's bottom edge. */
+    CF_NEAR(f.rects[1].y, 0.0f);
+    CF_NEAR(f.rects[2].y, 40.0f);
+    CF_NEAR(f.rects[3].y, 40.0f);
+}
+
+static void a_wrapped_baseline_line_keeps_the_groups_descent(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+    f.styles[root].wrap = CF_WRAP;
+    f.styles[root].align_items = CF_ALIGN_BASELINE;
+
+    append(&f, root, fixed_box(50.0f, 50.0f));
+    const uint32_t first = append(&f, root, fixed_box(50.0f, 20.0f));
+    append(&f, first, fixed_box(50.0f, 10.0f));
+    const uint32_t second = append(&f, root, fixed_box(50.0f, 20.0f));
+    append(&f, second, fixed_box(50.0f, 10.0f));
+    append(&f, root, fixed_box(50.0f, 50.0f));
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* The first line is 60 tall - the tall member's ascent plus the room the
+     * column reaches below the baseline - so the second line starts there. */
+    CF_NEAR(f.rects[1].y, 0.0f);
+    CF_NEAR(f.rects[2].y, 40.0f);
+    CF_NEAR(f.rects[3].y, 40.0f);
+    CF_NEAR(f.rects[4].y, 100.0f);
+    CF_NEAR(f.rects[5].y, 100.0f);
+    CF_NEAR(f.rects[6].y, 60.0f);
+}
+
+static void baseline_group_counts_margins_into_the_ascent(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 100.0f, 100.0f);
+    f.styles[root].align_items = CF_ALIGN_BASELINE;
+
+    const uint32_t framed = append(&f, root, fixed_box(50.0f, 50.0f));
+    f.styles[framed].flex_shrink = 0.0f;
+    f.styles[framed].margin = (cf_box){
+        .left = CF_PX(5.0f), .top = CF_PX(5.0f), .right = CF_PX(5.0f), .bottom = CF_PX(5.0f)};
+    const uint32_t column = append(&f, root, fixed_box(50.0f, 20.0f));
+    const uint32_t inner = append(&f, column, fixed_box(50.0f, 10.0f));
+    f.styles[inner].margin = (cf_box){
+        .left = CF_PX(1.0f), .top = CF_PX(1.0f), .right = CF_PX(1.0f), .bottom = CF_PX(1.0f)};
+    arrange_in(&f, 100.0f, 100.0f);
+
+    /* The ascent is measured from the margin box, so the framed item's margin
+     * lifts the whole group, and the column's inner margin rides inside the
+     * baseline the column hands up. */
+    CF_NEAR(f.rects[framed].x, 5.0f);
+    CF_NEAR(f.rects[framed].y, 5.0f);
+    CF_NEAR(f.rects[column].x, 60.0f);
+    CF_NEAR(f.rects[column].y, 44.0f);
+    CF_NEAR(f.rects[inner].x, 61.0f);
+    CF_NEAR(f.rects[inner].y, 45.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -564,6 +646,10 @@ int main(void) {
     CF_RUN(a_declared_main_size_still_measures_its_cross_from_the_content);
     CF_RUN(an_auto_box_keeps_the_width_its_content_cannot_break);
     CF_RUN(a_gap_sits_between_items_only);
+    CF_RUN(baseline_group_aligns_on_the_tallest_members_baseline);
+    CF_RUN(a_column_hands_the_baseline_its_first_item_sits_at);
+    CF_RUN(a_wrapped_baseline_line_keeps_the_groups_descent);
+    CF_RUN(baseline_group_counts_margins_into_the_ascent);
     CF_RUN(refused_scratch_leaves_the_subtree_as_it_was);
     CF_RUN(a_tree_or_rect_array_that_is_not_there_changes_nothing);
 

@@ -254,6 +254,17 @@ void collect_line_cross(const flex_context *f, const flex_item *items, flex_line
         for (uint32_t i = line->first; i < line->first + line->count; ++i) {
             line->cross = larger(line->cross, item_outer_cross(&items[i]));
         }
+
+        /* §9.8: a line with a baseline group is at least as tall as the
+         * group's ascent and descent, so a line whose tallest item ends at
+         * the baseline keeps the room the other members reach below it. */
+        line->baseline = 0.0f;
+        float ascent;
+        float descent;
+        if (line_baseline(f, items, line, &ascent, &descent)) {
+            line->baseline = ascent;
+            line->cross = larger(line->cross, ascent + descent);
+        }
     }
 
     /* §9.6.1: a single line in a container whose cross size is settled is that
