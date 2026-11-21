@@ -18,6 +18,9 @@
  * `touched` is the frame id of the last diff that claimed the slot. A slot
  * the current frame did not claim is dead or stale, and the store makes
  * removing either a no-op.
+ *
+ * `handlers` is the declaration's current pair, refreshed by every diff
+ * that claims the slot and read by dispatch alone.
  */
 typedef struct node_record {
     cf_name key;
@@ -28,11 +31,12 @@ typedef struct node_record {
     uint32_t subtree_size;
     uint32_t ordinal;
     uint32_t touched;
+    cf_handlers handlers;
 } node_record;
 
 /* The record a store slot holds. Slots below the store's extent always
  * address memory; whether it belongs to a live node is the store's answer. */
-static inline node_record *record_of(cf_ctx *ctx, uint32_t slot) {
+static inline node_record *record_of(const cf_ctx *ctx, uint32_t slot) {
     return cf_store_at(&ctx->nodes, slot);
 }
 

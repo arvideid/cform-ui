@@ -90,6 +90,7 @@ target_link_libraries(cf_paint PUBLIC cf_layout)
 add_library(cf_node STATIC
     src/node/context.c
     src/node/diff.c
+    src/node/input.c
     src/node/state.c
     src/node/tree.c
 )

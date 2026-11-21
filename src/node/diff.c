@@ -415,6 +415,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->parent = CF_NO_LINK;
     root_record->ordinal = root_ordinal;
     root_record->touched = ctx->frame_id;
+    root_record->handlers = root->handlers;
 
     claim_chunk *claimed = NULL;
     walk_stack stack = {0};
@@ -455,6 +456,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->parent = frame->slot;
         record->ordinal = ordinal;
         record->touched = ctx->frame_id;
+        record->handlers = decl->handlers;
 
         if (!claim_push(ctx, &claimed, slot, decl)) {
             cf_logf(CF_LOG_CORE, "node: the frame arena cannot record the declaration");

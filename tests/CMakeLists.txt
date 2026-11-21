@@ -43,6 +43,10 @@ cf_add_layer_test(node_state unit/node_state.c cf_node)
 # seed rebuilds the same sequence, so a failure names its seed and frame.
 cf_add_layer_test(node_rebuild unit/node_rebuild.c cf_node)
 
+# cf_input is the dispatch half of a frame: these cases lay a tree out,
+# drive events at it and read which handler saw them.
+cf_add_layer_test(node_input unit/node_input.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against

@@ -43,6 +43,13 @@ bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes) {
         return false;
     }
 
+    /* An id of zeroed bytes is a valid slot; the interaction state starts
+     * naming nothing. */
+    ctx->hover_id = CF_NO_ID;
+    ctx->press_id = CF_NO_ID;
+    ctx->capture_id = CF_NO_ID;
+    ctx->focus_id = CF_NO_ID;
+
     return true;
 }
 
@@ -68,6 +75,8 @@ void cf_frame_begin(cf_ctx *ctx) {
     ctx->frame_id++;
     state_gc(ctx);
     ctx->layout_ready = false;
+    /* The rects lived in the arena just cleared. */
+    ctx->rects = NULL;
 }
 
 const cf_tree *cf_frame_tree(const cf_ctx *ctx) {
@@ -76,4 +85,22 @@ const cf_tree *cf_frame_tree(const cf_ctx *ctx) {
     }
 
     return &ctx->layout;
+}
+
+void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
+    if (ctx == NULL || !ctx->layout_ready || ctx->root_slot == CF_NO_LINK) {
+        return;
+    }
+
+    /* One rect per store slot; the walk from the root only ever reads the
+     * slots it reaches, so the rest staying untouched is harmless. */
+    cf_rect *rects = cf_alloc(&ctx->frame, ctx->layout.node_count * sizeof *rects);
+
+    if (rects == NULL) {
+        cf_logf(CF_LOG_CORE, "node: the frame arena cannot hold the layout rects");
+        return;
+    }
+
+    cf_layout(&ctx->frame, &ctx->layout, ctx->root_slot, available, origin, rects);
+    ctx->rects = rects;
 }
