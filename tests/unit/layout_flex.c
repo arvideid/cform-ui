@@ -649,6 +649,30 @@ static void baseline_group_counts_margins_into_the_ascent(void) {
     CF_NEAR(f.rects[inner].y, 45.0f);
 }
 
+static void child_percentages_read_the_content_box_inside_the_frame(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 200.0f, 200.0f);
+    f.styles[root].direction = CF_DIRECTION_COLUMN;
+
+    const uint32_t framed = append(&f, root, cf_style_default());
+    f.styles[framed].width = CF_PERCENT(50);
+    f.styles[framed].padding = (cf_box){
+        .left = CF_PX(10.0f), .top = CF_PX(10.0f), .right = CF_PX(10.0f), .bottom = CF_PX(10.0f)};
+    const uint32_t leaf = append(&f, framed, fixed_box(20.0f, 20.0f));
+    f.styles[leaf].margin = (cf_box){.left = CF_PERCENT(5),
+                                     .top = CF_PERCENT(5),
+                                     .right = CF_PERCENT(5),
+                                     .bottom = CF_PERCENT(5)};
+    arrange_in(&f, 200.0f, 200.0f);
+
+    /* The leaf's margins are percentages of the box they fill, so the frame
+     * the container declares is taken off before the measure hands the box
+     * down: the auto height grows inside the frame, never by it. */
+    CF_NEAR(f.rects[framed].height, 48.0f);
+    CF_NEAR(f.rects[leaf].x, 14.0f);
+    CF_NEAR(f.rects[leaf].y, 14.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -671,6 +695,7 @@ int main(void) {
     CF_RUN(a_tree_that_carries_no_measure_tables_still_lays_out);
     CF_RUN(padding_and_border_inset_the_content_box);
     CF_RUN(a_declared_main_size_still_measures_its_cross_from_the_content);
+    CF_RUN(child_percentages_read_the_content_box_inside_the_frame);
     CF_RUN(an_auto_box_keeps_the_width_its_content_cannot_break);
     CF_RUN(a_gap_sits_between_items_only);
     CF_RUN(baseline_group_aligns_on_the_tallest_members_baseline);

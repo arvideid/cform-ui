@@ -98,10 +98,14 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
         settled_length(verdict.height, style->height, constraint.height, measuring, &height);
 
     /* An axis that is already settled bounds the box the other axis measures
-     * itself into, so a wrapped callback gets the width the node will have. */
+     * itself into. The measure below sizes content, so the settled border box
+     * is offered taken inside the frame: a child's percentages read the box
+     * its content fills, not the one the frame wraps. */
     const cf_available content_offer = {
-        .width = has_width ? CF_PX(width) : constraint.width,
-        .height = has_height ? CF_PX(height) : constraint.height,
+        .width = has_width ? CF_PX(clamp_non_negative(width - inset.left - inset.right))
+                           : constraint.width,
+        .height = has_height ? CF_PX(clamp_non_negative(height - inset.top - inset.bottom))
+                             : constraint.height,
     };
 
     if (!has_width || !has_height) {
