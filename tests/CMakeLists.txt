@@ -69,6 +69,10 @@ cf_add_layer_test(widget_button unit/widget_button.c cf_widget cf_theme)
 cf_add_layer_test(widget_scroll unit/widget_scroll.c cf_widget cf_theme)
 cf_add_layer_test(widget_list unit/widget_list.c cf_widget cf_theme)
 
+# The image is the first widget that paints something other than its box:
+# this case reads the declaration the paint walk keys on.
+cf_add_layer_test(widget_image unit/widget_image.c cf_widget cf_theme)
+
 # The dirty bit answers one question per frame: did this node's declaration
 # move? These cases read it against the frame before it.
 cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)

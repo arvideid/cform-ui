@@ -12,7 +12,7 @@
  * submit, because a stream the backend does not understand draws wrong rather
  * than failing.
  */
-#define CF_BACKEND_ABI_VERSION 2u
+#define CF_BACKEND_ABI_VERSION 3u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -22,6 +22,11 @@ typedef struct cf_backend {
     void (*submit)(void *user_data, const cf_command *commands, uint32_t count);
     /* Draws what the last submit carried, to the output the backend owns. */
     void (*present)(void *user_data);
+    /* Uploads RGBA8888 pixels, one byte per channel, row after row, as a
+     * texture the stream's image commands name. Zero names a texture the
+     * backend refused: nothing was uploaded, nothing will draw. */
+    uint32_t (*create_texture)(void *user_data, uint32_t width, uint32_t height,
+                               const void *pixels);
 } cf_backend;
 
 /*

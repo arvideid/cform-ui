@@ -120,12 +120,13 @@ target_link_libraries(cf_node PUBLIC cf_layout)
 # and stays headless.
 add_library(cf_widget STATIC
     src/widget/button.c
+    src/widget/image.c
     src/widget/label.c
     src/widget/list.c
     src/widget/scroll.c
 )
 
-target_link_libraries(cf_widget PUBLIC cf_node cf_text)
+target_link_libraries(cf_widget PUBLIC cf_node cf_paint cf_text)
 
 # cf_backend_headless is the reference backend: it copies the submitted stream
 # into its arena so tests read what a device would have drawn. It opens no

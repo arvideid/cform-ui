@@ -2,6 +2,7 @@
 #define CF_WIDGET_H
 
 #include "cf/node.h"
+#include "cf/paint.h"
 #include "cf/text.h"
 
 /*
@@ -41,6 +42,16 @@ cf_node cf_label(cf_ctx *ctx, cf_string text, const cf_text_stack *stack, cf_col
  */
 cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *user_data,
                   const cf_node *children, uint32_t child_count);
+
+/*
+ * A box that paints a texture the backend issued when the app uploaded it.
+ * The content is borrowed: it must outlive the frame that declares the
+ * image, which a static or a frame-arena block both do. The theme's resting
+ * box sits under the texture, and the content's own extent sizes the box
+ * unless the build states one. A NULL context, name or content answers a
+ * declaration that draws nothing.
+ */
+cf_node cf_image(cf_ctx *ctx, const char *name, const cf_image_content *content);
 
 /*
  * A viewport that walks its children with the wheel: the offset lives in the

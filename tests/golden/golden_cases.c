@@ -313,7 +313,7 @@ static void format_stream(const cf_recorder *recorder, char *text) {
                                rect.x, rect.y, rect.width, rect.height, color.red, color.green,
                                color.blue, color.alpha, command->widths.left, command->widths.top,
                                command->widths.right, command->widths.bottom, command->radius);
-        } else {
+        } else if (command->kind == CF_COMMAND_TEXT) {
             written =
                 snprintf(text + used, TEXT_SIZE - used,
                          "text %.2f %.2f %.2f %.2f #%02x%02x%02x%02x len=%u ellipsis=%d "
@@ -321,6 +321,9 @@ static void format_stream(const cf_recorder *recorder, char *text) {
                          rect.x, rect.y, rect.width, rect.height, color.red, color.green,
                          color.blue, color.alpha, command->text.length, command->ellipsis ? 1 : 0,
                          (int)command->text.length, command->text.chars);
+        } else if (command->kind == CF_COMMAND_IMAGE) {
+            written = snprintf(text + used, TEXT_SIZE - used, "image %.2f %.2f %.2f %.2f tex=%u\n",
+                               rect.x, rect.y, rect.width, rect.height, command->texture);
         }
 
         if (written > 0 && (size_t)written < TEXT_SIZE - used) {

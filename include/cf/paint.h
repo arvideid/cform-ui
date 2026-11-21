@@ -18,7 +18,9 @@ typedef enum cf_command_kind {
     CF_COMMAND_BORDER, /* rect stroked by widths, inside rect, rounded by radius */
     /* One laid line of text, drawn from rect's left edge in the font's own
      * rhythm; the ellipsis glyph follows the bytes when the flag says so. */
-    CF_COMMAND_TEXT
+    CF_COMMAND_TEXT,
+    /* A texture drawn into rect: the upload the image's content names. */
+    CF_COMMAND_IMAGE
 } cf_command_kind;
 
 typedef struct cf_command {
@@ -35,6 +37,10 @@ typedef struct cf_command {
     cf_string text;
     cf_font font;
     bool ellipsis;
+    /* The texture an image command draws into rect: the id the backend
+     * handed back when the app uploaded the pixels. An id the backend does
+     * not know draws nothing. */
+    uint32_t texture;
 } cf_command;
 
 /*
@@ -50,11 +56,32 @@ typedef struct cf_command_list {
 } cf_command_list;
 
 /*
+ * The content an image box paints: the texture the backend issued when the
+ * app uploaded the pixels, and the extent the box draws at when no style
+ * sizes it. The content is borrowed like a text content's - it must outlive
+ * the frame that declares the box.
+ */
+typedef struct cf_image_content {
+    uint32_t texture;
+    float width;
+    float height;
+} cf_image_content;
+
+/*
+ * The measure an image box carries: it answers the content's own extent for
+ * every offer and both intrinsic kinds, because a replaced element has no
+ * packing tighter or wider than itself. The paint walk reads the measure
+ * slot to know a box paints an image rather than a fill or lines.
+ */
+cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kind);
+
+/*
  * Walks the subtree rooted at `root` in paint order and appends what each box
  * paints: a stated background fills the box layout placed at `rects[slot]`, a
- * stated border color with a width strokes it, and a box whose measure slot is
- * cf_text_measure lays its content's lines over its own paint, one command per
- * line, where the measure that sized the box counted them. A box that does not
+ * stated border color with a width strokes it, a box whose measure slot is
+ * cf_text_measure lays its content's lines over its own paint, one command
+ * per line, and a box whose measure slot is cf_image_measure paints its
+ * content's texture into its rect. A box that does not
  * reach `viewport` paints nothing; one that straddles it keeps its whole rect,
  * because cutting it is the backend's scissor decision, not the stream's.
  *

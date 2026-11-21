@@ -157,6 +157,45 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
     }
 }
 
+cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kind) {
+    const cf_image_content *image = content;
+
+    if (image == NULL) {
+        return (cf_size){.width = 0.0f, .height = 0.0f};
+    }
+
+    (void)available;
+    (void)kind;
+    return (cf_size){.width = image->width, .height = image->height};
+}
+
+/*
+ * An image paints its texture into its box: the measure that sized the box
+ * answered the content's own extent, so the rect is where the texture goes.
+ * Inside a clip it cuts like a fill - the texture draws where the rect says.
+ */
+static void emit_image(paint_walk *walk, uint32_t slot, cf_rect box) {
+    if (walk->tree->measures == NULL || walk->tree->measures[slot] != cf_image_measure) {
+        return;
+    }
+
+    const cf_image_content *content = walk->tree->measure_data[slot];
+
+    if (content == NULL) {
+        return;
+    }
+
+    cf_command *command = next_command(walk);
+
+    if (command == NULL) {
+        return;
+    }
+
+    *command = (cf_command){.kind = CF_COMMAND_IMAGE,
+                            .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
+                            .texture = content->texture};
+}
+
 /*
  * One box: fill first, then its own border, then the children that paint over
  * both. A border with a color but no width, or widths but no color, paints
@@ -211,6 +250,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     }
 
     emit_text(walk, slot, style, box);
+    emit_image(walk, slot, box);
 
     /* A box that clips its content bounds the descent: the children see the
      * box's rect as their clip, narrowed by whatever clipped their parent.

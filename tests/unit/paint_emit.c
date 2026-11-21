@@ -98,6 +98,8 @@ static const cf_text_content label_text = {
     .stack = {.fonts = mono_stack, .count = 1u},
     .text = {label_bytes, (uint32_t)(sizeof label_bytes - 1u)}};
 
+static const cf_image_content image_content = {.texture = 7u, .width = 32.0f, .height = 16.0f};
+
 static cf_rect box_at(float x, float y, float width, float height) {
     return (cf_rect){.x = x, .y = y, .width = width, .height = height};
 }
@@ -501,6 +503,48 @@ static void text_culls_per_line_inside_a_clip(void) {
     CF_CHECK(list.commands[0].kind == CF_COMMAND_TEXT, "and the command is text");
 }
 
+static void an_image_paints_its_texture_into_its_box(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.node_count = 1u;
+    f.measures[0] = cf_image_measure;
+    f.measure_data[0] = (void *)&image_content;
+    f.rects[0] = box_at(10.0f, 20.0f, 32.0f, 16.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 100.0f, 100.0f), &list);
+
+    CF_CHECK(list.count == 1u, "an image paints one command");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_IMAGE, "and it is an image");
+    CF_CHECK(list.commands[0].texture == 7u, "the texture the content names rides the command");
+    CF_NEAR(list.commands[0].rect.x, 10.0f);
+    CF_NEAR(list.commands[0].rect.y, 20.0f);
+    CF_NEAR(list.commands[0].rect.width, 32.0f);
+    CF_NEAR(list.commands[0].rect.height, 16.0f);
+}
+
+static void an_image_inside_a_clip_cuts_to_the_clip(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    const uint32_t image = append(&f, 0, cf_style_default());
+    f.measures[image] = cf_image_measure;
+    f.measure_data[image] = (void *)&image_content;
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[image] = box_at(80.0f, 10.0f, 32.0f, 16.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the clipped image is the only paint");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_IMAGE, "and it is an image");
+    CF_NEAR(list.commands[0].rect.x, 80.0f);
+    CF_NEAR(list.commands[0].rect.width, 20.0f);
+}
+
 int main(void) {
     printf("paint emit\n");
     CF_CHECK(cf_arena_init(&scratch, 65536u), "paint needs scratch");
@@ -523,6 +567,8 @@ int main(void) {
     CF_RUN(an_exhausted_scratch_paints_nothing_and_says_so);
     CF_RUN(a_truncated_list_keeps_the_commands_that_fit);
     CF_RUN(a_tree_or_list_that_is_not_there_paints_nothing);
+    CF_RUN(an_image_paints_its_texture_into_its_box);
+    CF_RUN(an_image_inside_a_clip_cuts_to_the_clip);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

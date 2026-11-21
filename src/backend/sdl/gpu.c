@@ -13,6 +13,11 @@
 typedef struct sdl_state {
     SDL_Window *window;
     SDL_Renderer *renderer;
+    /* The uploads the stream's image commands name, by id minus one. The
+     * table lives as long as the window does, outside every frame arena. */
+    SDL_Texture **textures;
+    uint32_t texture_count;
+    uint32_t texture_capacity;
 } sdl_state;
 
 /*
@@ -155,10 +160,61 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
         return;
     }
 
-    draw_border(state->renderer, rect, radius,
-                (cf_edges){command->widths.left * scale, command->widths.top * scale,
-                           command->widths.right * scale, command->widths.bottom * scale},
-                color);
+    if (command->kind == CF_COMMAND_BORDER) {
+        draw_border(state->renderer, rect, radius,
+                    (cf_edges){command->widths.left * scale, command->widths.top * scale,
+                               command->widths.right * scale, command->widths.bottom * scale},
+                    color);
+        return;
+    }
+
+    if (command->kind == CF_COMMAND_IMAGE) {
+        const uint32_t id = command->texture;
+
+        if (id != 0u && id <= state->texture_count) {
+            SDL_RenderTexture(state->renderer, state->textures[id - 1u], NULL, &rect);
+        }
+    }
+}
+
+/* RGBA8888, one byte per channel, row after row - the layout create_texture
+ * promises. The id is the table position plus one, so zero can name refusal. */
+static uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height,
+                                   const void *pixels) {
+    sdl_state *state = user_data;
+
+    if (state == NULL || width == 0u || height == 0u || pixels == NULL) {
+        return 0u;
+    }
+
+    if (state->texture_count == state->texture_capacity) {
+        const uint32_t capacity = state->texture_capacity == 0u ? 8u : state->texture_capacity * 2u;
+        SDL_Texture **textures = SDL_realloc(state->textures, (size_t)capacity * sizeof *textures);
+
+        if (textures == NULL) {
+            return 0u;
+        }
+
+        state->textures = textures;
+        state->texture_capacity = capacity;
+    }
+
+    SDL_Texture *texture = SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_RGBA8888,
+                                             SDL_TEXTUREACCESS_STATIC, (int)width, (int)height);
+
+    if (texture == NULL) {
+        cf_logf(CF_LOG_BACKEND, "backend: no texture: %s", SDL_GetError());
+        return 0u;
+    }
+
+    if (!SDL_UpdateTexture(texture, NULL, pixels, (int)(width * 4u))) {
+        SDL_DestroyTexture(texture);
+        cf_logf(CF_LOG_BACKEND, "backend: texture pixels did not upload: %s", SDL_GetError());
+        return 0u;
+    }
+
+    state->textures[state->texture_count++] = texture;
+    return state->texture_count;
 }
 
 static void draw_submit(void *user_data, const cf_command *commands, uint32_t count) {
@@ -252,5 +308,6 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .user_data = state,
                         .submit = draw_submit,
-                        .present = sdl_present};
+                        .present = sdl_present,
+                        .create_texture = sdl_create_texture};
 }
