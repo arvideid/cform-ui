@@ -673,6 +673,39 @@ static void child_percentages_read_the_content_box_inside_the_frame(void) {
     CF_NEAR(f.rects[leaf].y, 14.0f);
 }
 
+static void an_offer_free_spine_stays_exact_below_a_percent_padded_root(void) {
+    fixture f;
+    const uint32_t root = begin_box(&f, 300.0f, 100.0f);
+    f.styles[root].padding = (cf_box){.left = CF_PERCENT(10),
+                                      .top = CF_PERCENT(10),
+                                      .right = CF_PERCENT(10),
+                                      .bottom = CF_PERCENT(10)};
+
+    const uint32_t middle = append(&f, root, cf_style_default());
+    const uint32_t inner = append(&f, middle, cf_style_default());
+    const uint32_t first = append(&f, inner, fixed_box(50.0f, 20.0f));
+    const uint32_t second = append(&f, inner, fixed_box(50.0f, 20.0f));
+    arrange_in(&f, 300.0f, 100.0f);
+
+    /* The chain below the root answers the same whatever room it is offered,
+     * so its measures are cached and reused across the passes that re-ask
+     * them; the root's percentage padding keeps its own answers keyed by
+     * offer. Either way the boxes land where a fresh measure puts them, and
+     * the auto boxes stretch to the definite cross the root's content height
+     * (100 less the 30 percent padding each way) leaves them. */
+    CF_NEAR(f.rects[middle].x, 30.0f);
+    CF_NEAR(f.rects[middle].y, 30.0f);
+    CF_NEAR(f.rects[middle].width, 100.0f);
+    CF_NEAR(f.rects[middle].height, 40.0f);
+    CF_NEAR(f.rects[inner].height, 40.0f);
+    CF_NEAR(f.rects[first].x, 30.0f);
+    CF_NEAR(f.rects[first].y, 30.0f);
+    CF_NEAR(f.rects[first].width, 50.0f);
+    CF_NEAR(f.rects[first].height, 20.0f);
+    CF_NEAR(f.rects[second].x, 80.0f);
+    CF_NEAR(f.rects[second].width, 50.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -704,6 +737,7 @@ int main(void) {
     CF_RUN(baseline_group_counts_margins_into_the_ascent);
     CF_RUN(refused_scratch_leaves_the_subtree_as_it_was);
     CF_RUN(a_tree_or_rect_array_that_is_not_there_changes_nothing);
+    CF_RUN(an_offer_free_spine_stays_exact_below_a_percent_padded_root);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

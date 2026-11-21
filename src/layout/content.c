@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "layout/internal.h"
 
 /*
@@ -57,28 +59,207 @@ cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base
 }
 
 /*
+ * The question a measuring pass asks: one slot, one intrinsic kind, one
+ * content offer. The staging bytes start zeroed so the alignment gaps
+ * ride the same hash every pass.
+ */
+static uint32_t measure_hash(uint32_t slot, uint32_t mode, cf_available constraint) {
+    struct {
+        uint32_t slot;
+        uint32_t mode;
+        cf_available constraint;
+    } key;
+
+    memset(&key, 0, sizeof key);
+
+    key.slot = slot;
+    key.mode = mode;
+    key.constraint = constraint;
+
+    return cf_hash_bytes(&key, sizeof key);
+}
+
+/* The slot a measuring pass asks about first. */
+static bool measure_same(const measure_cell *cell, uint32_t slot, uint32_t mode,
+                         cf_available constraint) {
+    return cell->slot == slot && cell->mode == mode &&
+           cell->constraint.width.kind == constraint.width.kind &&
+           cell->constraint.width.value == constraint.width.value &&
+           cell->constraint.height.kind == constraint.height.kind &&
+           cell->constraint.height.value == constraint.height.value;
+}
+
+/* Stores an answer found after the recursion below it may have filled
+ * cells, so the probe restarts from the hash rather than a spot taken
+ * before the descent. The caller guarantees an empty cell exists. */
+static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
+                          cf_available constraint, cf_size extent) {
+    /* The memo extends as the queries run: an answer stored here is the
+     * answer the query that found it would have returned, so the const
+     * guards the tree and the rects, not the table of answers. */
+    layout_ctx *const table = (layout_ctx *)ctx;
+
+    uint32_t at = measure_hash(slot, mode, constraint) & (table->measure_capacity - 1u);
+
+    while (table->measures[at].slot != MEASURE_SLOT_NONE) {
+        at = (at + 1u) & (table->measure_capacity - 1u);
+    }
+
+    table->measures[at] =
+        (measure_cell){.slot = slot, .mode = mode, .constraint = constraint, .extent = extent};
+    table->measure_count++;
+
+    /* A full table has no empty cell to end a probe, so every later ask
+     * recomputes rather than walks the table forever. */
+    table->measure_full = table->measure_count == table->measure_capacity;
+}
+
+/* A percentage on any of these resolves against the room a pass offers,
+ * which is exactly the dependence the flag below rules out. */
+static bool length_is_percent(cf_length length) {
+    return length.kind == CF_LENGTH_PERCENT;
+}
+
+static bool box_has_percent(cf_box box) {
+    return length_is_percent(box.left) || length_is_percent(box.top) ||
+           length_is_percent(box.right) || length_is_percent(box.bottom);
+}
+
+static bool style_offers_nothing(const cf_style *style) {
+    return style->wrap == CF_NO_WRAP && !box_has_percent(style->padding) &&
+           !box_has_percent(style->border) && !box_has_percent(style->margin) &&
+           !length_is_percent(style->column_gap) && !length_is_percent(style->row_gap) &&
+           !length_is_percent(style->min_width) && !length_is_percent(style->max_width) &&
+           !length_is_percent(style->min_height) && !length_is_percent(style->max_height);
+}
+
+/*
+ * The table pays when subtrees are asked once for every level above them,
+ * which only a tree this tall can do; a shallow tree re-asks nothing and
+ * would only pay for the probes.
+ */
+#define CACHE_MIN_DEPTH 3u
+
+/*
+ * Whether the intrinsic extent of a subtree answers the same whatever room
+ * it is offered. A wrapping container breaks its lines at the offer, a
+ * measure callback wraps its content at the width it is handed, a grid
+ * distributes the offer across its tracks, and a percentage on the frame,
+ * the gaps or the bounds resolves against it. A node free of all of those
+ * measures to one extent, and so does every node below it that is free too.
+ * The height returned is the longest run of edges down from the slot.
+ */
+static uint32_t measure_offers_nothing(layout_ctx *ctx, uint32_t slot) {
+    const cf_style *style = &ctx->tree->styles[slot];
+    bool unconstrained = style_offers_nothing(style) &&
+                         (ctx->tree->measures == NULL || ctx->tree->measures[slot] == NULL) &&
+                         style->display != CF_DISPLAY_GRID;
+
+    uint32_t height = 0u;
+    const uint32_t first = ctx->tree->child_start[slot];
+    const uint32_t last = ctx->tree->child_start[slot + 1u];
+
+    for (uint32_t i = first; i < last; ++i) {
+        const uint32_t child_height = measure_offers_nothing(ctx, ctx->tree->child_slots[i]);
+
+        if (child_height > height) {
+            height = child_height;
+        }
+
+        unconstrained = unconstrained && ctx->offer_free[ctx->tree->child_slots[i]];
+    }
+
+    ctx->offer_free[slot] = unconstrained;
+
+    return height + 1u;
+}
+
+void measure_cache_init(layout_ctx *ctx) {
+    uint32_t capacity = 16u;
+
+    while ((uint64_t)capacity < (uint64_t)ctx->tree->node_count * 3u) {
+        capacity *= 2u;
+    }
+
+    bool *offers = cf_alloc(ctx->scratch, (size_t)ctx->tree->node_count * sizeof *offers);
+
+    if (offers == NULL) {
+        return;
+    }
+
+    ctx->offer_free = offers;
+
+    if (measure_offers_nothing(ctx, ctx->root) < CACHE_MIN_DEPTH) {
+        return;
+    }
+
+    measure_cell *cells = cf_alloc(ctx->scratch, capacity * sizeof *cells);
+
+    if (cells == NULL) {
+        return;
+    }
+
+    memset(cells, 0xFF, capacity * sizeof *cells);
+
+    ctx->measures = cells;
+    ctx->measure_capacity = capacity;
+}
+
+/*
  * The content extent of a node: what a callback reports, what its children
- * fill, or nothing at all when it is a leaf nobody can measure.
+ * fill, or nothing at all when it is a leaf nobody can measure. The answer
+ * is a pure function of the slot, the intrinsic kind and the content offer,
+ * so the table serves every ask that repeats one, whatever pass it comes
+ * from.
  */
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint) {
-    cf_size measured;
+    const uint32_t mode_word = (uint32_t)mode;
+    const bool cached = ctx->measures != NULL && !ctx->measure_full;
 
-    if (measured_extent(ctx, slot, constraint, mode, &measured)) {
-        return measured;
+    /* An offer-free subtree answers one extent for every room it is
+     * offered, so its cached asks share a canonical key: the table then
+     * holds one entry per slot and kind instead of one per ancestor. The
+     * computation itself still sees the real constraint, whose percent
+     * lengths resolve against it. */
+    cf_available key = constraint;
+
+    if (cached && ctx->offer_free[slot]) {
+        key = (cf_available){.width = CF_AUTO, .height = CF_AUTO};
     }
 
-    if (child_count(ctx, slot) == 0u) {
-        return (cf_size){0};
+    if (cached) {
+        uint32_t at = measure_hash(slot, mode_word, key) & (ctx->measure_capacity - 1u);
+
+        while (ctx->measures[at].slot != MEASURE_SLOT_NONE) {
+            if (measure_same(&ctx->measures[at], slot, mode_word, key)) {
+                return ctx->measures[at].extent;
+            }
+
+            at = (at + 1u) & (ctx->measure_capacity - 1u);
+        }
     }
 
-    if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
-        return grid_extent_of(ctx, slot, constraint, mode);
+    cf_size extent = {0};
+
+    if (!measured_extent(ctx, slot, constraint, mode, &extent)) {
+        if (child_count(ctx, slot) == 0u) {
+            extent = (cf_size){0};
+        } else if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
+            extent = grid_extent_of(ctx, slot, constraint, mode);
+        } else {
+            const flex_pass pass = {
+                .constraint = constraint, .intrinsic = mode, .mode = FLEX_MEASURE};
+
+            extent = flex_extent_of(ctx, slot, &pass);
+        }
     }
 
-    const flex_pass pass = {.constraint = constraint, .intrinsic = mode, .mode = FLEX_MEASURE};
+    if (cached) {
+        measure_store(ctx, slot, mode_word, key, extent);
+    }
 
-    return flex_extent_of(ctx, slot, &pass);
+    return extent;
 }
 
 cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,

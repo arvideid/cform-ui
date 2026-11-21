@@ -17,7 +17,7 @@
 #define CELL_HEIGHT 20.0f
 #define NS_PER_S 1000000000.0
 #define NS_PER_MS 1000000.0
-#define SCRATCH_CAPACITY 1048576u
+#define SCRATCH_CAPACITY (4u * 1024u * 1024u)
 
 static cf_style styles[MAX_NODES];
 static uint32_t child_start[MAX_NODES + 1u];

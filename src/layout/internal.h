@@ -11,11 +11,38 @@
  */
 typedef enum flex_mode { FLEX_ARRANGE, FLEX_MEASURE } flex_mode;
 
+/*
+ * One cached intrinsic answer: the content extent a measuring pass found
+ * for a slot at one content offer. The slot at MEASURE_SLOT_NONE ends a
+ * probe; nothing else in the cell is read before the slot matches.
+ */
+typedef struct measure_cell {
+    uint32_t slot;
+    uint32_t mode;
+    cf_available constraint;
+    cf_size extent;
+} measure_cell;
+
+#define MEASURE_SLOT_NONE UINT32_MAX
+
 typedef struct layout_ctx {
     cf_arena *scratch;
     const cf_tree *tree;
     cf_rect *rects;
     uint32_t root;
+    /* The intrinsic answers cached this layout. Measuring passes re-ask
+     * the same question at every level above a node, and the answers live
+     * only as long as the layout does - the table extends as the queries
+     * that fill it run. */
+    measure_cell *measures;
+    uint32_t measure_capacity;
+    uint32_t measure_count;
+    bool measure_full;
+    /* One flag per slot: whether the subtree's intrinsic measure cannot
+     * depend on the room it is offered, so its cached asks share one key.
+     * Set once per layout from the root; reads stay inside the slots the
+     * sweep reached. */
+    bool *offer_free;
 } layout_ctx;
 
 /*
@@ -142,10 +169,18 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
 
 /*
  * The content box of a node: its measure callback's answer when it has one and
- * its children's flex extent when it does not. Margins are not included.
+ * its children's flex extent when it does not. Margins are not included. The
+ * answer is a pure function of the slot, the intrinsic kind and the content
+ * offer, so the answer table serves every ask that repeats one.
  */
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint);
+
+/* Sized to hold every slot's measured questions a few times over, from the
+ * scratch, and to say which subtrees answer the same whatever they are
+ * offered. A table the scratch cannot hold is no cache: the passes then
+ * recompute, which is only slower. */
+void measure_cache_init(layout_ctx *ctx);
 
 /* Padding and border as one set of resolved edges, summed per side. */
 cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base);

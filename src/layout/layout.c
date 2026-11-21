@@ -174,7 +174,13 @@ void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_availab
         return;
     }
 
-    const layout_ctx ctx = {.scratch = scratch, .tree = tree, .rects = rects, .root = root};
+    /* The cache and the per-pass tables live only as long as the layout:
+     * a caller that runs layouts back to back on one arena finds it as it
+     * left it. */
+    const size_t mark = cf_arena_mark(scratch);
+
+    layout_ctx ctx = {.scratch = scratch, .tree = tree, .rects = rects, .root = root};
+    measure_cache_init(&ctx);
     const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
     /* Nothing is inherited above the root: it frames its own box, so this
      * block is never read. */
@@ -182,4 +188,6 @@ void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_availab
 
     layout_subtree(&ctx, root, available, undecided,
                    root_origin(&tree->styles[root], available, origin), nowhere);
+
+    cf_arena_rewind(scratch, mark);
 }
