@@ -64,6 +64,17 @@ add_library(cf_layout STATIC
 
 target_link_libraries(cf_layout PUBLIC cf_style cf_base)
 
+# cf_text turns borrowed text into measured extents: line breaking, min and
+# max content, the ellipsis cap. It reads fonts through a table of pen
+# distances and never rasterizes - a real font backend answers the same
+# table, which is what keeps this layer headless.
+add_library(cf_text STATIC
+    src/text/measure.c
+    src/text/utf8.c
+)
+
+target_link_libraries(cf_text PUBLIC cf_base)
+
 # cf_paint turns placed boxes into the flat command stream backends read: no
 # window, no device pixels, no backend - the stream is the whole contract.
 add_library(cf_paint STATIC
@@ -103,7 +114,7 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint SDL3::SDL3)
 endif()
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_paint cf_backend_headless)
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_text cf_paint cf_backend_headless)
 
 if(CFORM_WITH_SDL_BACKEND)
     list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)

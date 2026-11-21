@@ -78,6 +78,17 @@ typedef struct cf_length {
 #define CF_PERCENT(portion) ((cf_length){.kind = CF_LENGTH_PERCENT, .value = (portion)})
 #define CF_FR(shares) ((cf_length){.kind = CF_LENGTH_FR, .value = (shares)})
 
+/*
+ * The space a node is offered. AUTO on an axis means indefinite: the node
+ * measures its content and the caller accepts whatever comes out. A definite
+ * length caps the axis, and a node that asks for more is shrunk or clipped to
+ * it by the flex rules, never by this vocabulary.
+ */
+typedef struct cf_available {
+    cf_length width;
+    cf_length height;
+} cf_available;
+
 typedef enum cf_intrinsic { CF_INTRINSIC_MIN_CONTENT, CF_INTRINSIC_MAX_CONTENT } cf_intrinsic;
 
 /* A color a caller may decline to state. */
@@ -85,6 +96,12 @@ typedef struct cf_opt_color {
     bool present;
     cf_color value;
 } cf_opt_color;
+
+/* A count a caller may decline to state. */
+typedef struct cf_opt_u32 {
+    bool present;
+    uint32_t value;
+} cf_opt_u32;
 
 /*
  * Borrowed text. The chars are not guaranteed null-terminated, which is what

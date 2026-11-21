@@ -1,0 +1,295 @@
+#include <float.h>
+
+#include "cf/text.h"
+#include "utf8.h"
+
+/* The codepoints a walk reads as itself. */
+#define SPACE 0x20u
+#define HYPHEN 0x2Du
+#define LINE_FEED 0x0Au
+#define CARRIAGE_RETURN 0x0Du
+
+static bool is_forced(uint32_t codepoint) {
+    return codepoint == LINE_FEED || codepoint == CARRIAGE_RETURN;
+}
+
+/* A hyphen may end its line after itself, and so may an east-asian glyph:
+ * CJK punctuation through unified ideographs, the compatibility ideographs,
+ * the fullwidth forms. */
+static bool breaks_after(uint32_t codepoint) {
+    return codepoint == HYPHEN || (codepoint >= 0x2E80u && codepoint <= 0x9FFFu) ||
+           (codepoint >= 0xF900u && codepoint <= 0xFAFFu) ||
+           (codepoint >= 0xFF00u && codepoint <= 0xFF60u);
+}
+
+/* The walk carries the active font and the previous codepoint from glyph to
+ * glyph; both lay down again where the font switches, since kerning across
+ * a switch belongs to no font. */
+typedef struct text_pen {
+    const cf_font *font;
+    uint32_t previous;
+} text_pen;
+
+/* The first font of the stack that draws the codepoint, or the primary when
+ * none does: a glyph missing everywhere still advances the pen, by whatever
+ * the primary says the hole costs. */
+static const cf_font *font_of(const cf_text_stack *stack, uint32_t codepoint) {
+    for (uint32_t at = 0u; at < stack->count; ++at) {
+        if (stack->fonts[at].ops->has_glyph(stack->fonts[at].handle, codepoint)) {
+            return &stack->fonts[at];
+        }
+    }
+    return &stack->fonts[0];
+}
+
+static float step_pen(const cf_text_stack *stack, text_pen *pen, uint32_t codepoint) {
+    const cf_font *font = font_of(stack, codepoint);
+    const uint32_t previous = font == pen->font ? pen->previous : 0u;
+
+    *pen = (text_pen){.font = font, .previous = codepoint};
+    return font->ops->advance(font->handle, codepoint, previous);
+}
+
+/*
+ * One line's greedy fit from `start` within `max_width`: the line ends at
+ * the last space that fit, after a hyphen or east-asian glyph that fit, at
+ * the text's own break, or after the last glyph that fit when no break
+ * offers itself. *out_next is where the next line starts; the answer is the
+ * width the line shows - everything through its last glyph that carried
+ * ink, so the spaces a break would leave behind are not counted and the
+ * spaces between words are. A space wider than the line hangs instead of
+ * wrapping: only a glyph that carries ink can overflow.
+ */
+static float scan_line(const cf_text_stack *stack, cf_string text, uint32_t start, float max_width,
+                       uint32_t *out_next) {
+    float width = 0.0f; /* everything the scan consumed, spaces included */
+    float inked = 0.0f; /* width through the last glyph that carried ink */
+    uint32_t break_at = start;
+    float break_width = 0.0f;
+    bool may_break = false;
+    uint32_t at = start;
+    uint32_t next = 0u;
+    text_pen pen = {0};
+
+    while (at < text.length) {
+        const uint32_t codepoint = utf8_decode_at(text, at, &next);
+
+        if (is_forced(codepoint)) {
+            *out_next = next;
+            if (codepoint == CARRIAGE_RETURN && next < text.length && text.chars[next] == '\n') {
+                *out_next = next + 1u;
+            }
+            return inked;
+        }
+
+        if (codepoint == SPACE) {
+            break_at = at;
+            break_width = inked;
+            may_break = true;
+            width += step_pen(stack, &pen, codepoint);
+            at = next;
+            continue;
+        }
+
+        const float advance = step_pen(stack, &pen, codepoint);
+
+        if (width + advance > max_width) {
+            if (may_break) {
+                *out_next = break_at;
+                return break_width;
+            }
+            if (inked > 0.0f) {
+                *out_next = at;
+                return inked;
+            }
+            /* Nothing fits and nothing offers a break: the overflowing glyph
+             * opens the line it is too wide for. */
+            *out_next = next;
+            return advance;
+        }
+
+        width += advance;
+        inked = width;
+        if (breaks_after(codepoint)) {
+            /* The breaking glyph rides on the line it ends, spaces inside
+             * it included. */
+            break_at = next;
+            break_width = width;
+            may_break = true;
+        }
+        at = next;
+    }
+
+    *out_next = text.length;
+    return inked;
+}
+
+/* The walk's last line redrawn to make room for the ellipsis: the glyphs
+ * that fit beside it, then the ellipsis itself. */
+static float truncated_width(const cf_text_content *content, uint32_t start, float max_width) {
+    const cf_text_stack *stack = &content->stack;
+    const cf_font *ellipsis = font_of(stack, CF_ELLIPSIS);
+    const float ellipsis_width = ellipsis->ops->advance(ellipsis->handle, CF_ELLIPSIS, 0u);
+    const float budget = max_width > ellipsis_width ? max_width - ellipsis_width : 0.0f;
+
+    uint32_t next = 0u;
+    return scan_line(stack, content->text, start, budget, &next) + ellipsis_width;
+}
+
+/* The lines a walk lays out: how many remain, the widest of them, and
+ * whether the cap closed the last one with the ellipsis. */
+typedef struct text_extent {
+    uint32_t lines;
+    float widest;
+    bool ellipsized;
+} text_extent;
+
+static text_extent extent_of(const cf_text_content *content, float max_width) {
+    const cf_string text = content->text;
+    const cf_text_stack *stack = &content->stack;
+    const uint32_t limit = content->max_lines.present && content->max_lines.value < UINT32_MAX
+                               ? content->max_lines.value
+                               : UINT32_MAX;
+
+    text_extent extent = {0u, 0.0f, false};
+    float settled = 0.0f; /* the widest of the lines before the one pending */
+    float pending = 0.0f; /* the last line's width, held until the walk knows what follows it */
+    uint32_t offset = 0u;
+    uint32_t last_start = 0u;
+    uint32_t next = 0u;
+
+    while (offset < text.length) {
+        /* The spaces a break left behind open no line. */
+        while (offset < text.length && utf8_decode_at(text, offset, &next) == SPACE) {
+            offset = next;
+        }
+        if (offset >= text.length) {
+            break;
+        }
+
+        if (extent.lines == limit) {
+            /* The cap is reached and the text continues: the line just laid
+             * out is the last one, and it closes with the ellipsis inside
+             * its own width. A cap of no lines leaves nothing to close. */
+            if (content->ellipsis && extent.lines > 0u) {
+                pending = truncated_width(content, last_start, max_width);
+                extent.ellipsized = true;
+            }
+            break;
+        }
+
+        last_start = offset;
+        settled = settled > pending ? settled : pending;
+        pending = scan_line(stack, text, offset, max_width, &offset);
+        extent.lines++;
+    }
+
+    settled = settled > pending ? settled : pending;
+    return (text_extent){.lines = extent.lines, .widest = settled, .ellipsized = extent.ellipsized};
+}
+
+/* The intrinsic minimum: the widest run between break opportunities, and
+ * the count of runs - wrapped at that width, every run stands alone. */
+static text_extent runs_of(const cf_text_stack *stack, cf_string text) {
+    text_extent extent = {0u, 0.0f, false};
+    float run = 0.0f;
+    bool open = false;
+    uint32_t at = 0u;
+    uint32_t next = 0u;
+    text_pen pen = {0};
+
+    while (at < text.length) {
+        const uint32_t codepoint = utf8_decode_at(text, at, &next);
+
+        if (is_forced(codepoint)) {
+            if (open) {
+                extent.lines++;
+                open = false;
+            }
+            if (run > extent.widest) {
+                extent.widest = run;
+            }
+            run = 0.0f;
+            pen = (text_pen){0};
+            at = next;
+            if (codepoint == CARRIAGE_RETURN && at < text.length && text.chars[at] == '\n') {
+                ++at;
+            }
+            continue;
+        }
+
+        if (codepoint == SPACE) {
+            if (open) {
+                extent.lines++;
+                open = false;
+            }
+            if (run > extent.widest) {
+                extent.widest = run;
+            }
+            run = 0.0f;
+            pen = (text_pen){0};
+            at = next;
+            continue;
+        }
+
+        run += step_pen(stack, &pen, codepoint);
+        if (breaks_after(codepoint)) {
+            /* The glyph ends the run it belongs to: a hyphen stays on the
+             * line it closes, an east-asian glyph the same. */
+            if (run > extent.widest) {
+                extent.widest = run;
+            }
+            extent.lines++;
+            run = 0.0f;
+            pen = (text_pen){0};
+        } else {
+            open = true;
+        }
+        at = next;
+    }
+
+    if (run > extent.widest) {
+        extent.widest = run;
+    }
+    if (open) {
+        extent.lines++;
+    }
+    return extent;
+}
+
+/* A walk needs a font table whose every font answers all three questions. */
+static bool stack_usable(const cf_text_stack *stack) {
+    if (stack->fonts == NULL || stack->count == 0u) {
+        return false;
+    }
+
+    for (uint32_t at = 0u; at < stack->count; ++at) {
+        const cf_text_ops *ops = stack->fonts[at].ops;
+        if (ops == NULL || ops->metrics == NULL || ops->advance == NULL || ops->has_glyph == NULL) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+cf_size cf_text_measure(void *user_data, cf_available available, cf_intrinsic kind) {
+    const cf_text_content *content = user_data;
+
+    if (content == NULL || !stack_usable(&content->stack) || content->text.chars == NULL ||
+        content->text.length == 0u) {
+        return (cf_size){0};
+    }
+
+    const cf_font *primary = &content->stack.fonts[0];
+    const float line_height = primary->ops->metrics(primary->handle).line_height;
+
+    if (kind == CF_INTRINSIC_MIN_CONTENT) {
+        const text_extent runs = runs_of(&content->stack, content->text);
+        return (cf_size){.width = runs.widest, .height = (float)runs.lines * line_height};
+    }
+
+    const float max_width = available.width.kind == CF_LENGTH_PX ? available.width.value : FLT_MAX;
+    const text_extent extent = extent_of(content, max_width);
+    return (cf_size){.width = extent.widest, .height = (float)extent.lines * line_height};
+}

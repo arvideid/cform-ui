@@ -23,6 +23,11 @@ cf_add_layer_test(base_log unit/base_log.c cf_base)
 cf_add_layer_test(style_resolve unit/style_resolve.c cf_style)
 cf_add_layer_test(layout_flex unit/layout_flex.c cf_layout)
 cf_add_layer_test(layout_cases unit/layout_cases.c cf_layout)
+cf_add_layer_test(text_measure unit/text_measure.c cf_text)
+
+# The measure slot is the seam layout and text share: this one links both
+# layers and asserts the height a wrapped label contributes to its parent.
+cf_add_layer_test(text_layout unit/text_layout.c cf_layout cf_text)
 cf_add_layer_test(paint_emit unit/paint_emit.c cf_paint)
 cf_add_layer_test(backend_record unit/backend_record.c cf_backend_headless)
 

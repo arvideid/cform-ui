@@ -5,17 +5,6 @@
 #include "cf/style.h"
 
 /*
- * The space a node is offered. AUTO on an axis means indefinite: the node
- * measures its content and the caller accepts whatever comes out. A definite
- * length caps the axis, and a node that asks for more is shrunk or clipped to
- * it by the flex rules, never by this vocabulary.
- */
-typedef struct cf_available {
-    cf_length width;
-    cf_length height;
-} cf_available;
-
-/*
  * Content size of a node the engine cannot see into — text, an image, a
  * foreign subtree. `kind` says whether the caller wants the smallest the
  * content can be packed into or its natural extent; `available` carries the
