@@ -84,5 +84,6 @@ int main(void) {
                               .width = 32.0f,
                               .height = 32.0f};
 
-    cf_app_run(&(cf_app_config){.build = build, .backend = backend, .theme = theme});
+    cf_app_run(
+        &(cf_app_config){.build = build, .backend = backend, .theme = theme, .fonts = &fonts});
 }

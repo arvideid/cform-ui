@@ -1,0 +1,147 @@
+#include "internal.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/* The panel is a corner, not a windshield: the padding keeps its numbers off
+ * the edges and the width holds three labeled counts. */
+#define PANEL_WIDTH 168.0f
+#define PANEL_PADDING 8.0f
+#define PANEL_LINES 3u
+#define LINE_BYTES 32u
+
+/* The list the page painted through grows the same way the panel's own
+ * commands do, out of the frame arena. */
+#define FIRST_COMMANDS 64u
+
+/* A panel that reads on any page: the devtools dark, one edge, one ink. */
+static const cf_color PANEL_FILL = {30u, 32u, 36u, 235u};
+static const cf_color PANEL_EDGE = {80u, 84u, 92u, 255u};
+static const cf_color PANEL_INK = {232u, 232u, 232u, 255u};
+
+static float line_height(const cf_text_stack *fonts) {
+    if (fonts == NULL || fonts->count == 0u) {
+        return 0.0f;
+    }
+
+    const cf_font font = fonts->fonts[0];
+
+    if (font.handle == NULL || font.ops == NULL || font.ops->metrics == NULL) {
+        return 0.0f;
+    }
+
+    return font.ops->metrics(font.handle).line_height;
+}
+
+typedef struct panel_counts {
+    uint32_t nodes;
+    uint32_t dirty;
+} panel_counts;
+
+static panel_counts count_of(const cf_ctx *ctx) {
+    panel_counts counts = {0u, 0u};
+    const cf_tree *tree = cf_frame_tree(ctx);
+
+    if (tree == NULL) {
+        return counts;
+    }
+
+    counts.nodes = tree->node_count;
+
+    for (uint32_t slot = 0u; slot < tree->node_count; ++slot) {
+        if (cf_dirty(ctx, slot)) {
+            counts.dirty++;
+        }
+    }
+
+    return counts;
+}
+
+static bool list_room(cf_arena *arena, cf_command_list *out) {
+    if (out->count < out->capacity) {
+        return true;
+    }
+
+    const uint32_t capacity = out->capacity < FIRST_COMMANDS ? FIRST_COMMANDS : out->capacity * 2u;
+    cf_command *store = cf_alloc(arena, (size_t)capacity * sizeof *store);
+
+    if (store == NULL) {
+        return false;
+    }
+
+    out->commands = store;
+    out->capacity = capacity;
+    return true;
+}
+
+static void append_fill(cf_arena *arena, cf_command_list *out, cf_rect rect) {
+    if (!list_room(arena, out)) {
+        return;
+    }
+
+    out->commands[out->count++] =
+        (cf_command){.kind = CF_COMMAND_FILL, .rect = rect, .color = PANEL_FILL};
+}
+
+static void append_edge(cf_arena *arena, cf_command_list *out, cf_rect rect) {
+    if (!list_room(arena, out)) {
+        return;
+    }
+
+    out->commands[out->count++] = (cf_command){.kind = CF_COMMAND_BORDER,
+                                               .rect = rect,
+                                               .color = PANEL_EDGE,
+                                               .widths = (cf_edges){1.0f, 1.0f, 1.0f, 1.0f}};
+}
+
+/* One count, printed into bytes the frame arena holds through the submit the
+ * stream rides; the panel borrows them the way a label borrows its text. */
+static void append_count(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts,
+                         const char *format, uint32_t value, float at_y, float height) {
+    if (!list_room(&ctx->frame, out)) {
+        return;
+    }
+
+    char *bytes = cf_alloc(&ctx->frame, LINE_BYTES);
+
+    if (bytes == NULL) {
+        return;
+    }
+
+    const int written = snprintf(bytes, LINE_BYTES, format, value);
+
+    if (written <= 0) {
+        return;
+    }
+
+    out->commands[out->count++] =
+        (cf_command){.kind = CF_COMMAND_TEXT,
+                     .rect = {PANEL_PADDING, at_y, PANEL_WIDTH - PANEL_PADDING * 2.0f, height},
+                     .color = PANEL_INK,
+                     .text = {bytes, (uint32_t)written},
+                     .font = fonts->fonts[0]};
+}
+
+void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t painted,
+                          cf_command_list *out) {
+    if (ctx == NULL || out == NULL) {
+        return;
+    }
+
+    const float height = line_height(fonts);
+    const cf_rect panel = {0.0f, 0.0f, PANEL_WIDTH,
+                           PANEL_PADDING * 2.0f + height * (float)PANEL_LINES};
+
+    append_fill(&ctx->frame, out, panel);
+    append_edge(&ctx->frame, out, panel);
+
+    if (fonts == NULL || height == 0.0f) {
+        return;
+    }
+
+    const panel_counts counts = count_of(ctx);
+
+    append_count(ctx, out, fonts, "nodes %u", counts.nodes, PANEL_PADDING, height);
+    append_count(ctx, out, fonts, "dirty %u", counts.dirty, PANEL_PADDING + height, height);
+    append_count(ctx, out, fonts, "commands %u", painted, PANEL_PADDING + height * 2.0f, height);
+}

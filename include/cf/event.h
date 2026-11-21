@@ -21,6 +21,13 @@ typedef enum cf_event_type {
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;
 
 /*
+ * The shell's own key, in the value the SDL backend hands key events: F12 is
+ * scan-code 69 under the scan-code bit there. Nothing in the tree dispatches
+ * it; the shell that owns the loop reads it and toggles the inspector.
+ */
+#define CF_KEY_F12 0x40000045u
+
+/*
  * One input event. Position and wheel are in the coordinate space the rects
  * were laid out in; button and key carry whichever the type names. Target,
  * stopped and captured are dispatch state: the engine writes them as the

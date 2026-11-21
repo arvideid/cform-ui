@@ -108,6 +108,7 @@ add_library(cf_node STATIC
     src/node/input.c
     src/node/resolve.c
     src/node/scroll.c
+    src/node/semantic.c
     src/node/state.c
     src/node/tree.c
 )
@@ -135,6 +136,7 @@ target_link_libraries(cf_widget PUBLIC cf_node cf_paint cf_text)
 # asks to close. The inspector and the accessibility export land beside it as
 # they exist.
 add_library(cf_app STATIC
+    src/app/inspector.c
     src/app/loop.c
 )
 

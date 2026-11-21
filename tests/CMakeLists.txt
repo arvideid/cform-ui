@@ -85,6 +85,10 @@ cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
 # this case runs it once and reads the stream the whole pass leaves.
 cf_add_layer_test(node_frame_run unit/node_frame_run.c cf_node)
 
+# The semantic export is the retained tree read as roles and text: this case
+# declares one page and reads the dump a screen reader would walk.
+cf_add_layer_test(semantics unit/semantics.c cf_node)
+
 # The shell is the app layer's whole surface: this case plays a device that
 # hands an event, dries up, then quits, and counts the frames it got.
 cf_add_layer_test(app_run unit/app_run.c cf_app cf_backend_headless)

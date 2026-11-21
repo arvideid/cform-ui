@@ -257,6 +257,15 @@ typedef const cf_node *(*cf_build_fn)(cf_ctx *ctx);
 void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, cf_command_list *out);
 
 /*
+ * The view's semantic tree, one line per node in paint order and indented by
+ * depth: the role a screen reader walks, the text the node carries, the rect
+ * it sits at, and a `disabled` suffix where it is switched off. The bytes
+ * land in `out`, terminated, up to `capacity`. A context without a view, or
+ * a tree the buffer cannot hold, answers false with the lines that fit.
+ */
+bool cf_semantic_export(const cf_ctx *ctx, char *out, size_t capacity);
+
+/*
  * The topmost node whose rect holds the position - later siblings above
  * earlier ones, children above the parent, paint order read backwards.
  * CF_NO_LINK before cf_frame_layout has run this frame.

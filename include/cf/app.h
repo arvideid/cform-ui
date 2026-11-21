@@ -8,12 +8,15 @@
  * The shell a whole program fits in: the build that declares each frame's
  * page, the backend that reads its events and draws its stream, and the
  * theme the resolver styles the view with. The backend is a value, built
- * before the run starts; the theme is borrowed and must outlive it.
+ * before the run starts; the theme and the fonts are borrowed and must
+ * outlive the run. The fonts are the inspector's printing press: without
+ * them the F12 panel draws bare.
  */
 typedef struct cf_app_config {
     cf_build_fn build;
     cf_backend backend;
     const cf_theme *theme;
+    const cf_text_stack *fonts;
 } cf_app_config;
 
 /*
