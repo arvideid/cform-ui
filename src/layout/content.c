@@ -3,10 +3,16 @@
 /*
  * The length an axis has without measuring: the parent's verdict, then the
  * node's own declaration. False means the axis is content-based and has to be
- * measured before it exists.
+ * measured before it exists. A percentage declared inside a measuring pass is
+ * a percentage of the extent that pass exists to find, so it waits for the
+ * arranging pass, where the offer is the settled containing box.
  */
 static bool settled_length(cf_length verdict, cf_length declaration, cf_length constraint,
-                           float *out) {
+                           bool measuring, float *out) {
+    if (measuring && declaration.kind == CF_LENGTH_PERCENT) {
+        return definite_offer(verdict, out);
+    }
+
     return definite_offer(verdict, out) || cf_length_of(declaration, constraint, out);
 }
 
@@ -76,7 +82,7 @@ cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mod
 }
 
 cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
-                       cf_available constraint, cf_available verdict) {
+                       cf_available constraint, cf_available verdict, bool measuring) {
     const cf_style *style = &ctx->tree->styles[slot];
 
     float percent_base = 0.0f;
@@ -86,19 +92,20 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
 
     float width = 0.0f;
     float height = 0.0f;
-    const bool has_width = settled_length(verdict.width, style->width, constraint.width, &width);
+    const bool has_width =
+        settled_length(verdict.width, style->width, constraint.width, measuring, &width);
     const bool has_height =
-        settled_length(verdict.height, style->height, constraint.height, &height);
+        settled_length(verdict.height, style->height, constraint.height, measuring, &height);
 
     /* An axis that is already settled bounds the box the other axis measures
      * itself into, so a wrapped callback gets the width the node will have. */
-    const cf_available measuring = {
+    const cf_available content_offer = {
         .width = has_width ? CF_PX(width) : constraint.width,
         .height = has_height ? CF_PX(height) : constraint.height,
     };
 
     if (!has_width || !has_height) {
-        const cf_size content = content_extent_of(ctx, slot, mode, measuring);
+        const cf_size content = content_extent_of(ctx, slot, mode, content_offer);
 
         if (!has_width) {
             width = content.width + inset.left + inset.right;

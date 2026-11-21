@@ -74,7 +74,7 @@ static float absolute_size(const layout_ctx *ctx, uint32_t slot, cf_available co
         } else {
             const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
             const cf_size natural =
-                border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, undecided);
+                border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, undecided, false);
 
             size = axis->width_axis ? natural.width : natural.height;
         }

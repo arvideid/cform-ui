@@ -98,7 +98,8 @@ static cf_rect padding_box(cf_rect border_box, cf_edges frame) {
  */
 void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
                     cf_available verdict, cf_point origin, cf_rect containing) {
-    const cf_size border = border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, verdict);
+    const cf_size border =
+        border_size_of(ctx, slot, CF_INTRINSIC_MAX_CONTENT, constraint, verdict, false);
     const cf_style *style = &ctx->tree->styles[slot];
     /* A root's own margin and insets were counted before the recursion began,
      * because nothing above it places it. */

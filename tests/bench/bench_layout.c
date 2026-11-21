@@ -38,9 +38,12 @@ static cf_tree tree_of(uint32_t node_count) {
 /*
  * A complete binary tree of alternating rows and columns, a third of the
  * branches growing into the leftover space and a seventh claiming half the
- * width: the shape a widget tree is close to, and the deep case.
+ * width: the shape a widget tree is close to, and the deep case. The root
+ * states the width it is offered because an auto one would shrink-wrap to the
+ * content, and a 50% branch reads as auto while its ancestor's extent is the
+ * answer still being measured.
  */
-static void build_deep_tree(uint32_t node_count) {
+static void build_deep_tree(uint32_t node_count, cf_available offer) {
     uint32_t edge = 0u;
 
     for (uint32_t slot = 0u; slot < node_count; ++slot) {
@@ -48,6 +51,11 @@ static void build_deep_tree(uint32_t node_count) {
         style.direction = slot % 2u == 0u ? CF_DIRECTION_ROW : CF_DIRECTION_COLUMN;
         style.column_gap = CF_PX(4.0f);
         style.row_gap = CF_PX(4.0f);
+
+        if (slot == 0u) {
+            style.width = offer.width;
+            style.height = offer.height;
+        }
 
         if (slot > 0u && slot % 3u == 0u) {
             style.flex_grow = 1.0f;
@@ -147,7 +155,7 @@ static double layout_fastest_ms(const cf_tree *tree, cf_available offer, uint32_
  */
 static void bench_deep_tree(cf_available offer) {
     for (uint32_t nodes = DEEP_FIRST_NODES; nodes <= MAX_NODES; nodes *= 2u) {
-        build_deep_tree(nodes);
+        build_deep_tree(nodes, offer);
         const cf_tree tree = tree_of(nodes);
         const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 

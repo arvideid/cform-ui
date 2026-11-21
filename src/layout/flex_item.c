@@ -22,6 +22,21 @@ static void axes_of_size(const flex_context *f, cf_size box, float *main, float 
 }
 
 /*
+ * A declared size the item can use as-is. A percentage measured while the
+ * pass is still looking for the item's extent is a percentage of the answer
+ * the pass exists to find, so it reads as auto here; the arranging pass that
+ * follows resolves it against the settled box.
+ */
+static bool declared_size(const flex_context *f, cf_length declaration, cf_length offer,
+                          float *out) {
+    if (f->measuring && declaration.kind == CF_LENGTH_PERCENT) {
+        return false;
+    }
+
+    return cf_length_of(declaration, offer, out);
+}
+
+/*
  * §9.3: reversing a direction moves which physical edge is main-start. §9.4
  * does the same for cross-start when the wrap is reversed, and only then -
  * reversing the main axis leaves the block and inline directions alone.
@@ -71,15 +86,15 @@ static void measure_item(const flex_context *f, flex_item *item) {
     /* §9.2.1 steps 3-5: flex-basis, then the declared main size, then the
      * content. Nothing declared means nothing measured yet either. */
     float declared;
-    if (cf_length_of(child->flex_basis, f->main_offer, &declared) ||
-        cf_length_of(main_declared, f->main_offer, &declared)) {
+    if (declared_size(f, child->flex_basis, f->main_offer, &declared) ||
+        declared_size(f, main_declared, f->main_offer, &declared)) {
         item->basis = clamp_non_negative(declared);
     } else {
         float content_main;
         float content_cross;
         axes_of_size(f,
                      border_size_of(f->ctx, item->slot, f->intrinsic, f->constraint,
-                                    verdict_for(f, CF_AUTO, CF_AUTO)),
+                                    verdict_for(f, CF_AUTO, CF_AUTO), f->measuring),
                      &content_main, &content_cross);
         item->basis = content_main;
         item->cross = content_cross;
@@ -99,7 +114,7 @@ static void measure_item(const flex_context *f, flex_item *item) {
     item->main = item->hypothetical_main;
 
     float cross_settled;
-    item->cross_is_auto = !cf_length_of(cross_declared, f->cross_offer, &cross_settled);
+    item->cross_is_auto = !declared_size(f, cross_declared, f->cross_offer, &cross_settled);
 
     if (!item->cross_is_auto) {
         item->cross =
@@ -116,7 +131,7 @@ static void measure_item_cross(const flex_context *f, flex_item *item) {
     float main;
     axes_of_size(f,
                  border_size_of(f->ctx, item->slot, CF_INTRINSIC_MAX_CONTENT, f->constraint,
-                                verdict_for(f, CF_PX(item->main), CF_AUTO)),
+                                verdict_for(f, CF_PX(item->main), CF_AUTO), false),
                  &main, &item->cross);
 
     item->cross = clamp_range(item->cross, item->min_cross, item->max_cross);

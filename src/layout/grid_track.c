@@ -96,7 +96,7 @@ static float item_weight(const grid_ctx *g, const grid_item *item, cf_intrinsic 
     }
 
     const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
-    const cf_size box = border_size_of(g->ctx, item->slot, mode, offer, undecided);
+    const cf_size box = border_size_of(g->ctx, item->slot, mode, offer, undecided, false);
     const cf_edges margin = cf_box_resolve(child->margin, g->percent_base);
 
     return width_axis ? box.width + margin.left + margin.right

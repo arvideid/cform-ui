@@ -146,10 +146,12 @@ cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base
 /*
  * The border box a node takes for itself: its content grown by its insets and
  * forced inside its own min and max. Margins are not included; a flex line
- * adds the ones it resolved.
+ * adds the ones it resolved. `measuring` says the offer is provisional - the
+ * pass is still looking for an extent - so percentage sizes wait for a pass
+ * that offers the settled containing box.
  */
 cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
-                       cf_available constraint, cf_available verdict);
+                       cf_available constraint, cf_available verdict, bool measuring);
 
 /* Flexbox §9.2 through §9.7 over slot's children. */
 cf_size flex_extent_of(const layout_ctx *ctx, uint32_t slot, const flex_pass *pass);
