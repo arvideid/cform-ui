@@ -44,7 +44,7 @@ void collect_lines(const flex_context *f, const flex_item *items, uint32_t count
 
     for (uint32_t i = 0; i < count; ++i) {
         flex_line *line = &lines[*line_count - 1u];
-        const float gap = line->count > 0u ? f->gap_main : 0.0f;
+        float gap = line->count > 0u ? f->gap_main : 0.0f;
         const float outer = item_outer_main(&items[i]);
         const bool overflow =
             one_per_line || (f->main_definite &&
@@ -54,6 +54,9 @@ void collect_lines(const flex_context *f, const flex_item *items, uint32_t count
             ++*line_count;
             line = &lines[*line_count - 1u];
             *line = (flex_line){.first = i, .count = 0u, .outer_main = 0.0f};
+            /* The break replaces the gap the item would have crossed, so the
+             * fresh line's first item books none. */
+            gap = 0.0f;
         }
 
         line->outer_main += gap + outer;

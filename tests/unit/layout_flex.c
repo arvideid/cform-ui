@@ -541,6 +541,32 @@ static void a_tree_or_rect_array_that_is_not_there_changes_nothing(void) {
     CF_NEAR(f.rects[0].width, 3.0f);
 }
 
+static void a_broken_line_starts_without_the_gap_it_crossed(void) {
+    fixture f;
+    cf_style root = cf_style_default();
+    root.width = CF_PX(80.0f);
+    root.wrap = CF_WRAP;
+    root.column_gap = CF_PX(10.0f);
+    root.row_gap = CF_PX(20.0f);
+    begin(&f, root);
+
+    for (int32_t i = 0; i < 9; ++i) {
+        append(&f, 0u, fixed_box(20.0f, 20.0f));
+    }
+    arrange_in(&f, 80.0f, 100.0f);
+
+    /* Three lines of three, exactly filling the box: the gap belongs between
+     * items and between lines, never ahead of a line the break started. */
+    CF_NEAR(f.rects[0].height, 100.0f);
+    CF_NEAR(f.rects[3].x, 60.0f);
+    CF_NEAR(f.rects[4].y, 40.0f);
+    CF_NEAR(f.rects[6].x, 60.0f);
+    CF_NEAR(f.rects[6].y, 40.0f);
+    CF_NEAR(f.rects[7].y, 80.0f);
+    CF_NEAR(f.rects[9].x, 60.0f);
+    CF_NEAR(f.rects[9].y, 80.0f);
+}
+
 static void baseline_group_aligns_on_the_tallest_members_baseline(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 100.0f, 100.0f);
@@ -635,6 +661,7 @@ int main(void) {
     CF_RUN(the_automatic_minimum_size_stops_a_shrink_at_the_content);
     CF_RUN(a_column_stacks_its_items_vertically);
     CF_RUN(wrap_breaks_between_items_at_the_container_edge);
+    CF_RUN(a_broken_line_starts_without_the_gap_it_crossed);
     CF_RUN(justify_content_distributes_the_leftover_main_space);
     CF_RUN(an_auto_margin_claims_the_space_before_justify_content_does);
     CF_RUN(a_cross_end_auto_margin_leaves_the_item_at_cross_start);
