@@ -83,6 +83,17 @@ add_library(cf_paint STATIC
 
 target_link_libraries(cf_paint PUBLIC cf_layout)
 
+# cf_node reconciles each frame's declaration into retained slots: identity
+# by depth and key, position for the keyless, and the view cf_layout reads.
+# It is the first layer that owns memory across frames.
+add_library(cf_node STATIC
+    src/node/context.c
+    src/node/diff.c
+    src/node/tree.c
+)
+
+target_link_libraries(cf_node PUBLIC cf_layout)
+
 # cf_backend_headless is the reference backend: it copies the submitted stream
 # into its arena so tests read what a device would have drawn. It opens no
 # window and touches no device pixels - the draw is everywhere else.
@@ -125,7 +136,7 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_text cf_paint cf_backend_headless)
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_text cf_paint cf_node cf_backend_headless)
 
 if(CFORM_WITH_SDL_BACKEND)
     list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)

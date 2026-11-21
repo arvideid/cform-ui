@@ -31,6 +31,10 @@ cf_add_layer_test(text_layout unit/text_layout.c cf_layout cf_text)
 cf_add_layer_test(paint_emit unit/paint_emit.c cf_paint)
 cf_add_layer_test(backend_record unit/backend_record.c cf_backend_headless)
 
+# The diff is the retained side of a frame: these cases drive two or more
+# declarations through one context and read which slot each node kept.
+cf_add_layer_test(node_tree unit/node_tree.c cf_node)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
