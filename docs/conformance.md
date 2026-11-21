@@ -54,8 +54,8 @@ denominator stays the whole suite rather than the convenient part of it.
 
 ## Score
 
-438 of the 485 ported fixtures match, 90% of what was ported and 81% of the
-whole corpus. Measured at `5a03cba`. The table is the tier's own output, so a
+444 of the 485 ported fixtures match, 92% of what was ported and 82% of the
+whole corpus. Measured at `84e23af`. The table is the tier's own output, so a
 run is the check and this page is the record of it.
 
 The grade is half a pixel. The reference snapped every fixture edge to the
@@ -79,7 +79,7 @@ the rules.
 | flexbasisfitcontent | 5 | 4 | 1 |
 | flexdirection | 53 | 53 | 0 |
 | flexwrap | 23 | 22 | 1 |
-| gap | 32 | 24 | 8 |
+| gap | 32 | 30 | 2 |
 | justifycontent | 28 | 28 | 0 |
 | margin | 34 | 33 | 1 |
 | minmaxdimension | 24 | 24 | 0 |
@@ -88,11 +88,10 @@ the rules.
 | rounding | 13 | 3 | 10 |
 | sizeoverflow | 3 | 3 | 0 |
 | staticposition | 62 | 59 | 3 |
-| **total** | **485** | **438** | **47** |
+| **total** | **485** | **444** | **41** |
 
-121 node assertions fail across those 47 cases. Only 12 of them differ from
-the reference by two pixels or less everywhere; 33 differ by more than eight.
-The grade is not what is missing - the rules are.
+102 node assertions fail across those 41 cases. The grade is not what is
+missing - the rules are.
 
 ## What the misses need
 
@@ -107,10 +106,8 @@ The grade is not what is missing - the rules are.
   `percent_within_flex_grow` wants a 100% child to fill the 150 its grown parent
   settles at rather than the 350 the root offered, and the `staticposition`
   amalgamations left standing want the settled answer for a 21% or 10% width -
-  `133` from the content where the first pass measured `44`. The other
-  `percentage` misses are the same shape, and the 8 `gap` cases are a percentage
-  row gap resolving against a wrapped line box that has to settle before the gap
-  divides.
+  `133` from the content where the first pass measured `44`. Two `gap` cases
+  still wait on the same rule applied to a wrapped line's cross extent.
 - **Edge rounding.** Rounding a box means rounding both its edges, so its size
   can land a whole pixel from the exact one - `33.333` wide starting at `33.333`
   becomes `34` when the far edge snaps to `67`. That is more than the grade
@@ -124,7 +121,7 @@ The grade is not what is missing - the rules are.
 
 ## The floor
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 438 and only moves
+`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is 444 and only moves
 up. The tier prints every mismatch and asserts the floor rather than a verdict,
 so a fixture that regresses fails `ctest` while the ones that have never passed
 stay visible here instead of being deleted to make the run green. Closing a gap
