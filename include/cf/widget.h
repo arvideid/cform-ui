@@ -54,6 +54,30 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
 cf_node cf_image(cf_ctx *ctx, const char *name, const cf_image_content *content);
 
 /*
+ * The bytes a field edits in place: a buffer the build owns, how much of it
+ * is in use, and how much it holds. The field writes through it for as long
+ * as the build keeps declaring the field - the memory and its lifetime stay
+ * the build's.
+ */
+typedef struct cf_text_edit {
+    char *chars;
+    uint32_t length;
+    uint32_t capacity;
+} cf_text_edit;
+
+/*
+ * A themed single-line text box. The press that starts inside books focus
+ * through the climb the field's role stops, and the keys the focused field
+ * receives edit the buffer in place: a printable scalar appends its UTF-8
+ * bytes while the buffer holds them, and backspace drops the last one. The
+ * bytes show through a one-line label that closes with the ellipsis when
+ * the box cannot hold them. A NULL context, name or buffer answers a
+ * declaration that draws nothing and edits nothing; without fonts it still
+ * edits and only draws nothing.
+ */
+cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
+
+/*
  * A viewport that walks its children with the wheel: the offset lives in the
  * block the name keys, the children ride a content box that moves by the
  * offset, and the box clips what it cannot show. The caller sizes the box -

@@ -73,6 +73,10 @@ cf_add_layer_test(widget_list unit/widget_list.c cf_widget cf_theme)
 # this case reads the declaration the paint walk keys on.
 cf_add_layer_test(widget_image unit/widget_image.c cf_widget cf_theme)
 
+# The field edits the buffer its build owns: these cases press it, type into
+# it and read the bytes back.
+cf_add_layer_test(widget_field unit/widget_field.c cf_widget cf_theme)
+
 # The dirty bit answers one question per frame: did this node's declaration
 # move? These cases read it against the frame before it.
 cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
