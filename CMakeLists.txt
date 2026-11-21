@@ -81,7 +81,33 @@ add_library(cf_backend_headless STATIC
 
 target_link_libraries(cf_backend_headless PUBLIC cf_paint)
 
+# The SDL renderer backend is off by default so a headless configure never
+# fetches or builds SDL; the machine that wants to see a frame turns it on.
+option(CFORM_WITH_SDL_BACKEND "Build the SDL renderer backend" OFF)
+
+if(CFORM_WITH_SDL_BACKEND)
+    include(FetchContent)
+    FetchContent_Declare(sdl3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG release-3.2.20
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(sdl3)
+
+    # The stream's first real draw path: it owns the window until the app shell
+    # exists, and every layer above it stays window-free.
+    add_library(cf_backend_sdl STATIC
+        src/backend/sdl/gpu.c
+    )
+
+    target_link_libraries(cf_backend_sdl PUBLIC cf_paint SDL3::SDL3)
+endif()
+
 set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_paint cf_backend_headless)
+
+if(CFORM_WITH_SDL_BACKEND)
+    list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)
+endif()
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}

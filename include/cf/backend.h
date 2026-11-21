@@ -39,4 +39,22 @@ typedef struct cf_recorder {
 /* A backend that records instead of draws. A NULL recorder submits nothing. */
 cf_backend cf_backend_recorder(cf_recorder *recorder);
 
+/*
+ * The renderer backend, built when CFORM_WITH_SDL_BACKEND is on: it opens its
+ * own window and draws the stream through SDL's GPU-accelerated renderer. The
+ * backend owns the window until the app shell exists to own it, so its present
+ * drains the event queue, and a frame is whatever the last submit drew,
+ * cleared to black where nothing was painted. Rects arrive in logical points;
+ * the window's pixel density is the backend's to apply.
+ */
+typedef struct cf_sdl_config {
+    const char *title;
+    uint32_t width;
+    uint32_t height;
+} cf_sdl_config;
+
+/* A backend drawing to a new window. A window that cannot open is a backend
+ * that draws nothing, reported once on CF_LOG_BACKEND. */
+cf_backend cf_backend_sdl(const cf_sdl_config *config);
+
 #endif
