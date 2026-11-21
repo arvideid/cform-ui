@@ -160,6 +160,17 @@ typedef struct cf_style {
     cf_align align_self;
     cf_align_content align_content;
     int32_t order;
+
+    /*
+     * What the box paints once layout has placed it. The background fills the
+     * border box, the way CSS paints under its border, and the border color
+     * strokes the border widths into it; a color that is not stated paints
+     * nothing. The radius rounds both, clamped to half the shorter extent,
+     * and a negative one is a square box.
+     */
+    cf_opt_color background;
+    cf_opt_color border_color;
+    float radius;
 } cf_style;
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */

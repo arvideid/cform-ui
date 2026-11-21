@@ -64,7 +64,15 @@ add_library(cf_layout STATIC
 
 target_link_libraries(cf_layout PUBLIC cf_style cf_base)
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout)
+# cf_paint turns placed boxes into the flat command stream backends read: no
+# window, no device pixels, no backend - the stream is the whole contract.
+add_library(cf_paint STATIC
+    src/paint/emit.c
+)
+
+target_link_libraries(cf_paint PUBLIC cf_layout)
+
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_layout cf_paint)
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}
