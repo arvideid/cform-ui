@@ -128,11 +128,6 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
     /* A border box is drawn no smaller than the padding and border it has to
      * hold: the frame has the last word, the way min does when min and max
      * contradict. A declared or clamped size below it is impossible to paint. */
-    const float frame_width = inset.left + inset.right;
-    const float frame_height = inset.top + inset.bottom;
-
-    return (cf_size){
-        .width = clamped_width > frame_width ? clamped_width : frame_width,
-        .height = clamped_height > frame_height ? clamped_height : frame_height,
-    };
+    return (cf_size){.width = larger(clamped_width, inset.left + inset.right),
+                     .height = larger(clamped_height, inset.top + inset.bottom)};
 }
