@@ -1,8 +1,10 @@
 #ifndef CF_BACKEND_H
 #define CF_BACKEND_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
+#include "cf/event.h"
 #include "cf/paint.h"
 #include "cf/text.h"
 
@@ -12,7 +14,7 @@
  * submit, because a stream the backend does not understand draws wrong rather
  * than failing.
  */
-#define CF_BACKEND_ABI_VERSION 3u
+#define CF_BACKEND_ABI_VERSION 4u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -27,6 +29,14 @@ typedef struct cf_backend {
      * backend refused: nothing was uploaded, nothing will draw. */
     uint32_t (*create_texture)(void *user_data, uint32_t width, uint32_t height,
                                const void *pixels);
+    /* Moves one device event into `out` and answers whether it took one.
+     * The queue belongs to whoever reads it every frame; a backend without
+     * input leaves this NULL and its caller runs without events. */
+    bool (*poll_event)(void *user_data, cf_event *out);
+    /* The output's extent in logical points, read fresh each call so a
+     * resize takes without a callback. A backend without an output leaves
+     * this NULL and its caller lays out against nothing. */
+    cf_size (*surface)(void *user_data);
 } cf_backend;
 
 /*
@@ -46,12 +56,12 @@ typedef struct cf_recorder {
 cf_backend cf_backend_recorder(cf_recorder *recorder);
 
 /*
- * The renderer backend, built when CFORM_WITH_SDL_BACKEND is on: it opens its
- * own window and draws the stream through SDL's GPU-accelerated renderer. The
- * backend owns the window until the app shell exists to own it, so its present
- * drains the event queue, and a frame is whatever the last submit drew,
- * cleared to black where nothing was painted. Rects arrive in logical points;
- * the window's pixel density is the backend's to apply.
+ * The renderer backend, built when CFORM_WITH_SDL_BACKEND is on: it opens
+ * its own window, answers the shell's polls with the device's events, and
+ * draws the stream through SDL's GPU-accelerated renderer. A frame is
+ * whatever the last submit drew, cleared to black where nothing was painted.
+ * Rects arrive in logical points; the window's pixel density is the
+ * backend's to apply.
  */
 typedef struct cf_sdl_config {
     const char *title;

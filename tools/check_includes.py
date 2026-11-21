@@ -26,7 +26,7 @@ LAYER_OF_HEADER = {
     "layout.h": "layout",
     "text.h": "text",
     "paint.h": "paint",
-    "event.h": "node",
+    "event.h": "event",
     "node.h": "node",
     "build.h": "node",
     "theme.h": "theme",
@@ -37,14 +37,15 @@ LAYER_OF_HEADER = {
 
 ALLOWED = {
     "base": set(),
+    "event": {"base"},
     "style": {"base"},
     "layout": {"base", "style"},
     "text": {"base"},
     "paint": {"base", "layout", "style", "text"},
-    "node": {"base", "layout", "paint", "style", "text"},
+    "node": {"base", "event", "layout", "paint", "style", "text"},
     "theme": {"base", "style"},
     "widget": {"base", "node", "style", "theme", "layout", "paint", "text"},
-    "backend": {"base", "paint", "text", "style", "layout"},
+    "backend": {"base", "event", "paint", "text", "style", "layout"},
     "app": {"base", "widget", "node", "backend", "paint", "layout", "style", "text", "theme"},
 }
 

@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 
 #include "cf/backend.h"
+#include "cf/event.h"
 
 /*
  * The quarter arc of a corner is walked in this many straight pieces: enough
@@ -253,6 +254,68 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
     }
 }
 
+/*
+ * The queue is the app shell's to read: one device event per call, translated
+ * to the vocabulary the dispatch walks, false when the queue runs dry. Events
+ * the tree has no word for are consumed here and answer nothing. Keyboard
+ * scalars pass as SDL keycodes, so a printable code point is its own scalar
+ * and the editing keys land on the bytes a field already understands.
+ */
+static bool sdl_poll(void *user_data, cf_event *out) {
+    sdl_state *state = user_data;
+    SDL_Event event;
+
+    while (state != NULL && SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_EVENT_QUIT:
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            *out = (cf_event){.type = CF_EVENT_QUIT};
+            return true;
+        case SDL_EVENT_MOUSE_MOTION:
+            *out = (cf_event){.type = CF_EVENT_POINTER_MOVE,
+                              .position = {event.motion.x, event.motion.y}};
+            return true;
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+            *out =
+                (cf_event){.type = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? CF_EVENT_POINTER_DOWN
+                                                                             : CF_EVENT_POINTER_UP,
+                           .position = {event.button.x, event.button.y},
+                           .button = event.button.button};
+            return true;
+        case SDL_EVENT_MOUSE_WHEEL:
+            *out = (cf_event){.type = CF_EVENT_SCROLL,
+                              .position = {event.wheel.mouse_x, event.wheel.mouse_y},
+                              .wheel = {event.wheel.x, event.wheel.y}};
+            return true;
+        case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_KEY_UP:
+            *out = (cf_event){.type = event.type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
+                                                                       : CF_EVENT_KEY_UP,
+                              .key = (uint32_t)event.key.key};
+            return true;
+        default:
+            break;
+        }
+    }
+
+    return false;
+}
+
+/* The window's own size, which is what logical points lay out against; the
+ * pixel density between points and device pixels stays inside the draw. */
+static cf_size sdl_surface(void *user_data) {
+    sdl_state *state = user_data;
+    int width = 0;
+    int height = 0;
+
+    if (state != NULL) {
+        SDL_GetWindowSize(state->window, &width, &height);
+    }
+
+    return (cf_size){(float)width, (float)height};
+}
+
 static void sdl_present(void *user_data) {
     sdl_state *state = user_data;
 
@@ -260,10 +323,10 @@ static void sdl_present(void *user_data) {
         return;
     }
 
-    /* No app layer exists yet to own the event queue, so present drains it: a
-     * window whose queue backs up stops answering to the desktop. */
+    /* The pump keeps the desktop answering even in a run that never reads
+     * events; what it collects waits for the reader, where a flush would
+     * drop the presses and moves a shell has not reached yet. */
     SDL_PumpEvents();
-    SDL_FlushEvents(SDL_EVENT_QUIT, SDL_EVENT_LAST);
 
     SDL_RenderPresent(state->renderer);
 }
@@ -309,5 +372,7 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .user_data = state,
                         .submit = draw_submit,
                         .present = sdl_present,
-                        .create_texture = sdl_create_texture};
+                        .create_texture = sdl_create_texture,
+                        .poll_event = sdl_poll,
+                        .surface = sdl_surface};
 }

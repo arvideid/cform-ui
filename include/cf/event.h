@@ -12,7 +12,10 @@ typedef enum cf_event_type {
     CF_EVENT_POINTER_UP,
     CF_EVENT_SCROLL,
     CF_EVENT_KEY_DOWN,
-    CF_EVENT_KEY_UP
+    CF_EVENT_KEY_UP,
+    /* The device asked the window to close. Nothing in the tree dispatches
+     * it; the shell that owns the loop reads it and stops. */
+    CF_EVENT_QUIT
 } cf_event_type;
 
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;

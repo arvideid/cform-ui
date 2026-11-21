@@ -81,6 +81,14 @@ cf_add_layer_test(widget_field unit/widget_field.c cf_widget cf_theme)
 # move? These cases read it against the frame before it.
 cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
 
+# cf_frame_run is the pipeline the shell and the golden scenes play by hand:
+# this case runs it once and reads the stream the whole pass leaves.
+cf_add_layer_test(node_frame_run unit/node_frame_run.c cf_node)
+
+# The shell is the app layer's whole surface: this case plays a device that
+# hands an event, dries up, then quits, and counts the frames it got.
+cf_add_layer_test(app_run unit/app_run.c cf_app cf_backend_headless)
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against

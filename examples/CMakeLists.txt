@@ -16,11 +16,12 @@ if(CFORM_WITH_SDL_BACKEND)
 
     target_link_libraries(scenes PRIVATE cf_backend_sdl)
 
-    # The gallery: every widget on one page. The font is the one the tests
-    # fetch; offline, the labels draw nothing and the rest still runs.
+    # The gallery: every widget on one page, running on the app shell. The
+    # font is the one the tests fetch; offline, the labels draw nothing and
+    # the rest still runs.
     add_executable(gallery gallery.c)
 
-    target_link_libraries(gallery PRIVATE cf_backend_sdl cf_widget cf_theme)
+    target_link_libraries(gallery PRIVATE cf_backend_sdl cf_app cf_theme)
 
     target_compile_definitions(gallery PRIVATE
         CFORM_GALLERY_FONT="${CMAKE_BINARY_DIR}/fonts/Lato-Regular.ttf")

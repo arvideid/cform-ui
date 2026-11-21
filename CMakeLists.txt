@@ -104,6 +104,7 @@ add_library(cf_node STATIC
     src/node/anim.c
     src/node/context.c
     src/node/diff.c
+    src/node/frame_run.c
     src/node/input.c
     src/node/resolve.c
     src/node/scroll.c
@@ -111,7 +112,7 @@ add_library(cf_node STATIC
     src/node/tree.c
 )
 
-target_link_libraries(cf_node PUBLIC cf_layout)
+target_link_libraries(cf_node PUBLIC cf_layout cf_paint)
 
 # cf_widget fills declarations: each widget states the fields a build would
 # otherwise spell by hand - a label's text and measure, a button's role and
@@ -128,6 +129,16 @@ add_library(cf_widget STATIC
 )
 
 target_link_libraries(cf_widget PUBLIC cf_node cf_paint cf_text)
+
+# cf_app is the shell a whole program fits in: it owns the loop the backend
+# serves - the device's events in, one declared frame out - until the device
+# asks to close. The inspector and the accessibility export land beside it as
+# they exist.
+add_library(cf_app STATIC
+    src/app/loop.c
+)
+
+target_link_libraries(cf_app PUBLIC cf_widget)
 
 # cf_backend_headless is the reference backend: it copies the submitted stream
 # into its arena so tests read what a device would have drawn. It opens no
@@ -171,7 +182,7 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 endif()
 
-set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_widget cf_backend_headless)
+set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_widget cf_app cf_backend_headless)
 
 if(CFORM_WITH_SDL_BACKEND)
     list(APPEND CFORM_LAYER_TARGETS cf_backend_sdl)

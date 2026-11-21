@@ -4,6 +4,7 @@
 #include "cf/base.h"
 #include "cf/event.h"
 #include "cf/layout.h"
+#include "cf/paint.h"
 
 /*
  * The node's handlers, one table rather than a field per event. The data
@@ -237,6 +238,23 @@ void cf_frame_resolve(cf_ctx *ctx);
  * whose diff built no view is a no-op.
  */
 void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);
+
+/*
+ * The declaration a frame runs: it answers the root of the tree it declared,
+ * in memory that lives through the diff cf_frame_run performs right after -
+ * the frame arena's blocks do, so the tree's arrays are built there. A NULL
+ * answer is a frame that declares nothing; the retained tree empties.
+ */
+typedef const cf_node *(*cf_build_fn)(cf_ctx *ctx);
+
+/*
+ * One frame, end to end: begins the frame, runs the build and diffs its
+ * declaration in the scope the build declared it in, resolves the theme over
+ * the view, lays it out into the offer's points, and paints the commands into
+ * `out`. A build that answers nothing, or an offer of nothing, empties the
+ * list instead of painting it.
+ */
+void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, cf_command_list *out);
 
 /*
  * The topmost node whose rect holds the position - later siblings above
