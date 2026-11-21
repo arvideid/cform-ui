@@ -115,11 +115,14 @@ target_link_libraries(cf_node PUBLIC cf_layout)
 
 # cf_widget fills declarations: each widget states the fields a build would
 # otherwise spell by hand - a label's text and measure, a button's role and
-# press handler - out of the context's frame arena. Text, fonts and tones
-# stay arguments, so the layer owns no loading and stays headless.
+# press handler, a scroller's offset and clip - out of the context's frame
+# arena. Text, fonts and tones stay arguments, so the layer owns no loading
+# and stays headless.
 add_library(cf_widget STATIC
     src/widget/button.c
     src/widget/label.c
+    src/widget/list.c
+    src/widget/scroll.c
 )
 
 target_link_libraries(cf_widget PUBLIC cf_node cf_text)

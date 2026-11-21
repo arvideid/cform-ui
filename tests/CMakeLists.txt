@@ -64,6 +64,11 @@ cf_add_layer_test(node_anim unit/node_anim.c cf_node)
 # button through the dispatch it configures and read the click it fires.
 cf_add_layer_test(widget_button unit/widget_button.c cf_widget cf_theme)
 
+# The scroller and the list own the wheel: these cases walk content taller
+# than the window and read the rows the window declares.
+cf_add_layer_test(widget_scroll unit/widget_scroll.c cf_widget cf_theme)
+cf_add_layer_test(widget_list unit/widget_list.c cf_widget cf_theme)
+
 # The dirty bit answers one question per frame: did this node's declaration
 # move? These cases read it against the frame before it.
 cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
