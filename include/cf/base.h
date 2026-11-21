@@ -72,10 +72,13 @@ uint32_t cf_hash_bytes(const void *bytes, size_t length);
  * Text identity by value. Keys are stable indices into the interned table, so
  * a cache keyed on cf_name survives the caller rebuilding its string — the
  * pointer-identity key it replaces silently missed on every rebuild.
+ *
+ * Zero names nothing and issued names start at one, so a zeroed structure
+ * holds no name and the interner never hands out the zero it begins with.
  */
 typedef uint32_t cf_name;
 
-#define CF_NO_NAME UINT32_MAX
+#define CF_NO_NAME 0u
 
 /*
  * buckets[] and chains[] both hold name + 1, and 0 ends a chain. A name is an

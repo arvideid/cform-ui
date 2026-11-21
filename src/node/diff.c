@@ -122,7 +122,7 @@ static bool table_init(cf_ctx *ctx, match_table *table) {
     /* Zeroed heads read as empty; counter keys start at CF_NO_NAME so a
      * group's count begins at its first take, and the counts at zero. */
     memset(heads, 0, buckets * sizeof *heads);
-    memset(counter_keys, 0xFF, buckets * sizeof *counter_keys);
+    memset(counter_keys, 0, buckets * sizeof *counter_keys);
     memset(counter_consumed, 0, buckets * sizeof *counter_consumed);
 
     uint32_t inserted = 0u;
@@ -177,7 +177,7 @@ static bool counters_grow(cf_ctx *ctx, match_table *table) {
         return false;
     }
 
-    memset(keys, 0xFF, capacity * sizeof *keys);
+    memset(keys, 0, capacity * sizeof *keys);
     memset(consumed, 0, capacity * sizeof *consumed);
 
     for (uint32_t from = 0u; from < table->counter_capacity; ++from) {

@@ -9,6 +9,10 @@
  * typical UI never pays for the first doubling. */
 #define INTERNER_INITIAL_CAPACITY 64
 
+/* Marks a lookup that started at the bucket head; the storage indices it
+ * walks from there begin at zero, so none of them can double as the mark. */
+#define NO_PREVIOUS UINT32_MAX
+
 static bool text_equal(cf_string stored, cf_string other) {
     if (stored.length != other.length) {
         return false;
@@ -115,13 +119,13 @@ cf_name cf_intern(cf_interner *interner, cf_string text) {
     const uint32_t hash = cf_hash_bytes(text.chars, text.length);
     const size_t head = hash % interner->bucket_count;
 
-    cf_name previous = CF_NO_NAME;
+    cf_name previous = NO_PREVIOUS;
     uint32_t *link = &interner->buckets[head];
 
     while (*link != 0u) {
         const cf_name existing = *link - 1u;
         if (text_equal(interner->texts[existing], text)) {
-            return existing;
+            return existing + 1u;
         }
         previous = existing;
         link = &interner->chains[existing];
@@ -148,14 +152,16 @@ cf_name cf_intern(cf_interner *interner, cf_string text) {
     /* The doubling above moved the chain array, so the tail of the chain is
      * found again by index rather than through the pointer held before it. */
     uint32_t *slot =
-        previous == CF_NO_NAME ? &interner->buckets[head] : &interner->chains[previous];
+        previous == NO_PREVIOUS ? &interner->buckets[head] : &interner->chains[previous];
     *slot = fresh + 1u;
 
     if (interner->count * 100u > interner->bucket_count * INTERNER_LOAD_FACTOR_PERCENT) {
         interned_rehash(interner, interner->bucket_count * 2);
     }
 
-    return fresh;
+    /* The storage indexes names from zero, so the name a caller holds sits
+     * one above its storage index and zero stays free to name nothing. */
+    return fresh + 1u;
 }
 
 cf_name cf_intern_text(cf_interner *interner, const char *chars) {
@@ -163,9 +169,9 @@ cf_name cf_intern_text(cf_interner *interner, const char *chars) {
 }
 
 cf_string cf_interned(const cf_interner *interner, cf_name name) {
-    if (interner == NULL || name >= interner->count) {
+    if (interner == NULL || name == CF_NO_NAME || name - 1u >= interner->count) {
         return (cf_string){0};
     }
 
-    return interner->texts[name];
+    return interner->texts[name - 1u];
 }
