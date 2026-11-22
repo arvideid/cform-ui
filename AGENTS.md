@@ -152,6 +152,11 @@ in `docs/` and moves in the diff that moves it. Nothing is committed that the
 repository can regenerate or fetch, and no dependency joins the tree unless it
 removes more code than it imports.
 
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the route to a merged pull request and
+[`CHANGELOG.md`](CHANGELOG.md) the record for consumers: a change to
+`include/cf/` or to `CF_BACKEND_ABI_VERSION` gets an entry, and the route is
+updated when the gates or the tiers change.
+
 Build and `ctest` prove compilation and headless behaviour, not what the window
 draws. An example that changed still runs, and a human has seen it.
 

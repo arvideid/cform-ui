@@ -290,10 +290,14 @@ git config commit.template .gitmessage
 
 [`AGENTS.md`](AGENTS.md) is the repository contract: the layer graph, the data
 rules, naming, comments, test tiers and the git conventions. Read it before the
-first edit. Pull requests are welcome; open an issue first for anything
+first edit. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the route from an idea to a
+merged pull request — branches, the test tier a rule belongs in, and the gates CI
+runs. [`CHANGELOG.md`](CHANGELOG.md) records what changed for consumers.
+Pull requests are welcome; open an issue first for anything
 substantial. CI gates the formatting and static-analysis checks over every
-layer, the include-graph rule, a sanitizer build, and Debug and Release compiles
-on Linux, Windows and macOS — keep those green and `ctest` passing. Report
+layer, the include-graph rule, a sanitizer build, the WebAssembly compile of the
+gallery, and Debug and Release compiles on Linux, Windows and macOS — keep those
+green and `ctest` passing. Report
 security problems as described in [`SECURITY.md`](SECURITY.md). A PR template is
 provided.
 
