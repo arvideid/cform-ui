@@ -110,8 +110,8 @@ backend is off. The conformance tier runs Yoga's fixtures as data and publishes
 its score in [`conformance.md`](conformance.md). The golden tier runs whole frames
 through the recorder backend and diffs the command stream, so a paint regression
 is a reviewable data diff rather than a pixel somebody squints at. The bench tier
-prints the two 10,000-node rigs on all three operating systems. ASan and UBSan
-run the rest of the suite over a Linux clang build.
+prints the 10,000-node rigs — layout, diff and stream — on all three operating
+systems. ASan and UBSan run the rest of the suite over a Linux clang build.
 
 What no tier checks is what the window draws. That is verified by running
 `examples/gallery.c` and looking at it, and a build green across four platforms

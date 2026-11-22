@@ -245,8 +245,9 @@ The renderer is verified by running the example and looking at it, never by
 mocking the backend or asserting pixels. `ctest` says the engine is right; the
 window is the maintainer's check.
 
-[`docs/bench.md`](docs/bench.md) publishes the layout baseline: what the rigs
-cost, how the cost grows with the tree, and why no number is asserted in CI.
+[`docs/bench.md`](docs/bench.md) publishes the baselines: what a layout, a
+re-reconciled 10,000-node frame and a page's command stream cost, how the cost
+grows with the tree, and why no number is asserted in CI.
 
 [`docs/conformance.md`](docs/conformance.md) publishes the flexbox score: which
 fixtures were ported and why the rest were not, how many match per suite, and
