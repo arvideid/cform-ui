@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "cf/app.h"
+#include "cf/build.h"
 #include "cf/widget.h"
 
 #define WINDOW_WIDTH 480u
@@ -25,41 +26,33 @@ static cf_node make_row(cf_ctx *ctx, uint32_t index, void *user_data) {
     (void)user_data;
     char *bytes = row_bytes[index % 8u];
     const int length = snprintf(bytes, 16u, "row %u", index);
+
     return cf_label(ctx, (cf_string){bytes, (uint32_t)length}, &fonts, theme->ink);
 }
 
-/* The build answers arena memory: one refusal is a page that paints nothing. */
-static const cf_node *build(cf_ctx *ctx) {
-    cf_node *page = cf_alloc(&ctx->frame, sizeof *page);
-    cf_node *children = cf_alloc(&ctx->frame, 3u * sizeof *children);
-    cf_node *bar = cf_alloc(&ctx->frame, sizeof *bar);
-    cf_node *buttons = cf_alloc(&ctx->frame, 2u * sizeof *buttons);
-    cf_node *labels = cf_alloc(&ctx->frame, 2u * sizeof *labels);
-
-    if (page == NULL || children == NULL || bar == NULL || buttons == NULL || labels == NULL) {
-        return NULL;
-    }
-
-    labels[0] = cf_label(ctx, cf_string_of("press me"), &fonts, theme->on_ink);
-    labels[1] = cf_label(ctx, cf_string_of("quiet"), &fonts, theme->on_ink);
-    buttons[0] = cf_button(ctx, "press", toggle_quiet, NULL, &labels[0], 1u);
-    buttons[1] = cf_button(ctx, "quiet", toggle_quiet, NULL, &labels[1], 1u);
-    buttons[1].disabled = quiet_off;
-
-    const cf_node bar_node = {.style = theme->bar, .children = buttons, .child_count = 2u};
-    children[0] = bar_node;
-    children[1] = cf_list(ctx, "rows", 96.0f, 24.0f, 64u, make_row, NULL);
-    children[2] = cf_image(ctx, "logo", &logo);
-
-    *page = (cf_node){.style = theme->page, .children = children, .child_count = 3u};
-    /* Percent sizing: the page follows the window when the hand resizes it. */
-    page->style.width = CF_PERCENT(100.0f);
-    page->style.height = CF_PERCENT(100.0f);
-    page->style.direction = CF_DIRECTION_COLUMN;
-    page->style.padding = (cf_box){CF_PX(16.0f), CF_PX(16.0f), CF_PX(16.0f), CF_PX(16.0f)};
-    page->style.row_gap = CF_PX(12.0f);
+/* Percentages are the one sizing that follows the window when the hand
+ * resizes it; the theme's page states everything else. */
+static cf_style page_style(void) {
+    cf_style page = theme->page;
+    page.width = CF_PERCENT(100.0f);
+    page.height = CF_PERCENT(100.0f);
+    page.padding = (cf_box){CF_PX(16.0f), CF_PX(16.0f), CF_PX(16.0f), CF_PX(16.0f)};
+    page.row_gap = CF_PX(12.0f);
 
     return page;
+}
+
+static cf_node build(cf_ctx *ctx) {
+    const cf_node press_label = cf_label(ctx, cf_string_of("press me"), &fonts, theme->on_ink);
+    const cf_node quiet_label = cf_label(ctx, cf_string_of("quiet"), &fonts, theme->on_ink);
+
+    const cf_node press = cf_button(ctx, "press", toggle_quiet, NULL, &press_label, 1u);
+    cf_node quiet = cf_button(ctx, "quiet", toggle_quiet, NULL, &quiet_label, 1u);
+    quiet.disabled = quiet_off;
+
+    return CF_COL(ctx, page_style(), CF_ROW(ctx, theme->bar, press, quiet),
+                  cf_list(ctx, "rows", 96.0f, 24.0f, 64u, make_row, NULL),
+                  cf_image(ctx, "logo", &logo));
 }
 
 int main(void) {

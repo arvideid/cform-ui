@@ -52,8 +52,7 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
         void *grown = block_alloc(ctx, size);
 
         if (grown == NULL) {
-            cf_logf(CF_LOG_CORE,
-                    "node: the persistent arena cannot grow a state block to %zu bytes", size);
+            reject_frame(ctx, "the persistent arena cannot grow a state block");
             return NULL;
         }
 
@@ -66,7 +65,7 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
     void *block = block_alloc(ctx, size);
 
     if (block == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the persistent arena cannot hold a %zu-byte state block", size);
+        reject_frame(ctx, "the persistent arena cannot hold a state block");
         return NULL;
     }
 
@@ -74,7 +73,7 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
     state_entry *fresh = cf_store_add(&ctx->states, &id);
 
     if (fresh == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the state store cannot hold another block");
+        reject_frame(ctx, "the state store cannot hold another block");
         return NULL;
     }
 

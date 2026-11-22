@@ -219,7 +219,7 @@ static uint32_t table_take(cf_ctx *ctx, match_table *table, cf_name key, uint32_
                            uint32_t *out_ordinal) {
     if ((uint64_t)table->counter_used * 2u >= table->counter_capacity &&
         !counters_grow(ctx, table)) {
-        cf_logf(CF_LOG_CORE, "node: the frame arena cannot index the declaration's keys");
+        reject_frame(ctx, "the frame arena cannot index the declaration's keys");
         *out_ordinal = 0u;
         return CF_NO_LINK;
     }
@@ -267,7 +267,7 @@ static uint32_t claim_fresh(cf_ctx *ctx, const cf_node *decl, uint32_t depth, ui
     node_record *record = cf_store_add(&ctx->nodes, &id);
 
     if (record == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the store cannot hold another node");
+        reject_frame(ctx, "the store cannot hold another node");
         return CF_NO_LINK;
     }
 
@@ -466,7 +466,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
 
     if (!walk_push(ctx, &stack, root, root_slot, 1u, root_record->child_first) ||
         !claim_push(ctx, &claimed, root_slot, root)) {
-        cf_logf(CF_LOG_CORE, "node: the frame arena cannot walk the declaration");
+        reject_frame(ctx, "the frame arena cannot walk the declaration");
         return CF_NO_LINK;
     }
 
@@ -512,7 +512,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->signature = signature;
 
         if (!claim_push(ctx, &claimed, slot, decl)) {
-            cf_logf(CF_LOG_CORE, "node: the frame arena cannot record the declaration");
+            reject_frame(ctx, "the frame arena cannot record the declaration");
             return CF_NO_LINK;
         }
 
@@ -525,7 +525,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         if (decl->child_count > 0u) {
             if (!walk_push(ctx, &stack, decl, slot, frame->depth + 1u,
                            record_of(ctx, slot)->child_first)) {
-                cf_logf(CF_LOG_CORE, "node: the frame arena cannot walk the declaration");
+                reject_frame(ctx, "the frame arena cannot walk the declaration");
                 return CF_NO_LINK;
             }
         }
@@ -542,7 +542,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     claim_entry *flat = claim_flatten(ctx, claimed, declared);
 
     if (flat == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the frame arena cannot record the declaration");
+        reject_frame(ctx, "the frame arena cannot record the declaration");
         return CF_NO_LINK;
     }
 

@@ -12,7 +12,8 @@
  * widget needs beyond the node vocabulary - text, fonts, tones - arrives as
  * an argument, and the per-frame bytes it keeps live in the context's frame
  * arena, which holds from cf_frame_begin until the frame that declared them
- * ends.
+ * ends. A widget that takes children copies them into that arena, so a build
+ * may hand one over on its own stack.
  */
 
 /*

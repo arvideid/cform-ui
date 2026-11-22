@@ -78,6 +78,10 @@ typedef struct cf_ctx {
     cf_id focus_id;
     uint32_t root_slot;
     uint32_t frame_id;
+    /* The reason the last boundary refused since this frame began, or NULL.
+     * Every message is a literal the library owns, so the answer outlives the
+     * call that recorded it. */
+    const char *rejection;
     bool layout_ready;
     /* Absolute rects, or nothing before cf_frame_layout ran this frame. */
     cf_rect *rects;
@@ -240,21 +244,29 @@ void cf_frame_resolve(cf_ctx *ctx);
 void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);
 
 /*
- * The declaration a frame runs: it answers the root of the tree it declared,
- * in memory that lives through the diff cf_frame_run performs right after -
- * the frame arena's blocks do, so the tree's arrays are built there. A NULL
- * answer is a frame that declares nothing; the retained tree empties.
+ * The declaration a frame runs, answering the page it declares. The answer is
+ * a value the run holds, so what a build must keep alive is the memory behind
+ * `children` and `measure_data` - the frame arena's blocks do, and `cf_box`
+ * builds a container's children there. A page with no children and a style
+ * that paints nothing is what a build says when it has nothing to declare.
  */
-typedef const cf_node *(*cf_build_fn)(cf_ctx *ctx);
+typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
 
 /*
  * One frame, end to end: begins the frame, runs the build and diffs its
  * declaration in the scope the build declared it in, resolves the theme over
  * the view, lays it out into the offer's points, and paints the commands into
- * `out`. A build that answers nothing, or an offer of nothing, empties the
- * list instead of painting it.
+ * `out`. A build that answers a page that paints nothing, or an offer of
+ * nothing, empties the list instead of painting it.
  */
 void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, cf_command_list *out);
+
+/*
+ * Why the last boundary refused since this frame began, or NULL when nothing
+ * has. The answer names the refusal and not the slot, string or size that
+ * asked for it: a caller that wants the request reads the frame it built.
+ */
+const char *cf_error_message(const cf_ctx *ctx);
 
 /*
  * The view's semantic tree, one line per node in paint order and indented by

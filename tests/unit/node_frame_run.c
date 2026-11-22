@@ -15,27 +15,22 @@ static bool context_of(cf_ctx *ctx) {
     return true;
 }
 
-/* The build answers arena memory: the root lives through the diff the run
- * performs right after the build answers, so a stack local would not do. */
-static const cf_node *one_box(cf_ctx *ctx) {
-    cf_node *root = cf_alloc(&ctx->frame, sizeof *root);
+/* A leaf build: the answer is a value, so nothing here needs the arena. */
+static cf_node one_box(cf_ctx *ctx) {
+    (void)ctx;
 
-    if (root == NULL) {
-        return NULL;
-    }
-
-    *root = (cf_node){.key = CF_NO_NAME};
-    root->style = cf_style_default();
-    root->style.width = CF_PX(40.0f);
-    root->style.height = CF_PX(20.0f);
-    root->style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
+    cf_node root = {0};
+    root.style = cf_style_default();
+    root.style.width = CF_PX(40.0f);
+    root.style.height = CF_PX(20.0f);
+    root.style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
 
     return root;
 }
 
-static const cf_node *nothing(cf_ctx *ctx) {
+static cf_node nothing(cf_ctx *ctx) {
     (void)ctx;
-    return NULL;
+    return (cf_node){0};
 }
 
 static void a_frame_runs_the_whole_pipeline_in_one_call(void) {
@@ -69,8 +64,8 @@ static void a_build_that_answers_nothing_paints_nothing(void) {
     cf_command_list list = {0};
     cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, &list);
 
-    CF_CHECK(list.count == 0u, "an empty declaration paints nothing");
-    CF_CHECK(cf_frame_tree(&ctx) == NULL, "the retained tree empties");
+    CF_CHECK(list.count == 0u, "a page that states nothing paints nothing");
+    CF_CHECK(cf_error_message(&ctx) == NULL, "declaring nothing is not a refusal");
 
     cf_ctx_free(&ctx);
 }

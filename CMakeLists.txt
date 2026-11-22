@@ -98,10 +98,12 @@ target_link_libraries(cf_paint PUBLIC cf_layout cf_text)
 # by depth and key, position for the keyless, and the view cf_layout reads.
 # state.c holds the blocks a build asks for by name across frames, scroll.c
 # the offsets a scroller keeps under its name, resolve.c the theme's per-state
-# paint applied to the view the diff built. It is the first layer that owns
-# memory across frames.
+# paint applied to the view the diff built and build.c the children a
+# declaration lists, copied where the diff can still read them. It is the
+# first layer that owns memory across frames.
 add_library(cf_node STATIC
     src/node/anim.c
+    src/node/build.c
     src/node/context.c
     src/node/diff.c
     src/node/frame_run.c

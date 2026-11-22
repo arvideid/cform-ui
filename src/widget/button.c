@@ -1,3 +1,4 @@
+#include "cf/build.h"
 #include "cf/widget.h"
 
 /* The bytes one button keeps for the dispatch it drives: the handler needs
@@ -65,7 +66,7 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
     node.role = CF_ROLE_BUTTON;
     node.handlers.pointer = button_pointer;
     node.handlers.pointer_data = data;
-    node.children = children;
-    node.child_count = child_count;
+    node.children = cf_children(ctx, children, child_count);
+    node.child_count = node.children != NULL ? child_count : 0u;
     return node;
 }

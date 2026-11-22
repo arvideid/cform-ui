@@ -75,7 +75,9 @@ void cf_frame_begin(cf_ctx *ctx) {
     ctx->frame_id++;
     state_gc(ctx);
     ctx->layout_ready = false;
-    /* The rects lived in the arena just cleared. */
+    /* A refusal belongs to the frame that made it; the rects lived in the
+     * arena just cleared. */
+    ctx->rejection = NULL;
     ctx->rects = NULL;
 
     /* The dirty bits answer one frame's changes; the coming build's diff
@@ -103,12 +105,21 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
     cf_rect *rects = cf_alloc(&ctx->frame, ctx->layout.node_count * sizeof *rects);
 
     if (rects == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the frame arena cannot hold the layout rects");
+        reject_frame(ctx, "the frame arena could not hold the layout rects");
         return;
     }
 
     cf_layout(&ctx->frame, &ctx->layout, ctx->root_slot, available, origin, rects);
     ctx->rects = rects;
+}
+
+const char *cf_error_message(const cf_ctx *ctx) {
+    return ctx == NULL ? NULL : ctx->rejection;
+}
+
+void reject_frame(cf_ctx *ctx, const char *message) {
+    ctx->rejection = message;
+    cf_logf(CF_LOG_CORE, "node: %s", message);
 }
 
 bool cf_dirty(const cf_ctx *ctx, uint32_t slot) {

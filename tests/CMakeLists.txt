@@ -85,6 +85,10 @@ cf_add_layer_test(node_dirty unit/node_dirty.c cf_node)
 # this case runs it once and reads the stream the whole pass leaves.
 cf_add_layer_test(node_frame_run unit/node_frame_run.c cf_node)
 
+# The declaration sugar is what a build spells its tree with: these cases read
+# the children it counted, the direction it stated and the refusals it records.
+cf_add_layer_test(node_build unit/node_build.c cf_node)
+
 # The semantic export is the retained tree read as roles and text: this case
 # declares one page and reads the dump a screen reader would walk.
 cf_add_layer_test(semantics unit/semantics.c cf_node)

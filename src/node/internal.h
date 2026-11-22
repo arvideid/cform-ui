@@ -82,4 +82,11 @@ typedef struct state_entry {
 /* Drops every entry the frame that just ended did not request. */
 void state_gc(cf_ctx *ctx);
 
+/*
+ * States why this frame could not be completed: the console reads it as it
+ * happens, and `cf_error_message` answers it to the program that has to decide
+ * what to draw instead. The message is a literal naming the refused request.
+ */
+void reject_frame(cf_ctx *ctx, const char *message);
+
 #endif

@@ -33,19 +33,15 @@ static int fake_font_handle;
 static const cf_font fake_font = {.handle = &fake_font_handle, .ops = &fake_ops};
 static const cf_text_stack fake_fonts = {.fonts = &fake_font, .count = 1u};
 
-static const cf_node *counting_box(cf_ctx *ctx) {
+static cf_node counting_box(cf_ctx *ctx) {
     frames_built++;
-    cf_node *root = cf_alloc(&ctx->frame, sizeof *root);
+    (void)ctx;
 
-    if (root == NULL) {
-        return NULL;
-    }
-
-    *root = (cf_node){.key = CF_NO_NAME};
-    root->style = cf_style_default();
-    root->style.width = CF_PX(40.0f);
-    root->style.height = CF_PX(20.0f);
-    root->style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
+    cf_node root = {0};
+    root.style = cf_style_default();
+    root.style.width = CF_PX(40.0f);
+    root.style.height = CF_PX(20.0f);
+    root.style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
 
     return root;
 }

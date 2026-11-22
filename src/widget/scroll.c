@@ -1,3 +1,4 @@
+#include "cf/build.h"
 #include "cf/widget.h"
 
 /* The bytes one scroller keeps for the dispatch it drives: the context to
@@ -62,14 +63,16 @@ cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint
 
     *data = (scroll_data){.ctx = ctx, .key = cf_intern_text(&ctx->names, name)};
 
+    const cf_node *carried = cf_children(ctx, children, child_count);
+
     /* The offset is read at declaration time, so this frame's layout moves
      * the content by it; the wheel handler writes it for the next one. */
     const cf_scroll *held = cf_scroll_of(ctx, data->key);
     const float offset = held != NULL ? held->offset : 0.0f;
 
     *content = (cf_node){.style = cf_style_default(),
-                         .children = children,
-                         .child_count = children != NULL ? child_count : 0u};
+                         .children = carried,
+                         .child_count = carried != NULL ? child_count : 0u};
     content->style.direction = CF_DIRECTION_COLUMN;
     content->style.position = CF_POSITION_RELATIVE;
     /* The wrapper keeps its whole height whatever the window shows of it:

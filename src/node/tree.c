@@ -20,7 +20,7 @@ bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared) {
 
     if (styles == NULL || measures == NULL || measure_data == NULL || child_counts == NULL ||
         last_child == NULL || sizes == NULL || child_start == NULL || child_slots == NULL) {
-        cf_logf(CF_LOG_CORE, "node: the frame arena cannot hold a %u-node view", declared);
+        reject_frame(ctx, "the frame arena cannot hold the declared view");
         return false;
     }
 
