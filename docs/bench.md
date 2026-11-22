@@ -14,9 +14,10 @@ ctest --preset dev -L bench       # Debug, roughly three times slower
 
 Best of nine consecutive runs on a Windows desktop, the `release` preset, GCC
 from MSYS2 UCRT64. Each run already reports its fastest pass of 50 layouts,
-because a shared machine spends its wall time on somebody else's process. The
-nine passes spread 20 to 30%: the low end describes the engine, the high end
-describes the operating system.
+because a shared machine spends its wall time on somebody else's process. Passes
+spread 20 to 30% on an idle machine and about double on a busy one: the table
+holds the fastest pass observed while nothing else was running, and the low end
+is what describes the engine.
 
 | rig                  | nodes  | ms per layout | ns per node |
 |----------------------|--------|---------------|-------------|
@@ -83,7 +84,7 @@ measured by rebuilding the rig's tree with one decision changed at a time:
 
 A sizing run walks the child list once per axis per intrinsic mode. A box that
 states both sizes needs one run, when it places; a box that states neither needs
-three - max-content to guess the width, min-content to keep that guess from
+three — max-content to guess the width, min-content to keep that guess from
 falling below what cannot break, and the run that places. Doubling the column
 count moves the number barely at all and halving the nodes halves the time, so
 the cost is per item and not per track, and 3.9 ms for one run against 2.2 ms for
@@ -93,7 +94,39 @@ The remaining reduction is visible in §12.5 rather than in new machinery: a
 track's floor comes from its items' min-content contributions and its ceiling
 from their max-content contributions, so one run already holds both answers.
 Nothing yet reads the min-content extent off the max-content run's floors, and
-until it does, an auto-sized box pays for the walk twice over.
+until it does, an auto-sized box pays for the walk twice over. None of this is
+what the flat grid pays: a tree two levels deep is refused a table at all,
+because nothing in it re-asks a question.
+
+## What one deep layout actually does
+
+Counters bolted onto the memo and the placing walk, the deep rig at 10,000 nodes:
+
+| counted per layout        |       |
+|---------------------------|-------|
+| nodes placed              | 10,000 |
+| extent asks               | 32,245 |
+| answered from the table   | 12,247 |
+| recomputed                | 19,998 |
+| cells probed per ask      | ~1 |
+
+Placing is optimal — exactly one visit per node, so nothing re-walks the tree to
+position it. The time goes into the 20,000 recomputed extents, two per node, each
+of which walks that node's children again. The table itself is not slow: at
+32,768 cells holding 20,000 entries it answers in about one probe, and
+relieving it measured as a regression rather than a win — recycling the table when
+full changes nothing at this size, because the table never reaches capacity, and
+recycling it at half load threw answers away faster than it saved probes (asks
+32,245 → 66,376, recomputes 19,998 → 54,297, and the rig went 15.0 → 23.6 ms
+with the counters compiled in).
+
+What is left is the shape of the key. An ask carries the room the node was
+offered, and a subtree answers once for every offer only if it is free of
+percentages, wrapping, measure callbacks and grids all the way down — which a
+seventh of the branches declaring `50%` defeats for every level above them.
+Per-axis freedom instead of per-subtree is the lever; like the grid's doubled
+sizing run, it changes the measure contract rather than a constant, and belongs
+in its own pull request with the conformance tier as the net.
 
 ## History
 
