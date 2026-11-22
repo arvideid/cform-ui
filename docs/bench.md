@@ -21,11 +21,11 @@ is what describes the engine.
 
 | rig                  | nodes  | ms per layout | ns per node |
 |----------------------|--------|---------------|-------------|
-| deep flex tree       |  1,250 | 0.29          | 233         |
-| deep flex tree       |  2,500 | 0.59          | 236         |
-| deep flex tree       |  5,000 | 1.32          | 263         |
-| deep flex tree       | 10,000 | 2.81          | 281         |
-| flat 100-column grid | 10,000 | 6.58          | 658         |
+| deep flex tree       |  1,250 | 0.29          | 230         |
+| deep flex tree       |  2,500 | 0.59          | 237         |
+| deep flex tree       |  5,000 | 1.30          | 261         |
+| deep flex tree       | 10,000 | 2.84          | 284         |
+| flat 100-column grid | 10,000 | 5.31          | 531         |
 
 The deep rig is a complete binary tree of alternating rows and columns with a
 third of the branches growing into the leftover space and a seventh claiming half
@@ -56,13 +56,14 @@ a shell sizes its arena against.
 ## What the budget says
 
 2 ms at 10,000 nodes is the target. The deep tree reaches 2.8 ms and the flat
-grid 6.6 ms, so the budget is still open and the grid is now the rig that misses
-by more. The idle half of the same line is met — an unchanged frame dirties
-nothing, lays out nothing and hands the backend zero commands, held by the golden
-`idle_frame` scene and the shell's undamaged-frame case.
+grid 5.3 ms, so the budget is still open and the grid is the rig that misses by
+more. The idle half of the same line is met — an unchanged frame dirties
+nothing, lays out nothing and hands the backend zero commands, held by the node
+rig's own assertions, the golden `idle_frame` scene and the shell's
+undamaged-frame case.
 
-Cost per node rises 1.2× over three doublings of the tree, 233 ns at 1,250 nodes
-against 281 ns at 10,000, where it rose 1.7× while every ask still paid for a
+Cost per node rises 1.2× over three doublings of the tree, 230 ns at 1,250 nodes
+against 284 ns at 10,000, where it rose 1.7× while every ask still paid for a
 leaf cell and a freshly resolved frame. The measured answer still lives only as
 long as the layout that found it: each of the 50 passes rebuilds the table from
 nothing.
@@ -83,7 +84,7 @@ measured by rebuilding the rig's tree with one decision changed at a time:
 | same children, one flex column   |  2.2  |
 
 Every row belongs to the build that was measured before an ask got cheaper, and
-that day's machine: the same rig in the row above the table now reads 6.6 ms.
+that day's machine: the same rig in the row above the table now reads 5.3 ms.
 Only the ratios between rows carry over.
 
 A sizing run walks the child list once per axis per intrinsic mode. A box that
@@ -94,13 +95,16 @@ count moves the number barely at all and halving the nodes halves the time, so
 the cost is per item and not per track, and 3.9 ms for one run against 2.2 ms for
 the same children in a flex column is the grid's own overhead above that.
 
-The remaining reduction is visible in §12.5 rather than in new machinery: a
-track's floor comes from its items' min-content contributions and its ceiling
-from their max-content contributions, so one run already holds both answers.
-Nothing yet reads the min-content extent off the max-content run's floors, and
-until it does, an auto-sized box pays for the walk twice over. None of this is
-what the flat grid pays: a tree two levels deep is refused a table at all,
-because nothing in it re-asks a question.
+The reduction §12.5 points at has been taken: a track's floor comes from its
+items' min-content contributions and its ceiling from their max-content
+contributions, so one walk already holds both answers for an item with no
+children and no measure callback - its border box is the same number at either
+intrinsic kind. The floor pass records each item's weight and the ceiling pass
+reads it back. The flat grid went 6.6 to 5.3 ms with both binaries run back to
+back on one machine, three times each. What is left of the doubling is the
+sizing *run*, not the walk: an auto-sized box still runs the solver three times.
+None of this is what the flat grid pays: a tree two levels deep is refused a
+table at all, because nothing in it re-asks a question.
 
 ## What one deep layout actually does
 
@@ -143,17 +147,19 @@ part, and the key is still what is left.
 
 ## History
 
-| rig                   | before                | after |
-|-----------------------|-----------------------|-------|
+| rig                     | before              | after |
+|-------------------------|---------------------|-------|
 | flat grid, 10,000 cells | ~300 ms             | 8.8 ms |
 | deep flex, 10,000 nodes | 18 to 20 ms         | 5.8 ms |
+| flat grid, 10,000 cells | two walks per axis  | one   |
 
 The first row is the dense auto-placement scan, which restarted at the first cell
 of the occupancy map for every item; the second is the intrinsic-measure
 memoisation, which stopped re-asking a subtree for the same extent at every level
-above it. The before columns come from the sessions that made those changes and
-the after columns from this machine, so a row's gap is wider than the engine
-moved.
+above it; the third is the floor pass's item weights, which the ceiling pass now
+reads instead of recomputing (6.6 to 5.3 ms, measured back to back here). The
+before columns come from the sessions that made those changes and the after
+columns from this machine, so a row's gap is wider than the engine moved.
 
 ## Why no number is asserted
 
