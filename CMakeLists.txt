@@ -96,11 +96,12 @@ target_link_libraries(cf_paint PUBLIC cf_layout cf_text)
 
 # cf_node reconciles each frame's declaration into retained slots: identity
 # by depth and key, position for the keyless, and the view cf_layout reads.
-# state.c holds the blocks a build asks for by name across frames, scroll.c
-# the offsets a scroller keeps under its name, resolve.c the theme's per-state
-# paint applied to the view the diff built and build.c the children a
-# declaration lists, copied where the diff can still read them. It is the
-# first layer that owns memory across frames.
+# match.c indexes the retained keyed members diff.c takes slots from; state.c
+# holds the blocks a build asks for by name across frames, scroll.c the offsets
+# a scroller keeps under its name, resolve.c the theme's per-state paint applied
+# to the view the diff built and build.c the children a declaration lists,
+# copied where the diff can still read them. The layer is the first that owns
+# memory across frames.
 add_library(cf_node STATIC
     src/node/anim.c
     src/node/build.c
@@ -108,6 +109,7 @@ add_library(cf_node STATIC
     src/node/diff.c
     src/node/frame_run.c
     src/node/input.c
+    src/node/match.c
     src/node/resolve.c
     src/node/scroll.c
     src/node/semantic.c

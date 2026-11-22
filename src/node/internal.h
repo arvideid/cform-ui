@@ -53,6 +53,50 @@ static inline node_record *record_of(const cf_ctx *ctx, uint32_t slot) {
     return cf_store_at(&ctx->nodes, slot);
 }
 
+/* A slot whose record the store still hands out: one removed since the last
+ * diff keeps its bytes until the arena dies, and answers no lookup. */
+static inline bool slot_is_live(const cf_ctx *ctx, uint32_t slot) {
+    return cf_store_get(&ctx->nodes, cf_store_id(&ctx->nodes, slot)) != NULL;
+}
+
+/*
+ * The retained keyed members indexed by their full (depth, key, ordinal)
+ * identity, rebuilt from the store at the start of every diff. An ordinal
+ * is unique inside its (depth, key) group, so the triple names one record
+ * and a take answers in one probe. The consumed count per (depth, key)
+ * lives in its own probed array - a group with no members yet has no cell
+ * to keep it on - and every take consumes one ordinal, hit or miss.
+ */
+typedef struct member_cell {
+    cf_name key; /* CF_NO_NAME ends a probe */
+    uint32_t depth;
+    uint32_t ordinal;
+    uint32_t slot;
+} member_cell;
+
+typedef struct match_table {
+    uint32_t member_capacity;
+    member_cell *members;
+    uint32_t counter_capacity;
+    uint32_t counter_used;
+    cf_name *counter_keys; /* CF_NO_NAME ends a probe */
+    uint32_t *counter_depths;
+    uint32_t *counter_consumed;
+} match_table;
+
+/* Indexes every live keyed record. False when the frame arena cannot hold the
+ * table, which leaves the frame without a tree. */
+bool match_index(cf_ctx *ctx, match_table *table);
+
+/*
+ * The slot a declaration of this depth and key matches: the kept member whose
+ * ordinal is the group's consumed count, or CF_NO_LINK - the caller then
+ * claims a fresh member at that ordinal, which `out_ordinal` reports either
+ * way.
+ */
+uint32_t match_take(cf_ctx *ctx, match_table *table, cf_name key, uint32_t depth,
+                    uint32_t *out_ordinal);
+
 /* One declared node resolved to the slot it keeps this frame, in preorder. */
 typedef struct claim_entry {
     uint32_t slot;
