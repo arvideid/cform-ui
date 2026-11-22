@@ -110,19 +110,10 @@ cf_add_layer_test(yoga_cases conformance/yoga_cases.c cf_layout)
 
 # The real font answers the same table the fakes do, measured without
 # rasterizing; it needs the backend's fetch, so it builds only where the
-# backend does. The repo carries no font binary: the one the adapter reads
-# is fetched once into the build, and a machine offline or without the
-# backend skips the test rather than pretends.
+# backend does. The font itself is downloaded where the path is settled, in the
+# root's SDL block, and a machine offline or without the backend skips this test
+# rather than pretends.
 if(CFORM_WITH_SDL_BACKEND)
-    set(CFORM_FONT_FILE "${CMAKE_BINARY_DIR}/fonts/Lato-Regular.ttf")
-
-    if(NOT EXISTS "${CFORM_FONT_FILE}")
-        file(DOWNLOAD
-            "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf"
-            "${CFORM_FONT_FILE}"
-            STATUS CFORM_FONT_STATUS)
-    endif()
-
     cf_add_layer_test(text_sdl_font unit/text_sdl_font.c cf_backend_sdl)
     target_compile_definitions(text_sdl_font PRIVATE CFORM_FONT_PATH="${CFORM_FONT_FILE}")
 endif()

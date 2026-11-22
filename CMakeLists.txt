@@ -157,6 +157,16 @@ option(CFORM_WITH_SDL_BACKEND "Build the SDL renderer backend" OFF)
 
 if(CFORM_WITH_SDL_BACKEND)
     include(FetchContent)
+
+    # The browser has no DLLs to load, so SDL links static there, and SDL's own
+    # EM_ASM uses need the GCC statement-expression extension that the strict
+    # ISO dialect project-wide refuses.
+    if(EMSCRIPTEN)
+        set(CMAKE_C_EXTENSIONS ON)
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    endif()
+
     FetchContent_Declare(sdl3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
         GIT_TAG release-3.2.20
@@ -166,7 +176,13 @@ if(CFORM_WITH_SDL_BACKEND)
 
     # Metrics and rasterization come from the same family, over one font file:
     # the numbers cf_text walks read and the glyphs the backend draws are the
-    # same hinting decisions.
+    # same hinting decisions. The shaping stack is vendored on every platform -
+    # a system harfbuzz is a different version per machine, and the conformance,
+    # golden and bench tiers all compare against numbers that one version made.
+    set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+    set(SDLTTF_SAMPLES OFF CACHE BOOL "" FORCE)
+    set(SDLTTF_PLUTOSVG OFF CACHE BOOL "" FORCE)
+
     FetchContent_Declare(sdl3_ttf
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
         GIT_TAG release-3.2.2
@@ -183,6 +199,19 @@ if(CFORM_WITH_SDL_BACKEND)
     )
 
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
+
+    # The one font the examples and the font adapter read is fetched, not
+    # committed: the repository carries no binary it can download. Both read
+    # this path, so it is settled once here rather than per consumer, and an
+    # offline machine gets a page without labels instead of a failed configure.
+    set(CFORM_FONT_FILE "${CMAKE_BINARY_DIR}/fonts/Lato-Regular.ttf")
+
+    if(NOT EXISTS "${CFORM_FONT_FILE}")
+        file(DOWNLOAD
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf"
+            "${CFORM_FONT_FILE}"
+            STATUS CFORM_FONT_STATUS)
+    endif()
 endif()
 
 set(CFORM_LAYER_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_widget cf_app cf_backend_headless)
