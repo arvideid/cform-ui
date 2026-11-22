@@ -6,7 +6,7 @@ ABI, and the behaviour its guarantees describe. Entries follow
 [Keep a Changelog](https://keepachangelog.com/).
 
 Measured numbers do not live here. Flexbox conformance is scored in
-[`docs/conformance.md`](docs/conformance.md), layout timings in
+[`docs/conformance.md`](docs/conformance.md), the bench baselines in
 [`docs/bench.md`](docs/bench.md), and what a binding may rely on across versions
 in [`docs/stability.md`](docs/stability.md). A release entry points at those
 files instead of restating them.
@@ -31,6 +31,10 @@ says what a port implements and what a host compares before the first submit.
 - `cf_layout` stands alone: it links `cf_style` and `cf_base` only, receives
   measurement as a callback, and `examples/layout_only.c` builds against it with
   nothing else in the tree.
+- The headless layers install as a package: ten archives under the `cform::`
+  CMake namespace, `include/cf/`, a `cform-ui-config.cmake` and a `cform.pc`.
+  `cf_backend_sdl` is deliberately absent — its interface names a target the SDL
+  fetch creates only inside this repository's build tree.
 - Flexbox per the spec's freeze loop, wrapping, `order` and baseline alignment;
   an absolute-positioning path; a grid subset of `px`/`%`/`fr`/`auto`/`minmax`
   tracks with `cf_tracks_repeat` for a pattern written once, and 1-based line

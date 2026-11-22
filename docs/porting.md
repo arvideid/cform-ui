@@ -40,6 +40,30 @@ the shell's only failure mode — when the build is missing, when the backend
 cannot submit, when the backend reads a command layout this build does not emit,
 or when its arenas cannot start.
 
+### Taking the floors from an installed package
+
+`cmake --install build --prefix <prefix>` lays down the ten headless archives,
+`include/cf/`, a CMake package config and a `cform.pc`. A CMake consumer resolves
+the same layer graph by name:
+
+```cmake
+find_package(cform-ui REQUIRED CONFIG)
+target_link_libraries(my_app PRIVATE cform::cf_app)
+```
+
+Every installed target carries its own dependencies, so `cform::cf_layout` is the
+layout floor and nothing more. Without CMake:
+
+```sh
+pkg-config --cflags --libs cform   # deepest layer last; drop the floors above the one you call
+```
+
+The installed set stops at the headless layers on purpose. `cf_backend_sdl`
+references `SDL3::SDL3`, a target the fetch creates inside this repository's
+build tree, and a host that wants a window already has its own SDL link line —
+build the backend from source with `CFORM_WITH_SDL_BACKEND=ON`, or write the
+platform's own against [`backend-abi.md`](backend-abi.md).
+
 ## Build knobs
 
 CMake is the single source of truth: the compiler, the C standard, the include

@@ -151,6 +151,21 @@ Sanitizers are opt-in and need a toolchain that ships the ASan/UBSan runtime:
 cmake --preset dev -DCFORM_WITH_SANITIZERS=ON
 ```
 
+The headless layers install as a package, with a CMake config under the `cform::`
+namespace and a `cform.pc` for builds that do not use CMake:
+
+```sh
+cmake --install build/dev --prefix /usr/local
+```
+
+```cmake
+find_package(cform-ui REQUIRED CONFIG)
+target_link_libraries(my_app PRIVATE cform::cf_app)  # cform::cf_layout for the engine alone
+```
+
+The SDL backend is not installed: a host that opens a window already owns an SDL
+link line. [`docs/porting.md`](docs/porting.md) is the route in either way.
+
 ### In the browser
 
 The gallery runs on WebAssembly through the same SDL backend. [Emscripten](https://emscripten.org/)
