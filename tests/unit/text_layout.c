@@ -47,7 +47,10 @@ static void a_text_node_hugs_the_lines_its_width_leaves(void) {
     styles[0].width = CF_PX(25.0f);
     styles[0].direction = CF_DIRECTION_COLUMN;
 
-    const uint32_t child_start[] = {0u, 1u};
+    /* node_count + 1 entries: the leaf's own range is the empty one at the
+     * end of the child list, and a table short of it lets the walk read past
+     * what this test declared. */
+    const uint32_t child_start[] = {0u, 1u, 1u};
     const uint32_t child_slots[] = {1u};
     const cf_tree tree = {.styles = styles,
                           .measures = measures,
