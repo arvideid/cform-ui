@@ -164,9 +164,9 @@ if(CFORM_WITH_SDL_BACKEND)
     )
     FetchContent_MakeAvailable(sdl3)
 
-    # Text metrics come from the same family: the font file is read for its
-    # numbers alone, and a glyph is priced, never rasterized, until the
-    # widgets draw one.
+    # Metrics and rasterization come from the same family, over one font file:
+    # the numbers cf_text walks read and the glyphs the backend draws are the
+    # same hinting decisions.
     FetchContent_Declare(sdl3_ttf
         GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
         GIT_TAG release-3.2.2
@@ -179,6 +179,7 @@ if(CFORM_WITH_SDL_BACKEND)
     add_library(cf_backend_sdl STATIC
         src/backend/sdl/gpu.c
         src/backend/sdl/font.c
+        src/backend/sdl/text.c
     )
 
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)

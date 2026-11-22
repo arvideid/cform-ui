@@ -2,6 +2,7 @@
 
 #include "cf/backend.h"
 #include "cf/event.h"
+#include "internal.h"
 
 /*
  * The quarter arc of a corner is walked in this many straight pieces: enough
@@ -169,6 +170,11 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
         return;
     }
 
+    if (command->kind == CF_COMMAND_TEXT) {
+        sdl_draw_text(state->renderer, command, scale);
+        return;
+    }
+
     if (command->kind == CF_COMMAND_IMAGE) {
         const uint32_t id = command->texture;
 
@@ -236,21 +242,8 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
         return;
     }
 
-    uint32_t skipped = 0u;
-
     for (uint32_t i = 0u; i < count; ++i) {
-        /* Glyphs are the font layer's raster work, not built here yet; the
-         * lines the stream carries are named once per submit, not per line. */
-        if (commands[i].kind == CF_COMMAND_TEXT) {
-            skipped++;
-            continue;
-        }
-
         draw_command(state, &commands[i], scale);
-    }
-
-    if (skipped > 0u) {
-        cf_logf(CF_LOG_BACKEND, "backend: %u text lines have no glyphs to draw them yet", skipped);
     }
 }
 
