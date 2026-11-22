@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Format · static analysis · layer graph
+    name: Format · static analysis · layer graph · shape
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -37,6 +37,28 @@ jobs:
 
       - name: Layer graph
         run: python3 tools/check_includes.py
+
+      # Two promises the tree has to keep holding: a translation unit stays
+      # small enough to have one job, and nothing but cf_ctx keeps state.
+      - name: Shape
+        run: |
+          # 400 lines is as far as one file goes. Past it a reader stops seeing
+          # the job and starts seeing two that were never separated.
+          long=$(git ls-files 'src/*/*.c' | xargs wc -l | awk '$1 > 400 && $2 != "total"')
+          if [ -n "$long" ]; then
+            echo "over the 400 line ceiling:"; echo "$long"; exit 1
+          fi
+
+          # src/base/log.c holds the installed sink, reachable only through
+          # cf_log_install, and is the one file scope allowed to change.
+          globals=$(git ls-files 'src/*/*.c' \
+            | xargs grep -nE '^static [^(=]*=' \
+            | grep -vE 'static (const|inline) ' \
+            | grep -v '^src/base/log\.c:' || true)
+          if [ -n "$globals" ]; then
+            echo "mutable file scope outside the logging sink:"; echo "$globals"
+            exit 1
+          fi
 
       - name: Static analysis
         run: |
