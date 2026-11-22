@@ -16,6 +16,28 @@ function(cf_add_layer_test name source)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+# The bench tier reports throughput rather than asserting it: a shared runner
+# cannot be trusted for a wall-clock number, so the rig checks that the tree
+# still lands where the spec says and prints what the machine managed.
+# Labelled `bench` so a default run can skip it and a dedicated step can ask
+# for it by name. No sanitizer flags: the sanitize job skips the label, and
+# instrumentation in a timed rig measures the instrumentation.
+function(cf_add_bench name source)
+    add_executable(${name} ${source})
+
+    target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${name} PRIVATE ${ARGN})
+
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+        target_compile_options(${name} PRIVATE -Wall -Wextra)
+    elseif(MSVC)
+        target_compile_options(${name} PRIVATE /W4)
+    endif()
+
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name} PROPERTIES LABELS bench)
+endfunction()
+
 cf_add_layer_test(base_arena unit/base_arena.c cf_base)
 cf_add_layer_test(base_store unit/base_store.c cf_base)
 cf_add_layer_test(base_intern unit/base_intern.c cf_base)
@@ -133,53 +155,13 @@ if(CFORM_WITH_SDL_BACKEND)
     target_compile_definitions(text_sdl_font PRIVATE CFORM_FONT_PATH="${CFORM_FONT_FILE}")
 endif()
 
-# The bench tier reports throughput rather than asserting it: a shared runner
-# cannot be trusted for a wall-clock number, so the rig checks that the tree
-# still lays out and prints what the machine managed. Labelled `bench` so a
-# default run can skip it and a dedicated step can ask for it by name.
-add_executable(bench_layout bench/bench_layout.c)
-
-target_include_directories(bench_layout PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bench_layout PRIVATE cf_layout)
-
-if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(bench_layout PRIVATE -Wall -Wextra)
-elseif(MSVC)
-    target_compile_options(bench_layout PRIVATE /W4)
-endif()
-
-add_test(NAME bench_layout COMMAND bench_layout)
-set_tests_properties(bench_layout PROPERTIES LABELS bench)
+cf_add_bench(bench_layout bench/bench_layout.c cf_layout)
 
 # The node layer's own budget: a 10k-node declaration reconciled frame
 # after frame, cold and idle, beside the layout pass it feeds.
-add_executable(bench_node bench/bench_node.c)
-
-target_include_directories(bench_node PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bench_node PRIVATE cf_node)
-
-if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(bench_node PRIVATE -Wall -Wextra)
-elseif(MSVC)
-    target_compile_options(bench_node PRIVATE /W4)
-endif()
-
-add_test(NAME bench_node COMMAND bench_node)
-set_tests_properties(bench_node PROPERTIES LABELS bench)
+cf_add_bench(bench_node bench/bench_node.c cf_node)
 
 # The paint rig's budget is the stream a 10k page hands a device: the command
 # count is what the rig asserts, and the scratch it costs is what a host sizes
 # an arena against.
-add_executable(bench_paint bench/bench_paint.c)
-
-target_include_directories(bench_paint PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(bench_paint PRIVATE cf_node)
-
-if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-    target_compile_options(bench_paint PRIVATE -Wall -Wextra)
-elseif(MSVC)
-    target_compile_options(bench_paint PRIVATE /W4)
-endif()
-
-add_test(NAME bench_paint COMMAND bench_paint)
-set_tests_properties(bench_paint PROPERTIES LABELS bench)
+cf_add_bench(bench_paint bench/bench_paint.c cf_node)
