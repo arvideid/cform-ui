@@ -33,7 +33,8 @@ says what a port implements and what a host compares before the first submit.
   nothing else in the tree.
 - Flexbox per the spec's freeze loop, wrapping, `order` and baseline alignment;
   an absolute-positioning path; a grid subset of `px`/`%`/`fr`/`auto`/`minmax`
-  tracks given as explicit arrays, with 1-based line placement and spanning.
+  tracks with `cf_tracks_repeat` for a pattern written once, and 1-based line
+  placement and spanning.
 - A command stream (`cf_command[]`) with viewport culling, nested clip
   intersection and text runs, consumed by a headless recorder backend that
   goldens compare against, and by an SDL3 GPU backend that draws it — rounded
@@ -50,8 +51,13 @@ says what a port implements and what a host compares before the first submit.
 - `cf_app_run` owns the frame loop, skips present when nothing is damaged, and
   toggles a live inspector (dirty bits and command counts) on F12.
 - `cf_error_message` reports why the last boundary refused since the frame began.
-- Four test tiers, 33 cases in `ctest`: unit, a ported Yoga conformance corpus,
-  golden command-stream snapshots, and bench rigs with published baselines.
+- `tools/amalgamate.py` packs `types.h`, `base.h`, `style.h` and `layout.h` into
+  one `cf_layout.h`. A project that takes it drops the file beside its own
+  source, links the `cf_layout` objects and configures no include path; a case
+  in `ctest` compiles against the generated header alone, which is what keeps
+  that promise checked.
+- Four test tiers in `ctest`: unit, a ported Yoga conformance corpus, golden
+  command-stream snapshots, and bench rigs with published baselines.
 - CI: three operating systems in Debug and Release, a sanitizer build, a wasm
   gallery, clang-format, clang-tidy, and the include-graph check
   (`tools/check_includes.py`).

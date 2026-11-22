@@ -78,6 +78,16 @@ program: it links `cf_layout` and nothing else, lays a grid inside a column that
 hugs it, and measures a label through a callback. Building it is the check that
 the engine still stands alone.
 
+[`tools/amalgamate.py`](tools/amalgamate.py) is the same engine as one file. It
+packs `types.h`, `base.h`, `style.h` and `layout.h` into a generated
+`cf_layout.h`, which a project drops beside its own source and compiles against
+with no include path configured — `ctest` builds a case that includes the
+packed header and nothing from `include/cf`, so the promise stays checked:
+
+```sh
+cmake --build build/dev --target cf_amalgamate   # writes build/amalgam/cf_layout.h
+```
+
 ## The whole stack
 
 Above `cf_layout`, a page is a function that returns a tree. The shell owns the
@@ -166,7 +176,8 @@ freezing the tab.
 ```
 include/cf/     Public headers — the contract; changes here are breaking
 src/base/       Arena, pool, handle, intern, hash, log (libc only)
-src/style/      Length and box resolution, style defaults, roles, themes
+src/style/      Length and box resolution, style defaults, roles
+src/theme/      The default palette: what each role rests on and reacts in
 src/layout/     Flex, grid, absolute, intrinsic measurement, measure callback
 src/text/       Decoding, break opportunities, line walking, measurement
 src/paint/      The command stream: fills, borders, lines, images
@@ -180,7 +191,8 @@ tests/unit/     One file per layer, scenario-named cases
 tests/conformance/  Yoga's fixtures as data, scored against a published number
 tests/golden/   Command-stream snapshots, reviewed as data
 tests/bench/    Throughput rigs at the size the budget names
-tools/          The include-graph check CI runs, and the corpus generator
+tools/          The include-graph check CI runs, the corpus generator, the
+                layout packer
 docs/           Published numbers, the backend ABI and the stability contract
 ```
 
