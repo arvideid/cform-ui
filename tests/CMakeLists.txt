@@ -166,3 +166,20 @@ endif()
 
 add_test(NAME bench_node COMMAND bench_node)
 set_tests_properties(bench_node PROPERTIES LABELS bench)
+
+# The paint rig's budget is the stream a 10k page hands a device: the command
+# count is what the rig asserts, and the scratch it costs is what a host sizes
+# an arena against.
+add_executable(bench_paint bench/bench_paint.c)
+
+target_include_directories(bench_paint PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(bench_paint PRIVATE cf_node)
+
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(bench_paint PRIVATE -Wall -Wextra)
+elseif(MSVC)
+    target_compile_options(bench_paint PRIVATE /W4)
+endif()
+
+add_test(NAME bench_paint COMMAND bench_paint)
+set_tests_properties(bench_paint PROPERTIES LABELS bench)
