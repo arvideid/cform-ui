@@ -111,8 +111,23 @@ int main(void) {
 
     /* The same declaration again and again: the idle path, where nothing
      * changes and nothing should be dirtied. */
+    const size_t idle_mark = cf_arena_mark(&ctx.persistent);
     const double diff_ms = frame_fastest_ms(&ctx, &root, FRAMES, false);
     printf("  idle diff, %u nodes:   %8.3f ms per frame\n", NODE_COUNT, diff_ms);
+
+    /* The budget a frame that changes nothing has to hit: no byte asked for
+     * above the cold build's, and no node left standing dirty, which is what
+     * tells the layout and the paint there is nothing to do. */
+    CF_CHECK(cf_arena_mark(&ctx.persistent) == idle_mark,
+             "an idle frame allocates nothing it did not already hold");
+
+    uint32_t dirtied = 0u;
+
+    for (uint32_t slot = 0u; slot < NODE_COUNT; ++slot) {
+        dirtied += cf_dirty(&ctx, slot) ? 1u : 0u;
+    }
+
+    CF_CHECK(dirtied == 0u, "an idle frame dirties no node");
 
     const double laid_ms = frame_fastest_ms(&ctx, &root, FRAMES, true);
     printf("  diff + layout, %u nodes: %5.3f ms per frame\n", NODE_COUNT, laid_ms);
