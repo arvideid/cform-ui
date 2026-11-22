@@ -157,7 +157,7 @@ static void the_inspector_toggles_on_f12(void) {
         .build = counting_box, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
 
     CF_CHECK(frames_built == 1u, "the toggle builds the frame it lands in");
-    CF_CHECK(recorder.count == 6u, "the page's fill and the panel's five commands arrived");
+    CF_CHECK(recorder.count == 8u, "the page's fill and the panel's seven commands arrived");
 
     bool text_seen = false;
 
@@ -167,7 +167,7 @@ static void the_inspector_toggles_on_f12(void) {
         }
     }
 
-    CF_CHECK(text_seen, "the panel's counts ride the stream as text");
+    CF_CHECK(text_seen, "the panel's numbers ride the stream as text");
 }
 
 static void a_shell_that_cannot_run_sits_idle(void) {

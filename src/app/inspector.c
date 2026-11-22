@@ -1,13 +1,14 @@
 #include "internal.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 /* The panel is a corner, not a windshield: the padding keeps its numbers off
- * the edges and the width holds three labeled counts. */
+ * the edges and the width holds the longest labeled line. */
 #define PANEL_WIDTH 168.0f
 #define PANEL_PADDING 8.0f
-#define PANEL_LINES 3u
+#define PANEL_LINES 5u
 #define LINE_BYTES 32u
 
 /* The list the page painted through grows the same way the panel's own
@@ -94,23 +95,23 @@ static void append_edge(cf_arena *arena, cf_command_list *out, cf_rect rect) {
                                                .widths = (cf_edges){1.0f, 1.0f, 1.0f, 1.0f}};
 }
 
-/* One count, printed into bytes the frame arena holds through the submit the
- * stream rides; the panel borrows them the way a label borrows its text. */
-static void append_count(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts,
-                         const char *format, uint32_t value, float at_y, float height) {
-    if (!list_room(&ctx->frame, out)) {
-        return;
-    }
-
+/* The bytes a line is printed into come out of the frame arena, so they live
+ * as long as the submit the stream rides - the way a label's text does. A
+ * line the arena cannot hold draws nothing. */
+static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts, float at_y,
+                        float height, const char *format, ...) {
     char *bytes = cf_alloc(&ctx->frame, LINE_BYTES);
 
     if (bytes == NULL) {
         return;
     }
 
-    const int written = snprintf(bytes, LINE_BYTES, format, value);
+    va_list arguments;
+    va_start(arguments, format);
+    const int written = vsnprintf(bytes, LINE_BYTES, format, arguments);
+    va_end(arguments);
 
-    if (written <= 0) {
+    if (written <= 0 || (uint32_t)written >= LINE_BYTES || !list_room(&ctx->frame, out)) {
         return;
     }
 
@@ -122,8 +123,14 @@ static void append_count(cf_ctx *ctx, cf_command_list *out, const cf_text_stack 
                      .font = fonts->fonts[0]};
 }
 
+/* Whole points, because the panel reads as text and a fraction of a point is
+ * noise at the size a rect is reported. */
+static uint32_t round_points(float value) {
+    return value > 0.0f ? (uint32_t)(value + 0.5f) : 0u;
+}
+
 void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t painted,
-                          cf_command_list *out) {
+                          uint32_t frame_us, cf_command_list *out) {
     if (ctx == NULL || out == NULL) {
         return;
     }
@@ -140,8 +147,13 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     }
 
     const panel_counts counts = count_of(ctx);
+    const cf_rect page =
+        ctx->rects != NULL ? ctx->rects[ctx->root_slot] : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
 
-    append_count(ctx, out, fonts, "nodes %u", counts.nodes, PANEL_PADDING, height);
-    append_count(ctx, out, fonts, "dirty %u", counts.dirty, PANEL_PADDING + height, height);
-    append_count(ctx, out, fonts, "commands %u", painted, PANEL_PADDING + height * 2.0f, height);
+    append_line(ctx, out, fonts, PANEL_PADDING, height, "nodes %u", counts.nodes);
+    append_line(ctx, out, fonts, PANEL_PADDING + height, height, "dirty %u", counts.dirty);
+    append_line(ctx, out, fonts, PANEL_PADDING + height * 2.0f, height, "commands %u", painted);
+    append_line(ctx, out, fonts, PANEL_PADDING + height * 3.0f, height, "page %ux%u",
+                round_points(page.width), round_points(page.height));
+    append_line(ctx, out, fonts, PANEL_PADDING + height * 4.0f, height, "frame %uus", frame_us);
 }

@@ -2,6 +2,8 @@
 
 #include "internal.h"
 
+#include <time.h>
+
 /*
  * The arena sizes the shell's context starts with. The frame side holds the
  * view, the rects and the paint list of the one frame in flight; the
@@ -16,6 +18,20 @@
 /* The toggle lives in the same keyed memory a build's state does, so the
  * shell keeps no globals of its own. */
 #define INSPECTOR_KEY "cf/inspector"
+
+/*
+ * The panel's frame time, in microseconds: what the engine spent producing
+ * this frame. The draw calls and the wait for the device are not in it, so
+ * the number moves when a page's build, layout or paint gets dearer and not
+ * when the monitor changes.
+ */
+static uint32_t elapsed_us(const struct timespec *started, const struct timespec *finished) {
+    const int64_t seconds = (int64_t)finished->tv_sec - (int64_t)started->tv_sec;
+    const int64_t nanos = (int64_t)finished->tv_nsec - (int64_t)started->tv_nsec;
+    const int64_t microseconds = seconds * 1000000 + nanos / 1000;
+
+    return microseconds > 0 ? (uint32_t)microseconds : 0u;
+}
 
 void cf_app_run(const cf_app_config *config) {
     if (config == NULL || config->build == NULL || config->backend.submit == NULL) {
@@ -82,13 +98,18 @@ void cf_app_run(const cf_app_config *config) {
 
         offer = now;
         cf_command_list list = {0};
+        struct timespec started;
+        struct timespec finished;
+        timespec_get(&started, TIME_UTC);
         cf_frame_run(&ctx, config->build, offer, &list);
+        timespec_get(&finished, TIME_UTC);
+        const uint32_t frame_us = elapsed_us(&started, &finished);
         painted = true;
 
         const bool *shown = cf_state(&ctx, inspector_key, sizeof *shown);
 
         if (shown != NULL && *shown) {
-            app_inspector_append(&ctx, config->fonts, list.count, &list);
+            app_inspector_append(&ctx, config->fonts, list.count, frame_us, &list);
         }
 
         config->backend.submit(config->backend.user_data, list.commands, list.count);

@@ -118,7 +118,8 @@ cf_app_run(&(cf_app_config){.build = build, .backend = cf_backend_sdl(&(cf_sdl_c
 
 `cf_app_run` polls the device, dispatches into the tree, rebuilds only when
 something changed, and submits the command stream the golden tier snapshots.
-`F12` opens the inspector: node count, dirty count and commands per frame.
+`F12` opens the inspector: node count, dirty count, commands, the page's rect
+and the frame's time.
 [`examples/gallery.c`](examples/gallery.c) is every widget on one page.
 
 ## Requirements
