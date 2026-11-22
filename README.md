@@ -7,11 +7,12 @@ A retained-mode, data-oriented UI framework in C17. You declare a tree of
 nodes; systems sweep parallel arrays to resolve styles, lay the tree out and
 emit draw commands. No DSL, no C++, no per-node vtables.
 
-> **Status:** `1.0.0` in development. The arena, the style vocabulary and the
-> layout engine are built and scored against a published conformance number;
-> text, paint, the node tree, widgets and the backend do not exist yet. The 0.2
-> frame API on `main` is not compatible and has no aliases — `cf_` names are the
-> contract from here.
+> **Status:** `1.0.0` in development. Every layer is built: the arena and pool,
+> the style vocabulary, flexbox and grid layout, text measurement, the paint
+> command stream, the node tree with diffing, input, scroll and tweens, the
+> widgets, themes and the app shell over an SDL3 backend. The 0.2 frame API on
+> `main` is not compatible and has no aliases — `cf_` names are the contract
+> from here.
 
 ## What is usable today
 
@@ -77,11 +78,45 @@ program: it links `cf_layout` and nothing else, lays a grid inside a column that
 hugs it, and measures a label through a callback. Building it is the check that
 the engine still stands alone.
 
+## The whole stack
+
+Above `cf_layout`, a page is a function that returns a tree. The shell owns the
+window, the loop and the frame arenas; the backend owns pixels and density.
+
+```c
+#include "cf/app.h"
+#include "cf/widget.h"
+
+static const cf_node *build(cf_ctx *ctx) {
+    cf_node *page = cf_alloc(&ctx->frame, sizeof *page);
+    cf_node *children = cf_alloc(&ctx->frame, sizeof *children);
+
+    if (page == NULL || children == NULL) {
+        return NULL; /* a page that paints nothing beats a half-built tree */
+    }
+
+    children[0] = cf_button(ctx, "press", on_press, NULL, NULL, 0u);
+    *page = (cf_node){.style = theme->page, .children = children, .child_count = 1u};
+
+    return page;
+}
+
+cf_app_run(&(cf_app_config){.build = build, .backend = cf_backend_sdl(&(cf_sdl_config){
+                                .title = "cform", .width = 480u, .height = 320u}),
+                            .theme = theme, .fonts = &fonts});
+```
+
+`cf_app_run` polls the device, dispatches into the tree, rebuilds only when
+something changed, and submits the command stream the golden tier snapshots.
+`F12` opens the inspector: node count, dirty count and commands per frame.
+[`examples/gallery.c`](examples/gallery.c) is every widget on one page.
+
 ## Requirements
 
 - CMake **3.25**+, a **C17** compiler (GCC, Clang or MSVC) and
   [Ninja](https://ninja-build.org/), which the presets use
-- Nothing else. There are no third-party dependencies to fetch.
+- Nothing else for the layers: they link libc alone. The SDL backend fetches
+  SDL3 and SDL3_ttf when it is turned on
 
 ## Build and test
 
@@ -92,8 +127,15 @@ ctest --preset dev
 ```
 
 `dev` is a Debug build with a compile database and the test suite on;
-`release` is the same graph in Release. Sanitizers are opt-in and need a
-toolchain that ships the ASan/UBSan runtime:
+`release` is the same graph in Release. The renderer backend and the examples
+that open a window are off until asked for, because fetching SDL is a network
+operation a headless machine should not pay for:
+
+```sh
+cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
+```
+
+Sanitizers are opt-in and need a toolchain that ships the ASan/UBSan runtime:
 
 ```sh
 cmake --preset dev -DCFORM_WITH_SANITIZERS=ON
@@ -104,14 +146,22 @@ cmake --preset dev -DCFORM_WITH_SANITIZERS=ON
 ```
 include/cf/     Public headers — the contract; changes here are breaking
 src/base/       Arena, pool, handle, intern, hash, log (libc only)
-src/style/      Length and box resolution, style defaults
+src/style/      Length and box resolution, style defaults, roles, themes
 src/layout/     Flex, grid, absolute, intrinsic measurement, measure callback
+src/text/       Decoding, break opportunities, line walking, measurement
+src/paint/      The command stream: fills, borders, lines, images
+src/node/       Slot tree, keyed diff, state, input, focus, scroll, tweens
+src/widget/     Label, button, field, list, scroll and image builders
+src/backend/    The ABI's implementations: headless recorder, SDL3 renderer
+src/app/        The shell: loop, damage rule, inspector
 src/*/internal.h  Types shared across src/ but not published
 examples/       Standalone programs, off unless CFORM_BUILD_EXAMPLES is on
 tests/unit/     One file per layer, scenario-named cases
 tests/conformance/  Yoga's fixtures as data, scored against a published number
+tests/golden/   Command-stream snapshots, reviewed as data
 tests/bench/    Throughput rigs at the size the budget names
 tools/          The include-graph check CI runs, and the corpus generator
+docs/           Published numbers, the backend ABI and the stability contract
 ```
 
 Dependency direction is enforced by one CMake target per layer and by
@@ -139,7 +189,8 @@ style by [`tools/gentest.py`](tools/gentest.py). It reports a score and asserts
 a floor that only moves up, so a fixture that regresses goes red while the ones
 that have never passed stay counted rather than deleted.
 
-[`tests/bench/bench_layout.c`](tests/bench/bench_layout.c) is the bench tier:
+[`tests/bench/bench_layout.c`](tests/bench/bench_layout.c) and
+[`tests/bench/bench_node.c`](tests/bench/bench_node.c) are the bench tier:
 two 10,000-node rigs that print milliseconds per layout and assert only that the
 tree still lands where it should. A shared runner cannot be trusted for a
 wall-clock number, so a regression is a diff in a published baseline a reviewer
@@ -151,8 +202,15 @@ ctest --preset dev           # unit and conformance cases
 ctest --preset dev -L bench  # the throughput rigs, printing the baseline
 ```
 
-When the renderer returns it will be verified by running the example and looking
-at it, never by mocking the backend or asserting pixels.
+The golden tier, [`tests/golden/golden_cases.c`](tests/golden/golden_cases.c),
+sits between the two: it runs whole frames through the recorder backend and
+compares the command stream against a checked-in snapshot. A snapshot changes
+only through `golden_cases --update`, so a draw that moved is a diff somebody
+reads as data rather than a pixel somebody squints at.
+
+The renderer is verified by running the example and looking at it, never by
+mocking the backend or asserting pixels. `ctest` says the engine is right; the
+window is the maintainer's check.
 
 [`docs/bench.md`](docs/bench.md) publishes the layout baseline: what the rigs
 cost, how the cost grows with the tree, and why no number is asserted in CI.
@@ -160,6 +218,15 @@ cost, how the cost grows with the tree, and why no number is asserted in CI.
 [`docs/conformance.md`](docs/conformance.md) publishes the flexbox score: which
 fixtures were ported and why the rest were not, how many match per suite, and
 the behaviour each miss needs.
+
+[`docs/backend-abi.md`](docs/backend-abi.md) is the contract a renderer backend
+has to satisfy, and the checklist for writing one: the five slots, what is
+borrowed and what is owned, where logical points stop being points, and how to
+test a port without looking at it.
+
+[`docs/stability.md`](docs/stability.md) says what a binding may rely on across
+versions: handle types, append-only enums, the two arena lifetimes, the one
+failure mode, and what still moves while the version carries `-alpha`.
 
 ## Editor and developer experience
 

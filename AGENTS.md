@@ -19,9 +19,9 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
-`release` is the same graph without the debug information. There are no
-third-party dependencies to find or fetch: the layers link libc and nothing
-else until a backend exists.
+`release` is the same graph without the debug information. The layers link libc
+and nothing else; `cf_backend_sdl` fetches SDL3 and SDL3_ttf when
+`CFORM_WITH_SDL_BACKEND` is on, and stays the only target that does.
 
 `-DCFORM_WITH_SANITIZERS=ON` builds the layers and their tests under AddressSanitizer
 and UndefinedBehaviorSanitizer. Configure fails where the toolchain has no
@@ -50,7 +50,8 @@ not configure. `tools/check_includes.py` catches the mirror-image mistake: an
   Platform differences live in build-selected files, never in `#ifdef` inside a
   shared source.
 - Everything above the backend speaks logical points. Device pixels stop at the
-  backend.
+  backend. [`docs/backend-abi.md`](docs/backend-abi.md) is what a port signs up
+  to; [`docs/stability.md`](docs/stability.md) is what a binding may rely on.
 - `cf_layout` must compile and pass conformance with no other layer present.
 - One job per file, roughly 300 lines, 400 the ceiling. Split when a file starts
   changing for two unrelated reasons. Moving code across a layer boundary is
@@ -97,11 +98,11 @@ corpora share one row format: the scenarios in
 `tests/conformance/yoga_cases_data.h` by `tools/gentest.py` and scored in
 [`docs/conformance.md`](docs/conformance.md), where the tier asserts a floor
 that only moves up. A rule is covered by adding a row, not a function. Golden
-(command-stream snapshots, changed only through an update tool and reviewed as
-data) arrives with the paint layer; the bench tier publishes its baseline in
-[`docs/bench.md`](docs/bench.md). Test names describe the scenario —
-`store_rejects_a_stale_id`, not `test_store_3`. Add a failing test before fixing
-a bug and keep it afterwards.
+snapshots (`tests/golden/`) capture the command stream the recorder backend
+receives, changed only through `golden_cases --update` and reviewed as data; the
+bench tier publishes its baseline in [`docs/bench.md`](docs/bench.md). Test
+names describe the scenario — `store_rejects_a_stale_id`, not `test_store_3`.
+Add a failing test before fixing a bug and keep it afterwards.
 
 Nothing in the suite verifies a pixel. Screenshots and window behaviour are the
 maintainer's check, so a PR that changes rendering says what to look at.
