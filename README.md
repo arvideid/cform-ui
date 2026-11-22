@@ -193,7 +193,8 @@ tests/golden/   Command-stream snapshots, reviewed as data
 tests/bench/    Throughput rigs at the size the budget names
 tools/          The include-graph check CI runs, the corpus generator, the
                 layout packer
-docs/           Published numbers, the backend ABI and the stability contract
+docs/           The architecture, the layout spec, the backend ABI, the porting
+                route, the stability contract and the published numbers
 ```
 
 Dependency direction is enforced by one CMake target per layer and by
@@ -259,6 +260,21 @@ test a port without looking at it.
 [`docs/stability.md`](docs/stability.md) says what a binding may rely on across
 versions: handle types, append-only enums, the two arena lifetimes, the one
 failure mode, and what still moves while the version carries `-alpha`.
+
+[`docs/architecture.md`](docs/architecture.md) is the shape of the thing: the
+ten layers and the edges between them, the order a frame runs in, why a node is
+a slot and an id rather than a pointer, and which boundary each test tier
+protects.
+
+[`docs/layout-spec.md`](docs/layout-spec.md) is the layout reader's reference:
+which CSS the engine implements, the spec step each layout file follows, the
+grid subset as the API exposes it, the contract a measure callback has to keep,
+and the list of what is deliberately not there.
+
+[`docs/porting.md`](docs/porting.md) is the way in: which floor to link, what
+the four build options change, what a platform owes the engine for input, scale
+and pixels, how the single packed header is produced, and how to compile the
+gallery for a browser tab.
 
 ## Editor and developer experience
 

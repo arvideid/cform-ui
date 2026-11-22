@@ -27,8 +27,9 @@ typedef struct cf_backend {
 
 Every slot takes `user_data` first, so a backend's state is one pointer and its
 own to allocate. `abi_version` is `CF_BACKEND_ABI_VERSION` and is how a stale
-`.so` is caught: a stream the backend misreads draws wrong rather than failing,
-so check the version before the first submit.
+`.so` is caught: a stream the backend misreads draws wrong rather than failing.
+`cf_app_run` compares it before the first submit and sits idle on a mismatch, so
+a host that drives `cf_frame_run` itself has to make the comparison.
 
 | Slot | Job | May be NULL |
 |---|---|---|

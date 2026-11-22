@@ -63,6 +63,10 @@ says what a port implements and what a host compares before the first submit.
   (`tools/check_includes.py`).
 - `AGENTS.md` as the tracked repository contract, with a thin machine-local
   pointer rule, `SECURITY.md`, issue templates and a pull-request template.
+- `docs/architecture.md`, `docs/layout-spec.md` and `docs/porting.md`: the layer
+  graph and the order a frame runs in, the CSS the engine implements with the
+  spec step each layout file follows and the grid subset as the API exposes it,
+  and the route in for a host or a platform the SDL backend does not cover.
 
 ### Changed
 
@@ -79,6 +83,10 @@ says what a port implements and what a host compares before the first submit.
   commands and presents.
 - Logical points are the unit everywhere above the backend, which owns display
   scale.
+- `cf_app_run` compares `backend.abi_version` with `CF_BACKEND_ABI_VERSION`
+  before the first submit and sits idle on a mismatch, reported once on the
+  backend log channel. A backend reading a command layout it does not have drew
+  wrong rather than failing, and `cf/backend.h` already told the caller to check.
 
 ### Removed
 
