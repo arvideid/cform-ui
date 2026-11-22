@@ -71,6 +71,12 @@ paths and the warning flags are set once in `CMakeLists.txt`, and CI, clangd and
 your terminal read the same `compile_commands.json` it writes. One minimum,
 3.25, in the `cmake_minimum_required` call and in `CMakePresets.json`.
 
+A second build definition is not offered and none is planned. A Meson port would
+re-declare the ten layer targets, the SDL fetch and the warning set, and the two
+discovery files above already hand a non-CMake build everything it needs to link;
+a build system that only consumes `compile_commands.json` reads the same flags
+the repository wrote.
+
 | Option | Default | Turns on |
 | --- | --- | --- |
 | `CFORM_BUILD_TESTS` | `OFF` | the unit, conformance, golden and bench tiers |
