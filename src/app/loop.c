@@ -22,6 +22,14 @@ void cf_app_run(const cf_app_config *config) {
         return;
     }
 
+    /* A backend that reads a different command layout draws wrong rather than
+     * failing, so the mismatch is settled before anything is submitted. */
+    if (config->backend.abi_version != CF_BACKEND_ABI_VERSION) {
+        cf_logf(CF_LOG_BACKEND, "app: the backend reads stream %u, this build emits %u",
+                config->backend.abi_version, CF_BACKEND_ABI_VERSION);
+        return;
+    }
+
     cf_ctx ctx;
 
     if (!cf_ctx_init(&ctx, APP_FRAME_BYTES, APP_PERSISTENT_BYTES)) {

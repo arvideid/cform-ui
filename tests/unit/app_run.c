@@ -82,6 +82,11 @@ static void fake_present(void *user_data) {
     presents++;
 }
 
+/* A submit that does nothing: the shell only asks whether one exists. */
+static void fake_submit(void *user_data, const cf_command *commands, uint32_t count) {
+    (void)user_data, (void)commands, (void)count;
+}
+
 static cf_backend driven_backend(cf_recorder *recorder) {
     cf_backend backend = cf_backend_recorder(recorder);
     backend.poll_event = fake_poll;
@@ -175,9 +180,15 @@ static void a_shell_that_cannot_run_sits_idle(void) {
     cf_app_run(&empty);
     CF_CHECK(frames_built == 0u, "a config without a build sits idle");
 
-    const cf_app_config without_submit = {.build = counting_box, .backend = {0}};
+    const cf_app_config without_submit = {.build = counting_box,
+                                          .backend = {.abi_version = CF_BACKEND_ABI_VERSION}};
     cf_app_run(&without_submit);
     CF_CHECK(frames_built == 0u, "a backend that cannot submit is never asked to build");
+
+    cf_app_run(&(cf_app_config){
+        .build = counting_box,
+        .backend = {.abi_version = CF_BACKEND_ABI_VERSION - 1u, .submit = fake_submit}});
+    CF_CHECK(frames_built == 0u, "a backend reading an older stream is not drawn for");
 }
 
 int main(void) {
