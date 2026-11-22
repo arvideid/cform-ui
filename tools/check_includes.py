@@ -3,10 +3,13 @@
 
 The CMake target graph already blocks a link across a layer boundary; this
 catches the other half — an #include that assumes an edge the build does not
-grant, a platform header above the backend, or a direct allocation in a layer
-that is supposed to allocate from an arena.
+grant, in a source file or in the public header that names the layer, a
+platform header above the backend, or a direct allocation in a layer that is
+supposed to allocate from an arena.
 
-The v0.2 tree is exempt until the 1.0 layers replace it.
+The public headers are checked because every one of them sits in the same
+directory on the include path: cf/layout.h reaching cf/text.h compiles and only
+shows at link time, in whichever program happened to use the declaration.
 """
 
 import pathlib
@@ -17,9 +20,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "src"
 INCLUDE = ROOT / "include" / "cf"
 
-LEGACY = {"core", "renderer"}
-
 LAYER_OF_HEADER = {
+    "cf.h": "umbrella",
     "types.h": "base",
     "base.h": "base",
     "style.h": "style",
@@ -49,6 +51,10 @@ ALLOWED = {
     "app": {"base", "widget", "node", "backend", "paint", "layout", "style", "text", "theme"},
 }
 
+# The umbrella names every header — that is its only job — so it reaches every
+# layer. Nothing else in the tree is an umbrella.
+ALLOWED["umbrella"] = set(ALLOWED)
+
 CF_INCLUDE = re.compile(r'^\s*#\s*include\s+"cf/([a-z0-9_/]+\.h)"')
 SDL_INCLUDE = re.compile(r'^\s*#\s*include\s+[<"]SDL3')
 ALLOCATION = re.compile(r"\b(malloc|calloc|realloc|free)\s*\(")
@@ -66,7 +72,7 @@ def layer_of(path):
 
 def check_source(path):
     layer = layer_of(path)
-    if layer is None or layer in LEGACY:
+    if layer is None:
         return
 
     may_allocate = layer == "base"
@@ -99,8 +105,25 @@ def check_source(path):
 
 
 def check_public_header(path):
+    owner = LAYER_OF_HEADER.get(path.name)
+    if owner is None:
+        errors.append(f"{path.relative_to(ROOT)}: a public header no layer owns")
+        return
+
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         where = f"{path.relative_to(ROOT)}:{number}"
+
+        header = CF_INCLUDE.match(line)
+        if header:
+            reached = header.group(1)
+            neighbour = LAYER_OF_HEADER.get(reached)
+            if neighbour is None:
+                errors.append(
+                    f"{where}: includes unknown public header cf/{reached}")
+            elif neighbour != owner and neighbour not in ALLOWED[owner]:
+                errors.append(
+                    f"{where}: layer '{owner}' includes cf/{reached} owned by '{neighbour}'")
+
         if re.match(r'^\s*#\s*include\s+"(?!cf/)', line):
             errors.append(
                 f"{where}: public header reaches into src/ internals")
