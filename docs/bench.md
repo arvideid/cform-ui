@@ -68,7 +68,32 @@ would give.
 
 The flat grid is not paying for measurement: it cost 9.3 to 10.6 ms before
 measures were cached and 8.8 to 12.8 ms after, inside the spread either way.
-Where that time goes has not been measured, so it is not claimed here.
+What it pays for is the number of full track-sizing runs one layout performs,
+measured by rebuilding the rig's tree with one decision changed at a time:
+
+| the same 10,000-cell grid      |    ms |
+|---------------------------------|-------|
+| both axes auto (the rig)        | 10.1  |
+| width stated, height auto       |  6.3  |
+| both axes stated                 |  3.9  |
+| both axes stated, `px` tracks   |  3.6  |
+| 10 columns instead of 100        | 10.2  |
+| 1,000 nodes instead of 10,000    |  0.6  |
+| same children, one flex column   |  2.2  |
+
+A sizing run walks the child list once per axis per intrinsic mode. A box that
+states both sizes needs one run, when it places; a box that states neither needs
+three - max-content to guess the width, min-content to keep that guess from
+falling below what cannot break, and the run that places. Doubling the column
+count moves the number barely at all and halving the nodes halves the time, so
+the cost is per item and not per track, and 3.9 ms for one run against 2.2 ms for
+the same children in a flex column is the grid's own overhead above that.
+
+The remaining reduction is visible in §12.5 rather than in new machinery: a
+track's floor comes from its items' min-content contributions and its ceiling
+from their max-content contributions, so one run already holds both answers.
+Nothing yet reads the min-content extent off the max-content run's floors, and
+until it does, an auto-sized box pays for the walk twice over.
 
 ## History
 
