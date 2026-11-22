@@ -21,11 +21,11 @@ is what describes the engine.
 
 | rig                  | nodes  | ms per layout | ns per node |
 |----------------------|--------|---------------|-------------|
-| deep flex tree       |  1,250 | 0.43          | 340         |
-| deep flex tree       |  2,500 | 1.06          | 420         |
-| deep flex tree       |  5,000 | 2.36          | 470         |
-| deep flex tree       | 10,000 | 5.80          | 580         |
-| flat 100-column grid | 10,000 | 8.79          | 880         |
+| deep flex tree       |  1,250 | 0.29          | 233         |
+| deep flex tree       |  2,500 | 0.59          | 236         |
+| deep flex tree       |  5,000 | 1.32          | 263         |
+| deep flex tree       | 10,000 | 2.81          | 281         |
+| flat 100-column grid | 10,000 | 6.58          | 658         |
 
 The deep rig is a complete binary tree of alternating rows and columns with a
 third of the branches growing into the leftover space and a seventh claiming half
@@ -55,17 +55,17 @@ a shell sizes its arena against.
 
 ## What the budget says
 
-2 ms at 10,000 nodes is the target, and neither layout rig reaches it: 5.8 ms
-for the deep tree, 8.8 ms for the flat grid. The idle half of the same line is
-met — an unchanged frame dirties nothing, lays out nothing and hands the backend
-zero commands, held by the golden `idle_frame` scene and the shell's
-undamaged-frame case.
+2 ms at 10,000 nodes is the target. The deep tree reaches 2.8 ms and the flat
+grid 6.6 ms, so the budget is still open and the grid is now the rig that misses
+by more. The idle half of the same line is met — an unchanged frame dirties
+nothing, lays out nothing and hands the backend zero commands, held by the golden
+`idle_frame` scene and the shell's undamaged-frame case.
 
-Cost per node still rises with the tree, 340 ns at 1,250 nodes against 580 ns at
-10,000, because a measured answer lives only as long as the layout that found it:
-each of the 50 passes rebuilds the table from nothing. The rise is 1.7× over
-three doublings of the tree, not the doubling per level a re-measured subtree
-would give.
+Cost per node rises 1.2× over three doublings of the tree, 233 ns at 1,250 nodes
+against 281 ns at 10,000, where it rose 1.7× while every ask still paid for a
+leaf cell and a freshly resolved frame. The measured answer still lives only as
+long as the layout that found it: each of the 50 passes rebuilds the table from
+nothing.
 
 The flat grid is not paying for measurement: it cost 9.3 to 10.6 ms before
 measures were cached and 8.8 to 12.8 ms after, inside the spread either way.
@@ -81,6 +81,10 @@ measured by rebuilding the rig's tree with one decision changed at a time:
 | 10 columns instead of 100        | 10.2  |
 | 1,000 nodes instead of 10,000    |  0.6  |
 | same children, one flex column   |  2.2  |
+
+Every row belongs to the build that was measured before an ask got cheaper, and
+that day's machine: the same rig in the row above the table now reads 6.6 ms.
+Only the ratios between rows carry over.
 
 A sizing run walks the child list once per axis per intrinsic mode. A box that
 states both sizes needs one run, when it places; a box that states neither needs
@@ -100,7 +104,9 @@ because nothing in it re-asks a question.
 
 ## What one deep layout actually does
 
-Counters bolted onto the memo and the placing walk, the deep rig at 10,000 nodes:
+Counters bolted onto the memo and the placing walk, the deep rig at 10,000 nodes,
+as first measured — a childless node still asked for a cell then, and a frame was
+still resolved on every ask:
 
 | counted per layout        |       |
 |---------------------------|-------|
@@ -127,6 +133,13 @@ seventh of the branches declaring `50%` defeats for every level above them.
 Per-axis freedom instead of per-subtree is the lever; like the grid's doubled
 sizing run, it changes the measure contract rather than a constant, and belongs
 in its own pull request with the conformance tier as the net.
+
+The two costs this table could act on have gone: a leaf with no callback now
+answers before the key is built, and a frame with no percentage side is resolved
+once per layout. The deep rig went 4.03 to 2.86 ms with both binaries run back to
+back on one machine, three times each. The counts above are what the memo saw
+before that, and the two cache experiments stand — the table was never the slow
+part, and the key is still what is left.
 
 ## History
 
