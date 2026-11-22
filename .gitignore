@@ -55,7 +55,7 @@ CMakeUserPresets.json
 *.user
 *.suo
 
-# --- Per-agent isolated checkouts (git worktree add .worktrees/<name>) ---
+# --- Linked worktrees (git worktree add .worktrees/<name>) ---
 .worktrees/
 
 # --- Operating system noise ---

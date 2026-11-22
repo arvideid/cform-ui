@@ -210,7 +210,7 @@ tests/bench/    Throughput rigs at the size the budget names
 tools/          The include-graph check CI runs, the corpus generator, the
                 layout packer
 docs/           The architecture, the layout spec, the backend ABI, the porting
-                route, the stability contract and the published numbers
+                route, the conformance score and the published numbers
 ```
 
 Dependency direction is enforced by one CMake target per layer and by
@@ -274,10 +274,6 @@ has to satisfy, and the checklist for writing one: the five slots, what is
 borrowed and what is owned, where logical points stop being points, and how to
 test a port without looking at it.
 
-[`docs/stability.md`](docs/stability.md) says what a binding may rely on across
-versions: handle types, append-only enums, the two arena lifetimes, the one
-failure mode, and what still moves while the version carries `-alpha`.
-
 [`docs/architecture.md`](docs/architecture.md) is the shape of the thing: the
 ten layers and the edges between them, the order a frame runs in, why a node is
 a slot and an id rather than a pointer, and which boundary each test tier
@@ -293,58 +289,31 @@ the four build options change, what a platform owes the engine for input, scale
 and pixels, how the single packed header is produced, and how to compile the
 gallery for a browser tab.
 
-## Editor and developer experience
+## Editor setup
 
-**CMake is the single source of truth.** The compiler, C standard, include
-paths and warning flags are defined once in `CMakeLists.txt`; clangd, the IDE,
-CI and your terminal all read the same `compile_commands.json` it produces, so
-nobody sees different diagnostics on different machines.
-
-Committed, shared configuration — `.editorconfig`, `.clang-format`,
-`.clang-tidy`, `.clangd`, `CMakePresets.json`, `.vscode/settings.json`,
-`.vscode/tasks.json` and `.vscode/extensions.json`. Personal and generated
-files (`build/`, `compile_commands.json`, `.vscode/launch.json`,
-`CMakeUserPresets.json`) are git-ignored.
-
-1. Install the recommended extensions when prompted; the essential one is
-   **clangd**, which can fetch its own server binary on first launch.
-2. Run **CMake: Configure (dev)** once. This writes
-   `build/dev/compile_commands.json`.
-3. clangd reads that database through `.clangd`, so the Outline view,
-   go-to-definition and inline warnings match the real build.
-   `.vscode/settings.json` disables the cpptools IntelliSense engine so it does
-   not fight clangd.
-
-`Ctrl+Shift+B` builds; **Test: ctest (dev)** builds and runs the suite.
-Everything goes through presets, so the IDE and the command line never drift
-apart.
+The compiler, the C standard, the include paths and the warning flags are said
+once, in `CMakeLists.txt`. Everything else reads the `compile_commands.json` the
+`dev` preset writes — clangd through `.clangd`, CI through the same presets, your
+terminal through the same commands — so nobody sees different diagnostics on
+different machines. Install **clangd**, run **CMake: Configure (dev)** once,
+build with `Ctrl+Shift+B`.
 
 ## Commit messages
 
-We use [Conventional Commits](https://www.conventionalcommits.org/):
+[Conventional Commits](https://www.conventionalcommits.org/):
 `<type>(<scope>): <short description>`, with types `feat`, `fix`, `test`,
 `docs`, `build`, `ci`, `refactor`, `chore`. One commit is one coherent change —
-no "update", "stuff", or unrelated changes squashed together. To use the
-bundled template locally (opt-in, not forced on anyone):
-
-```sh
-git config commit.template .gitmessage
-```
+no "update", "stuff", or unrelated changes squashed together.
 
 ## Contributing
 
-[`AGENTS.md`](AGENTS.md) is the repository contract: the layer graph, the data
-rules, naming, comments, test tiers and the git conventions. Read it before the
-first edit. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the route from an idea to a
-merged pull request — branches, the test tier a rule belongs in, and the gates CI
-runs. [`CHANGELOG.md`](CHANGELOG.md) records what changed for consumers.
-Pull requests are welcome; open an issue first for anything
-substantial. CI gates the formatting and static-analysis checks over every
-layer, the include-graph rule, a sanitizer build, the WebAssembly compile of the
-gallery, and Debug and Release compiles on Linux, Windows and macOS — keep those
-green and `ctest` passing. Report
-security problems as described in [`SECURITY.md`](SECURITY.md). A PR template is
-provided.
+Pick a layer, keep `cmake --build --preset dev` and `ctest --preset dev` green,
+run `clang-format` and `python tools/check_includes.py` over what you touched,
+and open a pull request. The layer graph and the reasons behind it are in
+[`docs/architecture.md`](docs/architecture.md); the backend contract is in
+[`docs/backend-abi.md`](docs/backend-abi.md); [`docs/porting.md`](docs/porting.md)
+walks a new platform in. Rendering is the one thing no test checks — a change
+that draws differently says what to look at.
 
 ## License
 
