@@ -42,78 +42,6 @@ static bool measured_extent(const layout_ctx *ctx, uint32_t slot, cf_available c
     return true;
 }
 
-/*
- * How far the content box sits inside the border box. Padding and border are
- * only ever added together - the engine paints no separate frame - so they
- * resolve into one set of edges.
- */
-cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base) {
-    const cf_style *style = &ctx->tree->styles[slot];
-    const cf_edges padding = cf_box_resolve(style->padding, percent_base);
-    const cf_edges border = cf_box_resolve(style->border, percent_base);
-
-    return (cf_edges){.left = padding.left + border.left,
-                      .top = padding.top + border.top,
-                      .right = padding.right + border.right,
-                      .bottom = padding.bottom + border.bottom};
-}
-
-/*
- * The question a measuring pass asks: one slot, one intrinsic kind, one
- * content offer. The staging bytes start zeroed so the alignment gaps
- * ride the same hash every pass.
- */
-static uint32_t measure_hash(uint32_t slot, uint32_t mode, cf_available constraint) {
-    struct {
-        uint32_t slot;
-        uint32_t mode;
-        cf_available constraint;
-    } key;
-
-    memset(&key, 0, sizeof key);
-
-    key.slot = slot;
-    key.mode = mode;
-    key.constraint = constraint;
-
-    return cf_hash_bytes(&key, sizeof key);
-}
-
-/* The slot a measuring pass asks about first. */
-static bool measure_same(const measure_cell *cell, uint32_t slot, uint32_t mode,
-                         cf_available constraint) {
-    return cell->slot == slot && cell->mode == mode &&
-           cell->constraint.width.kind == constraint.width.kind &&
-           cell->constraint.width.value == constraint.width.value &&
-           cell->constraint.height.kind == constraint.height.kind &&
-           cell->constraint.height.value == constraint.height.value;
-}
-
-/* Stores an answer found after the recursion below it may have filled
- * cells, so the probe restarts from the hash rather than a spot taken
- * before the descent. The caller guarantees an empty cell exists. */
-static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
-                          cf_available constraint, cf_size extent) {
-    /* The memo extends as the queries run: an answer stored here is the
-     * answer the query that found it would have returned, so the const
-     * guards the tree and the rects, not the table of answers. */
-    layout_ctx *const table = (layout_ctx *)ctx;
-
-    uint32_t at = measure_hash(slot, mode, constraint) & (table->measure_capacity - 1u);
-
-    while (table->measures[at].slot != MEASURE_SLOT_NONE) {
-        at = (at + 1u) & (table->measure_capacity - 1u);
-    }
-
-    table->measures[at] =
-        (measure_cell){.slot = slot, .mode = mode, .constraint = constraint, .extent = extent};
-    table->measure_count++;
-
-    /* A full table has no empty cell to end a probe, so every later ask
-     * recomputes rather than walks the table forever. */
-    table->measure_full = table->measure_count == table->measure_capacity;
-}
-
 /* A percentage on any of these resolves against the room a pass offers,
  * which is exactly the dependence the flag below rules out. */
 static bool length_is_percent(cf_length length) {
@@ -131,6 +59,112 @@ static bool style_offers_nothing(const cf_style *style) {
            !length_is_percent(style->column_gap) && !length_is_percent(style->row_gap) &&
            !length_is_percent(style->min_width) && !length_is_percent(style->max_width) &&
            !length_is_percent(style->min_height) && !length_is_percent(style->max_height);
+}
+
+/*
+ * How far the content box sits inside the border box. Padding and border are
+ * only ever added together - the engine paints no separate frame - so they
+ * resolve into one set of edges.
+ */
+static cf_edges resolve_frame(const layout_ctx *ctx, uint32_t slot, float percent_base) {
+    const cf_style *style = &ctx->tree->styles[slot];
+    const cf_edges padding = cf_box_resolve(style->padding, percent_base);
+    const cf_edges border = cf_box_resolve(style->border, percent_base);
+
+    return (cf_edges){.left = padding.left + border.left,
+                      .top = padding.top + border.top,
+                      .right = padding.right + border.right,
+                      .bottom = padding.bottom + border.bottom};
+}
+
+/*
+ * A frame without a percentage side reads no offer, so it is one answer for
+ * the whole layout and the sweep below resolves it once per node. A frame
+ * with one is resolved against the base the caller was given.
+ */
+cf_edges content_insets(const layout_ctx *ctx, uint32_t slot, float percent_base) {
+    if (ctx->frames != NULL && ctx->frames[slot].no_percent) {
+        return ctx->frames[slot].inset;
+    }
+
+    return resolve_frame(ctx, slot, percent_base);
+}
+
+/*
+ * The bits of a float, so an offer reads as the key it is rather than as the
+ * quantity it means: two offers that compare equal in `measure_same` below
+ * must land on one cell, and -0.0 is the only pair that does not.
+ */
+static uint32_t float_bits(float value) {
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof bits);
+
+    return bits;
+}
+
+/* One word into the running key. The rotates keep a slot number, whose low
+ * bits change every node, from lining up with the axis above it. */
+static uint32_t fold_key(uint32_t hash, uint32_t word) {
+    hash ^= word * 0x85EBCA6Bu;
+
+    return (hash << 16 | hash >> 16) * 0xC2B2AE35u;
+}
+
+/*
+ * The question a measuring pass asks: one slot, one intrinsic kind, one
+ * content offer. A length is a kind and a value, so each axis folds to one
+ * word and the whole key costs four multiplies - walked a byte at a time the
+ * hash alone would rival the probe it indexes.
+ */
+static uint32_t measure_hash(uint32_t slot, uint32_t mode, cf_available constraint) {
+    uint32_t hash = 0x9E3779B9u ^ slot ^ (mode << 8);
+
+    hash = fold_key(hash, float_bits(constraint.width.value) +
+                              (uint32_t)constraint.width.kind * 0x9E3779B9u);
+    hash = fold_key(hash, float_bits(constraint.height.value) +
+                              (uint32_t)constraint.height.kind * 0x85EBCA6Bu);
+
+    return hash;
+}
+
+/* The cell an ask lands on, from a hash the ask already paid for. */
+static uint32_t measure_probe(const layout_ctx *ctx, uint32_t hash) {
+    return hash & (ctx->measure_capacity - 1u);
+}
+
+/* The slot a measuring pass asks about first. */
+static bool measure_same(const measure_cell *cell, uint32_t slot, uint32_t mode,
+                         cf_available constraint) {
+    return cell->slot == slot && cell->mode == mode &&
+           cell->constraint.width.kind == constraint.width.kind &&
+           cell->constraint.width.value == constraint.width.value &&
+           cell->constraint.height.kind == constraint.height.kind &&
+           cell->constraint.height.value == constraint.height.value;
+}
+
+/* Stores an answer found after the recursion below it may have filled
+ * cells, so the probe restarts from the hash rather than a spot taken
+ * before the descent. The caller guarantees an empty cell exists. */
+static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
+                          cf_available constraint, cf_size extent, uint32_t hash) {
+    /* The memo extends as the queries run: an answer stored here is the
+     * answer the query that found it would have returned, so the const
+     * guards the tree and the rects, not the table of answers. */
+    layout_ctx *const table = (layout_ctx *)ctx;
+
+    uint32_t at = measure_probe(table, hash);
+
+    while (table->measures[at].slot != MEASURE_SLOT_NONE) {
+        at = (at + 1u) & (table->measure_capacity - 1u);
+    }
+
+    table->measures[at] =
+        (measure_cell){.slot = slot, .mode = mode, .constraint = constraint, .extent = extent};
+    table->measure_count++;
+
+    /* A full table has no empty cell to end a probe, so every later ask
+     * recomputes rather than walks the table forever. */
+    table->measure_full = table->measure_count == table->measure_capacity;
 }
 
 /*
@@ -181,13 +215,31 @@ void measure_cache_init(layout_ctx *ctx) {
         capacity *= 2u;
     }
 
-    bool *offers = cf_alloc(ctx->scratch, (size_t)ctx->tree->node_count * sizeof *offers);
+    const uint32_t node_count = ctx->tree->node_count;
+    bool *offers = cf_alloc(ctx->scratch, (size_t)node_count * sizeof *offers);
+    frame_cell *frames = cf_alloc(ctx->scratch, (size_t)node_count * sizeof *frames);
 
-    if (offers == NULL) {
+    if (offers == NULL || frames == NULL) {
         return;
     }
 
     ctx->offer_free = offers;
+    ctx->frames = frames;
+
+    /* Every slot in the declaration, not only the ones reachable from the
+     * root: a layout of a subtree can be handed a slot number that belongs to
+     * a sibling, and a frame read past the sweep would be a frame never
+     * resolved. */
+    for (uint32_t slot = 0u; slot < node_count; ++slot) {
+        const cf_style *style = &ctx->tree->styles[slot];
+
+        frames[slot].no_percent =
+            !box_has_percent(style->padding) && !box_has_percent(style->border);
+
+        if (frames[slot].no_percent) {
+            frames[slot].inset = resolve_frame(ctx, slot, 0.0f);
+        }
+    }
 
     if (measure_offers_nothing(ctx, ctx->root) < CACHE_MIN_DEPTH) {
         return;
@@ -214,6 +266,16 @@ void measure_cache_init(layout_ctx *ctx) {
  */
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint) {
+    const cf_measure_fn *measures = ctx->tree->measures;
+
+    /* A childless node with no callback answers zero for every room and every
+     * intrinsic kind, so a cell would only be read back as the constant the
+     * check below returns for free. Leaves are the majority of the asks a deep
+     * tree makes, and each one saved is a line of the table that stays warm. */
+    if (child_count(ctx, slot) == 0u && (measures == NULL || measures[slot] == NULL)) {
+        return (cf_size){0};
+    }
+
     const uint32_t mode_word = (uint32_t)mode;
     const bool cached = ctx->measures != NULL && !ctx->measure_full;
 
@@ -228,8 +290,10 @@ cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mod
         key = (cf_available){.width = CF_AUTO, .height = CF_AUTO};
     }
 
+    const uint32_t hash = measure_hash(slot, mode_word, key);
+
     if (cached) {
-        uint32_t at = measure_hash(slot, mode_word, key) & (ctx->measure_capacity - 1u);
+        uint32_t at = measure_probe(ctx, hash);
 
         while (ctx->measures[at].slot != MEASURE_SLOT_NONE) {
             if (measure_same(&ctx->measures[at], slot, mode_word, key)) {
@@ -243,9 +307,7 @@ cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mod
     cf_size extent = {0};
 
     if (!measured_extent(ctx, slot, constraint, mode, &extent)) {
-        if (child_count(ctx, slot) == 0u) {
-            extent = (cf_size){0};
-        } else if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
+        if (ctx->tree->styles[slot].display == CF_DISPLAY_GRID) {
             extent = grid_extent_of(ctx, slot, constraint, mode);
         } else {
             const flex_pass pass = {
@@ -256,7 +318,7 @@ cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mod
     }
 
     if (cached) {
-        measure_store(ctx, slot, mode_word, key, extent);
+        measure_store(ctx, slot, mode_word, key, extent, hash);
     }
 
     return extent;

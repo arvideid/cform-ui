@@ -25,6 +25,16 @@ typedef struct measure_cell {
 
 #define MEASURE_SLOT_NONE UINT32_MAX
 
+/*
+ * One node's padding and border summed. When neither box carries a
+ * percentage the sum reads no offer, so it is the same answer for every pass
+ * that asks about the node and one layout need resolve it only once.
+ */
+typedef struct frame_cell {
+    cf_edges inset;
+    bool no_percent;
+} frame_cell;
+
 typedef struct layout_ctx {
     cf_arena *scratch;
     const cf_tree *tree;
@@ -43,6 +53,9 @@ typedef struct layout_ctx {
      * Set once per layout from the root; reads stay inside the slots the
      * sweep reached. */
     bool *offer_free;
+    /* One frame per slot, resolved by the same sweep as `offer_free`, and
+     * usable only where its `no_percent` says so. */
+    frame_cell *frames;
 } layout_ctx;
 
 /*
