@@ -188,15 +188,27 @@ static void distribute(track_state *state, const cf_track *tracks, uint32_t star
     }
 }
 
+/*
+ * One weight per item, carried between the two passes an axis makes. An item
+ * with nothing to measure weighs the same whether the pass is after floors or
+ * after ceilings, so the second pass reads back what the first worked out.
+ * NULL is no array: the passes then recompute, which is only slower.
+ */
 static void collect_contributions(const grid_ctx *g, const cf_track *tracks, track_state *state,
-                                  float gap, cf_intrinsic mode, bool to_limit, bool width_axis) {
+                                  float gap, cf_intrinsic mode, bool to_limit, bool width_axis,
+                                  float *floors) {
     for (uint32_t i = 0u; i < g->item_count; ++i) {
         const grid_item *item = &g->items[i];
         const uint32_t start = width_axis ? item->column_start : item->row_start;
         const uint32_t span = width_axis ? item->column_span : item->row_span;
+        const bool reuse = to_limit && floors != NULL && extent_is_empty(g->ctx, item->slot);
+        const float weight = reuse ? floors[i] : item_weight(g, item, mode, width_axis);
 
-        distribute(state, tracks, start, span, gap, item_weight(g, item, mode, width_axis),
-                   to_limit);
+        if (!to_limit && floors != NULL) {
+            floors[i] = weight;
+        }
+
+        distribute(state, tracks, start, span, gap, weight, to_limit);
     }
 }
 
@@ -307,8 +319,11 @@ static void size_axis(const grid_ctx *g, const cf_track *tracks, uint32_t count,
     definite_offer(offer_length, &percent_base);
     init_states(tracks, count, percent_base, state);
 
-    collect_contributions(g, tracks, state, gap, CF_INTRINSIC_MIN_CONTENT, false, width_axis);
-    collect_contributions(g, tracks, state, gap, g->intrinsic, true, width_axis);
+    float *floors = cf_alloc(g->ctx->scratch, (size_t)g->item_count * sizeof *floors);
+
+    collect_contributions(g, tracks, state, gap, CF_INTRINSIC_MIN_CONTENT, false, width_axis,
+                          floors);
+    collect_contributions(g, tracks, state, gap, g->intrinsic, true, width_axis, floors);
 
     float offer;
 

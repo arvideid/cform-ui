@@ -257,6 +257,12 @@ void measure_cache_init(layout_ctx *ctx) {
     ctx->measure_capacity = capacity;
 }
 
+bool extent_is_empty(const layout_ctx *ctx, uint32_t slot) {
+    const cf_measure_fn *measures = ctx->tree->measures;
+
+    return child_count(ctx, slot) == 0u && (measures == NULL || measures[slot] == NULL);
+}
+
 /*
  * The content extent of a node: what a callback reports, what its children
  * fill, or nothing at all when it is a leaf nobody can measure. The answer
@@ -266,13 +272,9 @@ void measure_cache_init(layout_ctx *ctx) {
  */
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint) {
-    const cf_measure_fn *measures = ctx->tree->measures;
-
-    /* A childless node with no callback answers zero for every room and every
-     * intrinsic kind, so a cell would only be read back as the constant the
-     * check below returns for free. Leaves are the majority of the asks a deep
-     * tree makes, and each one saved is a line of the table that stays warm. */
-    if (child_count(ctx, slot) == 0u && (measures == NULL || measures[slot] == NULL)) {
+    /* Leaves are the majority of the asks a deep tree makes, and each one
+     * saved is a line of the table that stays warm. */
+    if (extent_is_empty(ctx, slot)) {
         return (cf_size){0};
     }
 

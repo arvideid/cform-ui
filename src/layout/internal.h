@@ -189,6 +189,15 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
 cf_size content_extent_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
                           cf_available constraint);
 
+/*
+ * Whether a node has anything to measure at all: no children and no callback.
+ * Such a subtree answers zero extent for every room and every intrinsic kind,
+ * so its border box reads the same in a min-content pass as in a max-content
+ * one. The answer table's fast path and the grid's contribution passes both
+ * key their reuse on it.
+ */
+bool extent_is_empty(const layout_ctx *ctx, uint32_t slot);
+
 /* Sized to hold every slot's measured questions a few times over, from the
  * scratch, and to say which subtrees answer the same whatever they are
  * offered. A table the scratch cannot hold is no cache: the passes then
