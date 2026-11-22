@@ -31,6 +31,9 @@ endif()
 # The layer graph: one target per layer, so a dependency can only be created
 # where the graph allows it - the linker is the check. A layer target is added
 # when the layer has code, not before.
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 add_library(cf_base STATIC
     src/base/arena.c
     src/base/hash.c
@@ -226,7 +229,8 @@ endif()
 
 foreach(layer IN LISTS CFORM_LAYER_TARGETS)
     target_include_directories(${layer}
-        PUBLIC include
+        PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+               $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         PRIVATE src
     )
 
@@ -234,6 +238,55 @@ foreach(layer IN LISTS CFORM_LAYER_TARGETS)
         target_compile_options(${layer} PRIVATE ${CFORM_WARNINGS})
     endif()
 endforeach()
+
+# A project outside this repository takes the headless floors as an installed
+# package: the archives, the headers they were built against, and the two
+# discovery files a consumer reads. The SDL backend is not in the package. Its
+# interface names SDL3::SDL3, a target FetchContent creates inside a build tree
+# and nowhere else, so an installed file that referenced it would fail to
+# configure - and a window is the platform's own link line in any port.
+set(CFORM_INSTALLED_TARGETS cf_base cf_style cf_theme cf_layout cf_text cf_paint cf_node cf_widget cf_app cf_backend_headless)
+
+install(TARGETS ${CFORM_INSTALLED_TARGETS}
+    EXPORT cformTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/cf
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING PATTERN "*.h"
+)
+
+install(EXPORT cformTargets
+    FILE cform-ui-targets.cmake
+    NAMESPACE cform::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cform-ui
+)
+
+configure_package_config_file(cmake/cform-ui-config.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/cform-ui-config.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cform-ui
+)
+
+write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/cform-ui-config-version.cmake"
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/cform-ui-config.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cform-ui-config-version.cmake"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cform-ui
+)
+
+# The same package for a build that does not use CMake. The prefix is baked in
+# rather than derived from where the file sits, because moving a prefix here
+# means reconfiguring, and nothing installs into two prefixes at once.
+configure_file(cmake/cform.pc.in "${CMAKE_CURRENT_BINARY_DIR}/cform.pc" @ONLY)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cform.pc"
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+)
 
 # Address and undefined behaviour sanitizers over the layers and their tests.
 # Off by default: the pair needs runtime libraries that neither MSVC nor a bare

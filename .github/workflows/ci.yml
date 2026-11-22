@@ -98,6 +98,13 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config ${{ matrix.type }} --output-on-failure -LE bench
 
+      # The floors a project outside this repository consumes: the archives,
+      # the headers and both discovery files have to land, and an interface that
+      # named a build-tree target would fail here rather than on the
+      # consumer's machine.
+      - name: Install
+        run: cmake --install build --prefix stage --config ${{ matrix.type }}
+
       # The rigs print the numbers a reviewer reads and only fail on a geometry
       # assertion, so they get a step of their own: a passing Test step hides
       # stdout, and an instrumented allocator would time the sanitizer instead

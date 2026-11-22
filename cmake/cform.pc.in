@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+
+Name: cform
+Description: @PROJECT_DESCRIPTION@
+Version: @PROJECT_VERSION@
+Cflags: -I${includedir}
+# Deepest layer last: static archives resolve left to right, so a consumer
+# that wants one floor drops the layers above the one it calls.
+Libs: -L${libdir} -lcf_app -lcf_widget -lcf_node -lcf_paint -lcf_text -lcf_layout -lcf_theme -lcf_style -lcf_base
