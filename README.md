@@ -141,6 +141,26 @@ Sanitizers are opt-in and need a toolchain that ships the ASan/UBSan runtime:
 cmake --preset dev -DCFORM_WITH_SANITIZERS=ON
 ```
 
+### In the browser
+
+The gallery runs on WebAssembly through the same SDL backend. [Emscripten](https://emscripten.org/)
+is the only extra requirement, and the output needs a static file server because
+a tab will not fetch a `.wasm` over `file://`:
+
+```sh
+cmake -S . -B build/wasm -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+  -DCMAKE_BUILD_TYPE=Release -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
+cmake --build build/wasm
+python -m http.server --directory build/wasm/bin 8000   # then open gallery.html
+```
+
+Nothing in the layers changes for the browser: `cf_layout`, `cf_text`, `cf_paint`
+and `cf_node` compile to the same objects, and the backend is the one directory
+that knows a tab exists. The font is preloaded into the data filesystem, and
+`ASYNCIFY` lets the shell's loop yield to the browser's frame clock instead of
+freezing the tab.
+
 ## Layout
 
 ```
