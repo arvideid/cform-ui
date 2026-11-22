@@ -23,6 +23,17 @@ cf_add_layer_test(base_log unit/base_log.c cf_base)
 cf_add_layer_test(style_resolve unit/style_resolve.c cf_style)
 cf_add_layer_test(layout_flex unit/layout_flex.c cf_layout)
 cf_add_layer_test(layout_cases unit/layout_cases.c cf_layout)
+
+# The standalone engine as a consumer takes it: one generated header, no include
+# directory consulted. The case is built only where the packer ran, and depends
+# on the target so the pack happens before the compile.
+if(TARGET cf_amalgamate)
+    cf_add_layer_test(layout_amalgamated unit/layout_amalgamated.c cf_layout)
+
+    target_include_directories(layout_amalgamated PRIVATE "${CMAKE_BINARY_DIR}/amalgam")
+    add_dependencies(layout_amalgamated cf_amalgamate)
+endif()
+
 cf_add_layer_test(text_measure unit/text_measure.c cf_text)
 
 # The measure slot is the seam layout and text share: this one links both

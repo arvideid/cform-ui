@@ -40,7 +40,11 @@ jobs:
 
       - name: Static analysis
         run: |
-          mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/*/*.c')
+          # The amalgamated case includes a header the build generates, which a
+          # run without a compile database cannot find; the same declarations are
+          # analysed through every other translation unit that includes cf/.
+          mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/*/*.c' \
+            | grep -v '^tests/unit/layout_amalgamated\.c$')
           # No compile database: cf_base includes nothing outside libc, so the
           # include paths below are the ones the target actually gets.
           clang-tidy --quiet --warnings-as-errors='*' "${sources[@]}" \

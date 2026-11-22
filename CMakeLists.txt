@@ -266,6 +266,27 @@ if(CFORM_WITH_SANITIZERS)
     endforeach()
 endif()
 
+# The one header a project outside this repository drops in beside its own
+# source. Python is a build-time tool and nothing more: with no interpreter the
+# packed header is not produced, and the case that compiles against it is not
+# built. `cf_amalgamate` is the handle a packager builds.
+find_package(Python3 QUIET COMPONENTS Interpreter)
+
+set(CFORM_AMALGAMATED_LAYOUT "${CMAKE_BINARY_DIR}/amalgam/cf_layout.h")
+
+if(Python3_Interpreter_FOUND)
+    add_custom_command(OUTPUT "${CFORM_AMALGAMATED_LAYOUT}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/amalgam"
+        COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py"
+                --out "${CFORM_AMALGAMATED_LAYOUT}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py"
+                include/cf/types.h include/cf/base.h include/cf/style.h include/cf/layout.h
+        COMMENT "Packing cf_layout.h from the layout headers"
+        VERBATIM)
+
+    add_custom_target(cf_amalgamate DEPENDS "${CFORM_AMALGAMATED_LAYOUT}")
+endif()
+
 option(CFORM_BUILD_TESTS "Build the cform-ui test suite" OFF)
 
 if(CFORM_BUILD_TESTS AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
