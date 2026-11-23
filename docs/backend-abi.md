@@ -1,9 +1,10 @@
 # The backend ABI
 
-`cf/backend.h` is the only boundary between the engine and a device. A backend
-is one struct of function pointers; the engine links nothing that knows about
-windows, GPUs, fonts or input devices. This document is the contract a port has
-to satisfy, and the checklist for writing one.
+`cf/backend.h` is the only boundary between the engine and a device: one struct of
+function pointers, with nothing in the engine knowing about windows, GPUs, fonts or
+input devices. This is the contract a port has to satisfy and the checklist for
+writing one; which floor to link and what the build options change are in the
+README.
 
 ```
 engine ──submit──▶ commands ──▶ backend ──▶ device
@@ -148,11 +149,10 @@ window, and it is a legal backend.
 
 ## Testing a port
 
-Nothing in the suite verifies a pixel. The layers below the backend are checked
-by the recorder (`cf_backend_recorder`), which keeps the last submitted stream
-in memory it owns, and the golden tier snapshots that stream as data — see
-`tests/golden/`. A new backend therefore earns its keep by running the examples:
-build with the port's option on, run `gallery`, and a human looks at it. The
-commands a port must draw are exactly the ones the golden snapshots already
-name, so a diff between what the recorder saw and what the device showed is the
-whole bug report.
+Nothing in the suite verifies a pixel. The layers below the backend are checked by
+the recorder (`cf_backend_recorder`), which keeps the last submitted stream in
+memory it owns, and the golden tier snapshots that stream as data. A new backend
+therefore earns its keep by running the example: build with the port's option on,
+run `gallery`, and a human looks at it. The commands a port must draw are exactly
+the ones the golden snapshots already name, so a diff between what the recorder saw
+and what the device showed is the whole bug report.
