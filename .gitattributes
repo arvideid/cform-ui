@@ -19,6 +19,12 @@
 # Tooling scripts run from CI and from a shell, where a CR breaks a shebang
 *.py   text eol=lf
 
+# These two carry the rules above. Left to text=auto, a Windows checkout reads
+# them back with CRLF while the stored blob stays LF, and git then reports both
+# as modified in every status.
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
 # Windows binaries
 *.exe  binary
 *.dll  binary
@@ -29,7 +35,6 @@
 # Exclude repository-only files from release / git-archive exports
 .gitattributes    export-ignore
 .gitignore        export-ignore
-.gitmessage       export-ignore
 .editorconfig     export-ignore
 .clang-format     export-ignore
 .clang-tidy       export-ignore
@@ -38,5 +43,5 @@
 .vscode/          export-ignore
 CMakePresets.json export-ignore
 CMakeUserPresets.json export-ignore
-example/          export-ignore
+examples/         export-ignore
 tests/            export-ignore
