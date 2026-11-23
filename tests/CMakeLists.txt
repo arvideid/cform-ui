@@ -1,3 +1,8 @@
+# The tiers are many small programs, and a runnable belongs to a human rather
+# than to a suite: ctest names these by target and reads them from a directory
+# of their own, so bin/ holds only what someone is meant to run.
+set(CFORM_TEST_OUTPUT_DIR "${CMAKE_BINARY_DIR}/tests")
+
 # The layers are headless by construction, so a test links the layer under
 # test and nothing else - reaching outside a layer's dependencies fails at link
 # rather than at review.
@@ -12,6 +17,8 @@ function(cf_add_layer_test name source)
     elseif(MSVC)
         target_compile_options(${name} PRIVATE /W4)
     endif()
+
+    set_property(TARGET ${name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CFORM_TEST_OUTPUT_DIR}")
 
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
@@ -33,6 +40,8 @@ function(cf_add_bench name source)
     elseif(MSVC)
         target_compile_options(${name} PRIVATE /W4)
     endif()
+
+    set_property(TARGET ${name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CFORM_TEST_OUTPUT_DIR}")
 
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES LABELS bench)
@@ -153,6 +162,14 @@ cf_add_layer_test(yoga_cases conformance/yoga_cases.c cf_layout)
 if(CFORM_WITH_SDL_BACKEND)
     cf_add_layer_test(text_sdl_font unit/text_sdl_font.c cf_backend_sdl)
     target_compile_definitions(text_sdl_font PRIVATE CFORM_FONT_PATH="${CFORM_FONT_FILE}")
+
+    # A loader finds a DLL beside the binary or on PATH, and the shared libraries
+    # this one needs are runtime outputs of the example directory rather than of
+    # the test directory. Linux and macOS get an RPATH from CMake instead.
+    if(WIN32)
+        set_tests_properties(text_sdl_font PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    endif()
 endif()
 
 cf_add_bench(bench_layout bench/bench_layout.c cf_layout)
