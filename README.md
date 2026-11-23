@@ -3,34 +3,51 @@
 [![Build](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A retained-mode, data-oriented UI framework in C17. You declare a tree of
-nodes; systems sweep parallel arrays to resolve styles, lay the tree out and
-emit draw commands. No DSL, no C++, no per-node vtables.
+A retained-mode, data-oriented UI framework in C17. You declare a tree of nodes;
+systems sweep parallel arrays to resolve styles, lay the tree out and emit draw
+commands. No DSL, no C++, no per-node vtables.
 
-> **Status:** `1.0.0` in development. Every layer is built: the arena and pool,
-> the style vocabulary, flexbox and grid layout, text measurement, the paint
-> command stream, the node tree with diffing, input, scroll and tweens, the
-> widgets, themes and the app shell over an SDL3 backend. The 0.2 frame API on
-> `main` is not compatible and has no aliases — `cf_` names are the contract
-> from here.
+Status: `1.0.0` in development, every layer built. The 0.2 `UI_*` API on `main` is
+not compatible and has no aliases — `cf_` names are the contract from here.
 
-## What is usable today
+## Build and run
 
-`cf_layout` is the standalone engine: flexbox as CSS Fragment 3 §9 specifies it
-— direction, wrap, order, grow, shrink, basis, auto margins, `min`/`max`
-clamps, percent resolution, cross alignment, align-content, and children placed
-out of the flow with `position: absolute`. Content the engine cannot see into —
-text, an image, a foreign subtree — arrives through a `cf_measure_fn` callback,
-so the library links nothing but libc.
+```sh
+cmake --preset dev && cmake --build --preset dev
+ctest --preset dev                       # unit, conformance and golden tiers
+ctest --preset dev -L bench              # the throughput rigs
+build/dev/bin/gallery                    # the one program that opens a window
+```
 
-Grid is a subset, and the subset is the contract: explicit tracks written as
-`px`, `%`, `fr`, `auto`, `minmax()` and `repeat()`, items placed by a 1-based
-start line and a span on either axis, and dense auto-placement for the items
-that name no lines. A container with no column tracks gets one content-sized
-column, and a row an item overflows into becomes a content-sized track of its
-own. The grid reads none of the alignment enums: leftover space in a settled box
-always goes to the tracks that named no ceiling, which is CSS's `normal` on both
-axes. Named lines, `span all` and `grid-auto-flow: column` are out of scope.
+CMake **3.25**+, a **C17** compiler and [Ninja](https://ninja-build.org/). The
+layers link libc alone; SDL3 and SDL3_ttf are fetched only when the backend is
+asked for, so a headless configure touches no network:
+
+```sh
+cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON
+```
+
+`dev` is Debug with tests, examples and a compile database on; `release` is the
+same graph in Release, which is where the bench numbers come from.
+
+| Option | Default | Turns on |
+| --- | --- | --- |
+| `CFORM_BUILD_TESTS` | `OFF` | the unit, conformance, golden and bench tiers |
+| `CFORM_BUILD_EXAMPLES` | `OFF` | the programs under `examples/` |
+| `CFORM_WITH_SDL_BACKEND` | `OFF` | `cf_backend_sdl`, and the SDL fetch |
+| `CFORM_WITH_SANITIZERS` | `OFF` | ASan and UBSan; fatal when the compiler cannot link them |
+
+`bin/` holds the two programs a person runs. The 35 tier binaries build into
+`build/dev/tests/` and ctest drives them by target.
+
+## The layout floor
+
+`cf_layout` is usable on its own today: flexbox as CSS Flexible Box Layout §9
+specifies it — four directions, wrap, order, grow, shrink, basis, auto margins,
+`min`/`max` clamps, percent resolution, all of `justify-content`, `align-content`,
+`align-items`, baseline alignment and `position: absolute` children — plus a grid
+subset. Content the engine cannot see into arrives through a `cf_measure_fn`, so
+the library links nothing else.
 
 ```c
 #include "cf/layout.h"
@@ -56,59 +73,61 @@ cf_arena scratch;
 cf_arena_init(&scratch, 16384u);
 
 cf_layout(&scratch,
-          &(cf_tree){
-              .styles = styles,
-              .child_start = child_start,
-              .child_slots = child_slots,
-              .node_count = 3u,
-          },
+          &(cf_tree){.styles = styles, .child_start = child_start,
+                     .child_slots = child_slots, .node_count = 3u},
           0u, (cf_available){.width = CF_PX(400.0f), .height = CF_PX(200.0f)},
           (cf_point){0.0f, 0.0f}, rects);
-
-/* rects[1] is 0, 0, 120, 200 - rects[2] starts at 132 and fills the rest. */
 ```
 
-The tree is slot-indexed data: styles, measures and children are parallel
-arrays, so a subtree can be moved, serialized or replayed without chasing
-pointers. Scratch is a caller-owned arena that each node hands back before
-descending, which keeps layout allocation-free across a frame.
+`cf_layout` is a pure function of its tree and its offer: it writes one absolute
+border-box rect per node, allocates only from the caller's arena, and reads an
+`auto` axis as the question "what extent do the children need". A declared size is
+the border box — `content-box` is not inherited on purpose. Lengths are tagged
+(`CF_AUTO`, `CF_PX`, `CF_PERCENT`, `CF_FR`), so `0` never has to be read as either
+unset or zero. The measure contract is a cache's contract: the answer must be a
+pure function of the node, the intrinsic kind and the offer, because one layout
+serves any repeat of that triple from the table it filled first.
 
-[`examples/layout_only.c`](examples/layout_only.c) is the same idea as a
-program: it links `cf_layout` and nothing else, lays a grid inside a column that
-hugs it, and measures a label through a callback. Building it is the check that
-the engine still stands alone.
+The grid subset is the whole contract: `minmax()` over `CF_AUTO`/`CF_PX`/
+`CF_PERCENT`/`CF_FR`, `cf_tracks_repeat()` for `repeat()`, items placed by a
+1-based start line plus a span, dense auto-placement for items naming no lines,
+and rows an item overflows into becoming content-sized tracks. It reads none of the
+alignment enums — leftover space goes to the tracks that named no ceiling, which is
+CSS's `normal` on both axes.
 
-[`tools/amalgamate.py`](tools/amalgamate.py) is the same engine as one file. It
-packs `types.h`, `base.h`, `style.h` and `layout.h` into a generated
-`cf_layout.h`, which a project drops beside its own source and compiles against
-with no include path configured — `ctest` builds a case that includes the
-packed header and nothing from `include/cf`, so the promise stays checked:
+[`examples/layout_only.c`](examples/layout_only.c) is the same engine as a program
+linking `cf_layout` and nothing else, and
+[`tools/amalgamate.py`](tools/amalgamate.py) packs it into one header a project
+drops beside its own source; a test compiles that header and nothing from
+`include/cf`, so the promise stays checked:
 
 ```sh
-cmake --build build/dev --target cf_amalgamate   # writes build/amalgam/cf_layout.h
+cmake --build build/dev --target cf_amalgamate   # -> build/dev/amalgam/cf_layout.h
 ```
 
 ## The whole stack
 
-Above `cf_layout`, a page is a function that returns a tree. The shell owns the
-window, the loop and the frame arenas; the backend owns pixels and density.
+Above the layout floor, a page is a function that returns a tree. The shell owns
+the loop and the frame arenas; the backend owns pixels and density.
 
 ```c
 #include "cf/app.h"
+#include "cf/build.h"
 #include "cf/widget.h"
 
-static const cf_node *build(cf_ctx *ctx) {
-    cf_node *page = cf_alloc(&ctx->frame, sizeof *page);
-    cf_node *children = cf_alloc(&ctx->frame, sizeof *children);
+static const cf_theme *theme;
+static cf_text_stack fonts;
 
-    if (page == NULL || children == NULL) {
-        return NULL; /* a page that paints nothing beats a half-built tree */
-    }
+static void on_press(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)ctx, (void)slot, (void)user_data;
+    printf("pressed\n");
+}
 
-    children[0] = cf_button(ctx, "press", on_press, NULL, NULL, 0u);
-    *page = (cf_node){.style = theme->page, .children = children, .child_count = 1u};
+static cf_node build(cf_ctx *ctx) {
+    const cf_node label = cf_label(ctx, cf_string_of("press me"), &fonts, theme->on_ink);
+    const cf_node press = cf_button(ctx, "press", on_press, NULL, &label, 1u);
 
-    return page;
+    return CF_COL(ctx, theme->page, press);
 }
 
 cf_app_run(&(cf_app_config){.build = build, .backend = cf_backend_sdl(&(cf_sdl_config){
@@ -116,205 +135,98 @@ cf_app_run(&(cf_app_config){.build = build, .backend = cf_backend_sdl(&(cf_sdl_c
                             .theme = theme, .fonts = &fonts});
 ```
 
-`cf_app_run` polls the device, dispatches into the tree, rebuilds only when
-something changed, and submits the command stream the golden tier snapshots.
-`F12` opens the inspector: node count, dirty count, commands, the page's rect
-and the frame's time.
-[`examples/gallery.c`](examples/gallery.c) is every widget on one page.
+`cf_app_run` drains the backend's events into the dispatch, rebuilds only when a
+signature moved, and presents without repainting when nothing woke — an undamaged
+frame lays out nothing, emits zero commands and allocates zero bytes. `F12` opens
+the inspector: node and dirty counts, commands, the page's rect, the frame's cost.
+[`examples/gallery.c`](examples/gallery.c) is every widget on one page, and the
+same source under Emscripten is the WebAssembly playground (CI pins the SDK in
+`.github/workflows/ci.yml`; serve the output over HTTP, since a tab will not fetch
+a `.wasm` over `file://`).
 
-## Requirements
+## Layers
 
-- CMake **3.25**+, a **C17** compiler (GCC, Clang or MSVC) and
-  [Ninja](https://ninja-build.org/), which the presets use
-- Nothing else for the layers: they link libc alone. The SDL backend fetches
-  SDL3 and SDL3_ttf when it is turned on
+| Target | Owns | Reaches |
+| --- | --- | --- |
+| `cf_base` | arena, generational store, interner, hash, log sink | libc |
+| `cf_style` | `cf_style`, length and box math | `cf_base` |
+| `cf_theme` | the default palette, one `cf_theme` value | `cf_style` |
+| `cf_layout` | `cf_tree`, flex, grid, absolute, intrinsic measurement | `cf_style`, `cf_base` |
+| `cf_text` | UTF-8 decode, break opportunities, line walking, measurement | `cf_base` |
+| `cf_paint` | the command stream: fills, borders, text, images | `cf_layout`, `cf_text` |
+| `cf_node` | context, keyed diff, state, input, focus, scroll, tweens | `cf_layout`, `cf_paint` |
+| `cf_widget` | label, button, field, list, scroll, image declarations | `cf_node`, `cf_paint`, `cf_text` |
+| `cf_app` | the run loop, the damage rule, the inspector | `cf_widget` |
+| `cf_backend_headless` | a recorder that keeps the submitted stream | `cf_paint` |
+| `cf_backend_sdl` | window, draw, rasterisation, event pump | `cf_paint`, `cf_text`, SDL3 |
 
-## Build and test
+One CMake target per layer is the dependency rule, and
+[`tools/check_includes.py`](tools/check_includes.py) checks the include graph
+against it. Two edges carry the design: SDL appears in exactly one target, and
+device pixels stop there, so every layer above counts logical points.
 
-```sh
-cmake --preset dev
-cmake --build --preset dev
-ctest --preset dev
-```
+A node is a slot in a `cf_store` addressed by a generation-checked `cf_id`, and
+identity inside the tree is `(depth, key, ordinal)` rather than a pointer, so a
+stale handle reads `NULL` instead of editing the next occupant of a recycled slot.
+`cf_ctx` owns everything a page keeps and takes no lock — one context per thread —
+and the installed log sink is the only process-wide state in the library.
 
-`dev` is a Debug build with a compile database and the test suite on;
-`release` is the same graph in Release. The renderer backend and the examples
-that open a window are off until asked for, because fetching SDL is a network
-operation a headless machine should not pay for:
+## Embedding
 
-```sh
-cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
-```
-
-Sanitizers are opt-in and need a toolchain that ships the ASan/UBSan runtime:
-
-```sh
-cmake --preset dev -DCFORM_WITH_SANITIZERS=ON
-```
-
-The headless layers install as a package, with a CMake config under the `cform::`
-namespace and a `cform.pc` for builds that do not use CMake:
-
-```sh
-cmake --install build/dev --prefix /usr/local
-```
+`cmake --install build --prefix <prefix>` lays down the ten headless archives,
+`include/cf/`, a CMake package config and a `cform.pc`. Each target carries its own
+dependencies, so `cform::cf_layout` is the layout floor and nothing more:
 
 ```cmake
 find_package(cform-ui REQUIRED CONFIG)
-target_link_libraries(my_app PRIVATE cform::cf_app)  # cform::cf_layout for the engine alone
+target_link_libraries(my_app PRIVATE cform::cf_app)   # or cform::cf_layout alone
 ```
 
-The SDL backend is not installed: a host that opens a window already owns an SDL
-link line. [`docs/porting.md`](docs/porting.md) is the route in either way.
-
-### In the browser
-
-The gallery runs on WebAssembly through the same SDL backend. [Emscripten](https://emscripten.org/)
-is the only extra requirement, and the output needs a static file server because
-a tab will not fetch a `.wasm` over `file://`:
-
-```sh
-cmake -S . -B build/wasm -G Ninja \
-  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
-  -DCMAKE_BUILD_TYPE=Release -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
-cmake --build build/wasm
-python -m http.server --directory build/wasm/bin 8000   # then open gallery.html
-```
-
-Nothing in the layers changes for the browser: `cf_layout`, `cf_text`, `cf_paint`
-and `cf_node` compile to the same objects, and the backend is the one directory
-that knows a tab exists. The font is preloaded into the data filesystem, and
-`ASYNCIFY` lets the shell's loop yield to the browser's frame clock instead of
-freezing the tab.
-
-## Layout
-
-```
-include/cf/     Public headers — the contract; changes here are breaking
-src/base/       Arena, pool, handle, intern, hash, log (libc only)
-src/style/      Length and box resolution, style defaults, roles
-src/theme/      The default palette: what each role rests on and reacts in
-src/layout/     Flex, grid, absolute, intrinsic measurement, measure callback
-src/text/       Decoding, break opportunities, line walking, measurement
-src/paint/      The command stream: fills, borders, lines, images
-src/node/       Slot tree, keyed diff, state, input, focus, scroll, tweens
-src/widget/     Label, button, field, list, scroll and image builders
-src/backend/    The ABI's implementations: headless recorder, SDL3 renderer
-src/app/        The shell: loop, damage rule, inspector
-src/*/internal.h  Types shared across src/ but not published
-examples/       Standalone programs, off unless CFORM_BUILD_EXAMPLES is on
-tests/unit/     One file per layer, scenario-named cases
-tests/conformance/  Yoga's fixtures as data, scored against a published number
-tests/golden/   Command-stream snapshots, reviewed as data
-tests/bench/    Throughput rigs at the size the budget names
-tools/          The include-graph check CI runs, the corpus generator, the
-                layout packer
-docs/           The architecture, the layout spec, the backend ABI, the porting
-                route, the conformance score and the published numbers
-```
-
-Dependency direction is enforced by one CMake target per layer and by
-`tools/check_includes.py`; a layer may only reach what its target links.
-`cf_layout` plus `cf_style` and `cf_base` compile and pass conformance with no
-other layer present — that is the standalone-engine product, and it is the part
-you can use today.
+`pkg-config --cflags --libs cform` serves a build that does not use CMake.
+`cf_backend_sdl` is deliberately not installed — its interface names `SDL3::SDL3`,
+a target the fetch creates inside this tree, and a host that opens a window already
+owns an SDL link line. Write the platform's own against
+[`docs/backend-abi.md`](docs/backend-abi.md): five function pointers, and
+`src/backend/headless/record.c` is a legal two-slot skeleton.
 
 ## Testing
 
-Layout math is testable without a window, so it is tested that way.
-[`tests/unit/layout_cases.c`](tests/unit/layout_cases.c) runs a corpus of
-scenarios kept as data — a tree of styles, the offer the pass starts from, and
-the border box every node must land in — and prints only what missed: the node,
-the rect it got, the rect it was owed. Add a row to
-[`tests/unit/layout_cases_data.h`](tests/unit/layout_cases_data.h) rather than
-a function when a rule needs covering. Assertions come from the tiny,
-dependency-free [`tests/cform_test.h`](tests/cform_test.h); the harness is
-small on purpose.
+Four tiers, all headless — nothing here looks at the screen.
 
-[`tests/conformance/yoga_cases.c`](tests/conformance/yoga_cases.c) runs the
-other tier: the same row format filled with 485 of Yoga's flexbox fixtures,
-which are HTML as a reference browser measured it, ported to this engine's
-style by [`tools/gentest.py`](tools/gentest.py). It reports a score and asserts
-a floor that only moves up, so a fixture that regresses goes red while the ones
-that have never passed stay counted rather than deleted.
+- **unit** — one binary per layer, linking that layer and nothing else, so a reach
+  outside its dependencies fails at link. A new rule is usually a row in a data
+  table rather than a function.
+- **conformance** — 485 of Yoga's flexbox fixtures, ported by `tools/gentest.py`
+  and scored against a floor that only moves up.
+  [`docs/conformance.md`](docs/conformance.md) publishes the score and the misses.
+- **golden** — whole frames through the recorder backend, diffed as a command
+  stream. `golden_cases --update` rewrites a snapshot, so a draw that moved is data
+  a reviewer reads.
+- **bench** — the 10,000-node rigs. They assert geometry and command counts and
+  print timing; [`docs/bench.md`](docs/bench.md) publishes the numbers a change
+  moves.
 
-[`tests/bench/bench_layout.c`](tests/bench/bench_layout.c) and
-[`tests/bench/bench_node.c`](tests/bench/bench_node.c) are the bench tier:
-two 10,000-node rigs that print milliseconds per layout and assert only that the
-tree still lands where it should. A shared runner cannot be trusted for a
-wall-clock number, so a regression is a diff in a published baseline a reviewer
-reads rather than a build that goes red on a busy machine. They carry the
-`bench` label, which keeps them out of an everyday run:
+The renderer is verified by running `gallery` and looking at it — never by mocking
+the backend or asserting pixels. A change that draws differently says what to look
+at.
 
-```sh
-ctest --preset dev           # unit and conformance cases
-ctest --preset dev -L bench  # the throughput rigs, printing the baseline
-```
+## Not implemented
 
-The golden tier, [`tests/golden/golden_cases.c`](tests/golden/golden_cases.c),
-sits between the two: it runs whole frames through the recorder backend and
-compares the command stream against a checked-in snapshot. A snapshot changes
-only through `golden_cases --update`, so a draw that moved is a diff somebody
-reads as data rather than a pixel somebody squints at.
+Writing modes and right-to-left, logical properties, `aspect-ratio`, container
+queries, `calc()`, grid named lines and areas, `display: none`, `overflow`,
+`box-sizing: content-box`, bidirectional text, variable fonts. None are in the
+vocabulary and no field pretends to accept them; anything on this list lands in
+`include/cf/` first and in the layout files second.
 
-The renderer is verified by running the example and looking at it, never by
-mocking the backend or asserting pixels. `ctest` says the engine is right; the
-window is the maintainer's check.
+## Conventions
 
-[`docs/bench.md`](docs/bench.md) publishes the baselines: what a layout, a
-re-reconciled 10,000-node frame and a page's command stream cost, how the cost
-grows with the tree, and why no number is asserted in CI.
+C17 with no extensions, `snake_case` with the verb first, `cf_function` /
+`CF_Type` at the API edge, allocation only through `src/base/`, and comments that
+say *why* — an invariant, a lifetime rule, a spec step. The compiler, the standard,
+the include paths and the warnings are stated once in `CMakeLists.txt`, and clangd,
+CI and your terminal read the same `compile_commands.json`. `.clang-format` and
+`.clang-tidy` are not suggestions. Commits are
+[Conventional Commits](https://www.conventionalcommits.org/), one logical change
+each.
 
-[`docs/conformance.md`](docs/conformance.md) publishes the flexbox score: which
-fixtures were ported and why the rest were not, how many match per suite, and
-the behaviour each miss needs.
-
-[`docs/backend-abi.md`](docs/backend-abi.md) is the contract a renderer backend
-has to satisfy, and the checklist for writing one: the five slots, what is
-borrowed and what is owned, where logical points stop being points, and how to
-test a port without looking at it.
-
-[`docs/architecture.md`](docs/architecture.md) is the shape of the thing: the
-ten layers and the edges between them, the order a frame runs in, why a node is
-a slot and an id rather than a pointer, and which boundary each test tier
-protects.
-
-[`docs/layout-spec.md`](docs/layout-spec.md) is the layout reader's reference:
-which CSS the engine implements, the spec step each layout file follows, the
-grid subset as the API exposes it, the contract a measure callback has to keep,
-and the list of what is deliberately not there.
-
-[`docs/porting.md`](docs/porting.md) is the way in: which floor to link, what
-the four build options change, what a platform owes the engine for input, scale
-and pixels, how the single packed header is produced, and how to compile the
-gallery for a browser tab.
-
-## Editor setup
-
-The compiler, the C standard, the include paths and the warning flags are said
-once, in `CMakeLists.txt`. Everything else reads the `compile_commands.json` the
-`dev` preset writes — clangd through `.clangd`, CI through the same presets, your
-terminal through the same commands — so nobody sees different diagnostics on
-different machines. Install **clangd**, run **CMake: Configure (dev)** once,
-build with `Ctrl+Shift+B`.
-
-## Commit messages
-
-[Conventional Commits](https://www.conventionalcommits.org/):
-`<type>(<scope>): <short description>`, with types `feat`, `fix`, `test`,
-`docs`, `build`, `ci`, `refactor`, `chore`. One commit is one coherent change —
-no "update", "stuff", or unrelated changes squashed together.
-
-## Contributing
-
-Pick a layer, keep `cmake --build --preset dev` and `ctest --preset dev` green,
-run `clang-format` and `python tools/check_includes.py` over what you touched,
-and open a pull request. The layer graph and the reasons behind it are in
-[`docs/architecture.md`](docs/architecture.md); the backend contract is in
-[`docs/backend-abi.md`](docs/backend-abi.md); [`docs/porting.md`](docs/porting.md)
-walks a new platform in. Rendering is the one thing no test checks — a change
-that draws differently says what to look at.
-
-## License
-
-Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
+Distributed under the MIT License. See [`LICENSE`](LICENSE).
