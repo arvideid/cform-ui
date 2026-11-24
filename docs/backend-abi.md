@@ -1,171 +1,184 @@
-# The backend ABI
+# Writing a backend
 
-`cf/backend.h` is the only boundary between the engine and a device: one struct of
-function pointers, with nothing in the engine knowing about windows, GPUs, fonts or
-input devices. This is the contract a port has to satisfy and the checklist for
-writing one; which floor to link and what the build options change are in the
-README.
+An **ABI** is the agreement between two pieces of code that were compiled
+separately: which functions exist, what their arguments mean, and which version
+of that agreement each side was built against. This file is that agreement
+between cform and a device.
+
+`cf/backend.h` is the only place the engine touches a window, a GPU, a font file
+or a mouse. It is one struct of six function pointers, and nothing else crosses
+the boundary in either direction — which is how the engine runs headless in tests
+and in a browser. If you only want to *use* cform, you can stop here.
 
 ```
-engine ──submit──▶ commands ──▶ backend ──▶ device
-       ◀─poll──── events  ◀──── surface ── extent
+engine ──submit──▶ shapes ──▶ backend ──▶ screen
+       ◀─poll──── input  ◀──── size ──── device
 ```
 
-## The struct
+## The six functions
 
 ```c
 typedef struct cf_backend {
-    uint32_t abi_version;
-    void *user_data;
+    uint32_t abi_version;   /* must equal CF_BACKEND_ABI_VERSION */
+    void *user_data;        /* your state; the engine never reads it */
     void (*submit)(void *user_data, const cf_command *commands, uint32_t count);
     void (*present)(void *user_data);
     uint32_t (*create_texture)(void *user_data, uint32_t width, uint32_t height,
                               const void *pixels);
     bool (*poll_event)(void *user_data, cf_event *out);
     cf_size (*surface)(void *user_data);
+    bool (*load_image)(void *user_data, const char *path, cf_image_content *out);
 } cf_backend;
 ```
 
-Every slot takes `user_data` first, so a backend's state is one pointer and its
-own to allocate. `abi_version` is `CF_BACKEND_ABI_VERSION` and is how a stale
-`.so` is caught: a stream the backend misreads draws wrong rather than failing.
-`cf_app_run` compares it before the first submit and sits idle on a mismatch, so
-a host that drives `cf_frame_run` itself has to make the comparison.
+Every one takes `user_data` first, so all of your state hangs off a single
+pointer that you allocate.
 
-| Slot | Job | May be NULL |
+| Function | Job | Can be left NULL |
 |---|---|---|
-| `submit` | Receive the frame's commands, in paint order | No — the backend draws nothing |
-| `present` | Push what the last `submit` drew to the output. A shell calls it every turn of its loop, including the turns it drew nothing in | No |
-| `create_texture` | Upload RGBA8888 pixels, return an id the stream can name | Yes — image commands then draw nothing |
-| `poll_event` | Move one device event into `out`, answer whether one came | Yes — the page runs without input |
-| `surface` | The output's extent in logical points | Yes — the page lays out against a zero offer |
+| `submit` | Receive this frame's shapes, in the order to draw them | **No** — `cf_app_run` silently does nothing without it |
+| `present` | Push what the last `submit` drew onto the screen | **No** |
+| `create_texture` | Upload RGBA8888 pixels, return an id the shapes can name | Yes — image shapes then draw nothing |
+| `poll_event` | Copy one waiting input event into `out`, say whether there was one | Yes — the page runs but nothing is clickable |
+| `surface` | How big the output is, in logical points | Yes — the page lays out against zero space |
+| `load_image` | Decode a file, upload it, name its texture and its extent | Yes — the app uploads its own pixels through `create_texture` |
 
-`cf_app_run` fails as a silent no-op when `submit` is NULL; a backend that
-cannot open its window returns one whose slots do nothing, and reports the
-reason once on `CF_LOG_BACKEND`. There is no error code to plumb through, and
-no callback the engine makes into a backend beyond these five.
+There is no error code to return, and no callback from the engine into your code
+beyond these six. A backend that can't open its window returns a struct whose
+functions do nothing and logs the reason once on `CF_LOG_BACKEND`. `abi_version`
+catches a mismatched library: a stream read with the wrong layout draws *wrong*
+rather than failing, so `cf_app_run` compares the number before the first frame
+and idles if it disagrees. A program calling `cf_frame_run` itself has to make
+that comparison.
 
-## Lifetimes
+## What you may keep, and what you must copy
 
-- The command array is **borrowed for the `submit` call alone**. It lives in the
-  frame arena, which the shell clears before the next frame. A backend that
-  draws after `submit` returns — a deferred renderer, a recorder, a display-list
-  encoder — copies what it needs into memory it owns.
-- `cf_command.text.chars` is borrowed the same way, and is **not**
-  NUL-terminated: `text.length` is the extent.
-- `cf_command.font` carries a `handle` and an `ops` table that outlive every
-  frame: fonts belong to the theme, not to the page. A backend never frees one.
-- `create_texture` ids are stable for the life of the backend's state. Zero
-  names refusal — "no texture" is a real, drawable value, and a command naming
-  an id the backend does not know draws nothing.
-- `user_data` is never read by the engine.
+- **The shape list is on loan for the duration of `submit` only.** It lives in
+  memory the frame owns, recycled before the next frame. Draw later — deferred,
+  display list, recorder — and copy what you need into memory you own.
+- `cf_command.text.chars` is on loan the same way, and is **not** zero-terminated;
+  `text.length` is how far it goes.
+- `cf_command.font` outlives every frame. Fonts belong to the theme, not the page.
+  Never free one.
+- `create_texture` ids stay valid as long as your state does. **Zero means "no
+  texture"** — a drawable answer, not an error. A shape naming an id you don't know
+  draws nothing.
+- A texture is never handed back. Nothing above this boundary knows how to free
+  one, so an image is loaded once and kept, and a port that wants to unload one
+  needs a slot the engine can call — there isn't one yet.
+- `user_data` is never read by the engine. It's yours.
 
-## Coordinates
+## Everything is in points, not pixels
 
-Everything above the backend is in **logical points**. `surface` answers points,
-`cf_event.position` arrives in points, `cf_command.rect` is in points. The
-device pixel density is the backend's private business: the SDL backend reads
-`SDL_GetWindowPixelDensity` per submit and multiplies. No layer above sees a
-pixel, and a port that exposes pixel sizes to the engine has leaked.
+`surface`, `cf_event.position` and `cf_command.rect` are all in **logical
+points**. The device pixel ratio is your private business: the SDL backend reads
+it per `submit` and multiplies. No layer above this one has ever seen a pixel, so
+if your port passes pixel sizes upward, the boundary has leaked.
 
-A resize needs no callback: the shell re-reads `surface` every frame, so a new
-extent is a new layout offer without the backend arranging anything.
+You don't need to report resizes — the engine asks `surface` again every frame, so
+a new window size becomes a new layout on its own.
 
-## The command stream
+## The shape list
 
-Four kinds, appended in paint order: a parent precedes its children, a border
-follows its own fill. Drawing the array front to back, clearing first, is the
-whole compositing rule.
+Four kinds, appended in paint order — a parent before its children, a border
+after the fill it surrounds. Clear the surface, walk the array front to back, and
+that is the entire compositing rule.
 
 | Kind | Fields that matter |
 |---|---|
 | `CF_COMMAND_FILL` | `rect`, `clip`, `color`, `radius` |
-| `CF_COMMAND_BORDER` | `rect`, `clip`, `color`, `radius`, `widths` (per side, painted inside `rect`) |
-| `CF_COMMAND_TEXT` | `rect` (one laid line), `clip`, `text`, `font`, `color`, `ellipsis` |
+| `CF_COMMAND_BORDER` | `rect`, `clip`, `color`, `radius`, `widths` (one per side, drawn inside `rect`) |
+| `CF_COMMAND_TEXT` | `rect` (one line), `clip`, `text`, `font`, `color`, `ellipsis` |
 | `CF_COMMAND_IMAGE` | `rect`, `clip`, `texture` |
 
-`radius` is clamped by the sender's intent, not by the stream: a radius past
-half the shorter extent is a corner the backend should read as a half-circle.
-A side with no `widths` entry paints nothing.
+A radius larger than half the shorter side means a half-circle; the sender
+intends that, so don't clamp it away. A side with no `widths` entry draws
+nothing.
 
-Text lines arrive **already broken and measured** by `cf_text`: one command per
-line, `rect.width` the line's measured advance, `rect.height` the font's line
-rhythm. A backend must not re-wrap them — that would draw lines the layout
-never priced. When `ellipsis` is set the line's bytes stop short and the
-backend appends U+2026 (`CF_ELLIPSIS`) after the text; the width already counts
-its advance.
+Text lines arrive **already broken and measured** — one command per line,
+`rect.width` the width the layout charged for it, `rect.height` the line spacing.
+Don't re-wrap them, or you'll draw lines the layout never made room for. When
+`ellipsis` is set, the bytes stop short and you append `…` (U+2026,
+`CF_ELLIPSIS`); the width already includes it.
 
-A straddling rect keeps its full extent, and `cf_paint` only drops commands that
-miss the viewport entirely. What cuts it is `clip`: the nearest box that clips
-its content, which a scrolling pane is. A fill and an image arrive already cut
-to it, because cutting a rectangle is the whole of what they draw; a border and
-a text line cannot be, because cutting their rect would move the corner the
-stroke rounds and the baseline the line sits on. Draw those two inside `clip`
-with the device's scissor, and nothing a scroll half-hides lands outside the box
-that hides it. A `clip` with no extent is the whole output — the device bounds
-that without being told, so a page that never clips should cost no state change.
+**`clip` is the part that trips people up.** A shape that sticks out of a
+scrolling box keeps its full size, because `cf_paint` only drops shapes that miss
+the viewport entirely. What cuts it is `clip`: the nearest box that hides its
+overflow.
 
-## Events
+- `CF_COMMAND_FILL` and `CF_COMMAND_IMAGE` arrive **already cut** to `clip`.
+  Cutting the rectangle *is* all they draw, so the engine can do it.
+- `CF_COMMAND_BORDER` and `CF_COMMAND_TEXT` **cannot be** cut, because shrinking
+  the box would move the corner a stroke rounds and the baseline a line sits on.
+  You have to clip those two yourself, with the device's scissor set to `clip`.
 
-The queue belongs to whoever reads it. `poll_event` hands over one event per
-call and returns false when the queue is dry, so the shell drains it every frame
-and nothing piles up unread while a window sits idle.
+A `clip` with no extent means the whole output: bound to the device edges without
+being told, so a page that never scrolls costs you no state change at all.
 
-A port maps device events onto `cf_event_type` and nothing else: `CF_EVENT_QUIT`
-closes the loop and never dispatches to the tree, and the shell consumes
-`CF_KEY_F12` for its inspector. Key scalars pass through as the platform's own
-keycodes — the engine does not translate them, and `cf_input` treats an unknown
-scalar as a key nobody bound.
+## Input
 
-Pointer positions must be in points. `present` may pump the device's own
-collection, but it must not drain or flush the queue: a press that arrives
-while a frame is being drawn has to survive to the next poll.
+`poll_event` hands over one event per call and returns false when none are left,
+so the engine drains the queue every frame and nothing piles up while a window
+sits idle. Map your device's input onto `cf_event_type` and nothing else:
+
+- `CF_EVENT_QUIT` closes the loop; it never reaches the tree.
+- The engine uses **F12** — `CF_KEY_F12` — for its own inspector, before your page
+  sees it.
+- A key event carries one of the `cf_key` numbers, not your platform's. Map
+  backspace, enter, the four arrows, home, end, delete, escape, tab and F12 onto
+  them. A key you have no word for keeps its own number, which no widget reads,
+  and a key that types a character types it through `CF_EVENT_TEXT` — so letters
+  never need mapping, and a widget never guesses what a keycode spelled.
+- `cf_event.mods` carries the `cf_mod` bits held when the key went down: it is how
+  a field learns that shift meant "extend the selection" rather than "type a
+  capital". Report zero if you would rather not track it, and the widgets that
+  read it see no modifier, which is honest.
+- Pointer positions must be in points.
+- `present` may collect your platform's events but must not empty the queue: a
+  click landing during a frame has to survive to the next `poll_event`.
 
 ## Fonts
 
-`cf_font` is `{handle, ops}`. The `ops` table answers **measuring only** —
-`metrics` (line height), `advance` (pen distance, kerning included), `has_glyph`
-— and never rasterizes. Rasterizing is the backend's side of the same object:
-`cf_command.font.handle` is whatever the backend's own font constructor made,
-and a port pairs the two (`cf_font_sdl` goes with `cf_backend_sdl`). A handle
-from a different backend is not a portable thing, and a NULL handle draws
-nothing.
+`cf_font` is a handle plus a table of functions, and that table answers
+**measuring only**: `metrics` (line height), `advance` (how far the pen moves,
+kerning included), `has_glyph`. It never draws a glyph — that's the other half of
+the same object. `cf_command.font.handle` is whatever your own font constructor
+made, so a port pairs the two (`cf_font_sdl` goes with `cf_backend_sdl`). A handle
+from a different backend means nothing to you, and a NULL handle draws nothing.
 
-This is why `cf_text` can be exercised headlessly: the tests answer the same
-table with fixed numbers.
+This split is why text layout is testable with no window: the tests answer the
+same three questions with fixed numbers.
 
-## Porting checklist
+## Porting, in order
 
-1. Fill the struct, set `abi_version = CF_BACKEND_ABI_VERSION`, keep state in
-   `user_data`.
-2. Implement `submit` as: clear, walk front to back, per kind map to the device's
-   fill / stroke / glyph-run / textured-quad call, scaled by pixel density, each
-   one under the scissor its `clip` names.
-3. Implement `present` as the device's swap, and skip the swap when no `submit`
-   has drawn since the last one. A shell presents at idle, and a discard-model
-   swapchain answers a swap with no drawing in it by showing an undefined buffer
-   — a trail of the frame before the last, and two states of one widget
-   flickering on the screen.
-4. Implement `surface` in points.
-5. Translate input in `poll_event`; consume what has no `cf_event` word.
-6. Add `create_texture` only when image commands are wanted; take the bytes in
-   the memory order the slot documents rather than the packed value of the same
-   name, return 0 when an upload fails and log once.
-7. Provide a font constructor whose `ops` measure and whose `handle` your
-   `submit` can draw.
-8. Register the target in `CMakeLists.txt` behind an option, next to
-   `cf_backend_sdl`, linking `cf_paint cf_text` and your device library. Only
-   `src/backend/*/` and `src/app/` may name a platform header.
+1. Fill the struct, set `abi_version`, keep your state in `user_data`.
+2. `submit`: clear, walk front to back, map each kind onto your fill / stroke /
+   glyph-run / textured-quad call, scaled by pixel density, each one under the
+   scissor its `clip` names.
+3. `present`: your device's swap. Don't collect input here.
+4. `surface`: the size, in points.
+5. `poll_event`: translate input; swallow events that have no `cf_event` meaning.
+6. `create_texture`: only when you want images. Return 0 on a failed upload and
+   log it once.
+7. `load_image`: decode a file into pixels, upload them through the same path, and
+   answer the extent in points. `cf_backend_sdl` reads BMP because SDL already
+   does; a port with a wider decoder is the reason the slot exists. Answer false
+   for a file you cannot read and leave `*out` alone.
+8. A font constructor whose table measures and whose handle your `submit` can
+   draw.
+9. Add a CMake target beside `cf_backend_sdl`, behind its own option, linking
+   `cf_paint cf_text` and your device library. Only `src/backend/*/` and
+   `src/app/` may name a platform header.
 
-A minimal skeleton is what `src/backend/headless/record.c` is: two slots, no
-window, and it is a legal backend.
+`src/backend/headless/record.c` does two of the six and is a legal backend —
+that is the minimum.
 
-## Testing a port
+## Checking your work
 
-Nothing in the suite verifies a pixel. The layers below the backend are checked by
-the recorder (`cf_backend_recorder`), which keeps the last submitted stream in
-memory it owns, and the golden tier snapshots that stream as data. A new backend
-therefore earns its keep by running the example: build with the port's option on,
-run `gallery`, and a human looks at it. The commands a port must draw are exactly
-the ones the golden snapshots already name, so a diff between what the recorder saw
-and what the device showed is the whole bug report.
+Nothing in the test suite looks at a pixel, on purpose. The layers below the
+backend are covered by the recorder backend, which keeps the last shape list in
+memory it owns, and the golden tier snapshots that list as text. So a new backend
+proves itself by running the demo: build with your option on, run `gallery`, and
+**look at it**. The shapes you must draw are exactly the ones the golden files
+already name, so a disagreement between what the recorder saw and what your window
+showed is the whole bug report.
