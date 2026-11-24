@@ -104,8 +104,8 @@ static void append_edge(cf_arena *arena, cf_command_list *out, cf_rect rect) {
 /* The bytes a line is printed into come out of the frame arena, so they live
  * as long as the submit the stream rides - the way a label's text does. A
  * line the arena cannot hold draws nothing. */
-static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts, float at_y,
-                        float height, const char *format, ...) {
+static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts,
+                        cf_rect panel, uint32_t line, float height, const char *format, ...) {
     char *bytes = cf_alloc(&ctx->frame, LINE_BYTES);
 
     if (bytes == NULL) {
@@ -121,12 +121,13 @@ static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *
         return;
     }
 
-    out->commands[out->count++] =
-        (cf_command){.kind = CF_COMMAND_TEXT,
-                     .rect = {PANEL_PADDING, at_y, PANEL_WIDTH - PANEL_PADDING * 2.0f, height},
-                     .color = PANEL_INK,
-                     .text = {bytes, (uint32_t)written},
-                     .font = fonts->fonts[0]};
+    out->commands[out->count++] = (cf_command){
+        .kind = CF_COMMAND_TEXT,
+        .rect = {panel.x + PANEL_PADDING, panel.y + PANEL_PADDING + height * (float)line,
+                 panel.width - PANEL_PADDING * 2.0f, height},
+        .color = PANEL_INK,
+        .text = {bytes, (uint32_t)written},
+        .font = fonts->fonts[0]};
 }
 
 /* Whole points, because the panel reads as text and a fraction of a point is
@@ -142,8 +143,18 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     }
 
     const float height = line_height(fonts);
-    const cf_rect panel = {0.0f, 0.0f, PANEL_WIDTH,
-                           PANEL_PADDING * 2.0f + height * (float)PANEL_LINES};
+    const cf_rect page =
+        ctx->rects != NULL ? ctx->rects[ctx->root_slot] : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    const float panel_height = PANEL_PADDING * 2.0f + height * (float)PANEL_LINES;
+
+    /* The corner the reading starts away from. A panel pinned to the origin
+     * sits over the first line a reader meets, and the numbers are meant to be
+     * read beside a page rather than instead of it. */
+    const cf_rect panel = {
+        .x = page.width > PANEL_WIDTH ? page.x + page.width - PANEL_WIDTH : page.x,
+        .y = page.height > panel_height ? page.y + page.height - panel_height : page.y,
+        .width = PANEL_WIDTH,
+        .height = panel_height};
 
     append_fill(&ctx->frame, out, panel);
     append_edge(&ctx->frame, out, panel);
@@ -153,13 +164,11 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     }
 
     const panel_counts counts = count_of(ctx);
-    const cf_rect page =
-        ctx->rects != NULL ? ctx->rects[ctx->root_slot] : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
 
-    append_line(ctx, out, fonts, PANEL_PADDING, height, "nodes %u", counts.nodes);
-    append_line(ctx, out, fonts, PANEL_PADDING + height, height, "dirty %u", counts.dirty);
-    append_line(ctx, out, fonts, PANEL_PADDING + height * 2.0f, height, "commands %u", painted);
-    append_line(ctx, out, fonts, PANEL_PADDING + height * 3.0f, height, "page %ux%u",
-                round_points(page.width), round_points(page.height));
-    append_line(ctx, out, fonts, PANEL_PADDING + height * 4.0f, height, "frame %uus", frame_us);
+    append_line(ctx, out, fonts, panel, 0u, height, "nodes %u", counts.nodes);
+    append_line(ctx, out, fonts, panel, 1u, height, "dirty %u", counts.dirty);
+    append_line(ctx, out, fonts, panel, 2u, height, "commands %u", painted);
+    append_line(ctx, out, fonts, panel, 3u, height, "page %ux%u", round_points(page.width),
+                round_points(page.height));
+    append_line(ctx, out, fonts, panel, 4u, height, "frame %uus", frame_us);
 }
