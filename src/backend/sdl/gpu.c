@@ -12,6 +12,13 @@
 #define ARC_SEGMENTS 6u
 #define PERIMETER_POINTS (4u * (ARC_SEGMENTS + 1u))
 
+/*
+ * How long a dry queue sleeps before answering that nothing came. The wait
+ * wakes on the first event, so the number only bounds what a lost wakeup can
+ * cost: one frame is short enough that nothing on screen looks stuck on it.
+ */
+#define IDLE_WAIT_MS 16
+
 typedef struct sdl_state {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -20,6 +27,10 @@ typedef struct sdl_state {
     SDL_Texture **textures;
     uint32_t texture_count;
     uint32_t texture_capacity;
+    /* A submit has drawn into the target and no swap has shown it yet. */
+    bool damaged;
+    /* Events have been handed to the shell that no drawn frame carries yet. */
+    bool pending;
     /* The scissor the target is under, and whether one is on at all. Held
      * between the commands of a submit because a stream that scrolls repeats
      * one clip down a whole column of boxes, and the state call is not free. */
@@ -269,6 +280,12 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
         return;
     }
 
+    /* From here the target holds a frame the output has not shown, and the
+     * events that produced it are inside it: the swap may run, and the poll
+     * may sleep again. */
+    state->damaged = true;
+    state->pending = false;
+
     /* The frame starts from black: what the stream does not cover is the
      * window's own color, not the last frame's leftovers. */
     SDL_SetRenderDrawColorFloat(state->renderer, 0.0f, 0.0f, 0.0f, 1.0f);
@@ -290,51 +307,74 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
 }
 
 /*
- * The queue is the app shell's to read: one device event per call, translated
- * to the vocabulary the dispatch walks, false when the queue runs dry. Events
- * the tree has no word for are consumed here and answer nothing. Keyboard
- * scalars pass as SDL keycodes, so a printable code point is its own scalar
- * and the editing keys land on the bytes a field already understands.
+ * One device event into the vocabulary the dispatch walks, false when the event
+ * has no word the tree owns. Keyboard scalars pass as SDL keycodes, so a
+ * printable code point is its own scalar and the editing keys land on the
+ * bytes a field already understands.
+ */
+static bool take_event(const SDL_Event *event, cf_event *out) {
+    switch (event->type) {
+    case SDL_EVENT_QUIT:
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        *out = (cf_event){.type = CF_EVENT_QUIT};
+        return true;
+    case SDL_EVENT_MOUSE_MOTION:
+        *out = (cf_event){.type = CF_EVENT_POINTER_MOVE,
+                          .position = {event->motion.x, event->motion.y}};
+        return true;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+        *out = (cf_event){.type = event->type == SDL_EVENT_MOUSE_BUTTON_DOWN ? CF_EVENT_POINTER_DOWN
+                                                                             : CF_EVENT_POINTER_UP,
+                          .position = {event->button.x, event->button.y},
+                          .button = event->button.button};
+        return true;
+    case SDL_EVENT_MOUSE_WHEEL:
+        *out = (cf_event){.type = CF_EVENT_SCROLL,
+                          .position = {event->wheel.mouse_x, event->wheel.mouse_y},
+                          .wheel = {event->wheel.x, event->wheel.y}};
+        return true;
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+        *out = (cf_event){.type = event->type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
+                                                                    : CF_EVENT_KEY_UP,
+                          .key = (uint32_t)event->key.key};
+        return true;
+    default:
+        return false;
+    }
+}
+
+/*
+ * The queue is the app shell's to read: one event per call, false when it runs
+ * dry. Events the tree has no word for are consumed here and answer nothing.
  */
 static bool sdl_poll(void *user_data, cf_event *out) {
     sdl_state *state = user_data;
     SDL_Event event;
+    bool waited = false;
 
-    while (state != NULL && SDL_PollEvent(&event)) {
-        switch (event.type) {
-        case SDL_EVENT_QUIT:
-        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-            *out = (cf_event){.type = CF_EVENT_QUIT};
-            return true;
-        case SDL_EVENT_MOUSE_MOTION:
-            *out = (cf_event){.type = CF_EVENT_POINTER_MOVE,
-                              .position = {event.motion.x, event.motion.y}};
-            return true;
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-            *out =
-                (cf_event){.type = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? CF_EVENT_POINTER_DOWN
-                                                                             : CF_EVENT_POINTER_UP,
-                           .position = {event.button.x, event.button.y},
-                           .button = event.button.button};
-            return true;
-        case SDL_EVENT_MOUSE_WHEEL:
-            *out = (cf_event){.type = CF_EVENT_SCROLL,
-                              .position = {event.wheel.mouse_x, event.wheel.mouse_y},
-                              .wheel = {event.wheel.x, event.wheel.y}};
-            return true;
-        case SDL_EVENT_KEY_DOWN:
-        case SDL_EVENT_KEY_UP:
-            *out = (cf_event){.type = event.type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
-                                                                       : CF_EVENT_KEY_UP,
-                              .key = (uint32_t)event.key.key};
-            return true;
-        default:
-            break;
-        }
+    if (state == NULL) {
+        return false;
     }
 
-    return false;
+    for (;;) {
+        while (SDL_PollEvent(&event)) {
+            if (take_event(&event, out)) {
+                state->pending = true;
+                return true;
+            }
+        }
+
+        /* A shell holding events it has not drawn yet must not have its frame
+         * parked behind a wait, and one wait per call keeps a stream of events
+         * nobody translates from sleeping here forever. */
+        if (state->pending || waited || !SDL_WaitEventTimeout(NULL, IDLE_WAIT_MS)) {
+            return false;
+        }
+
+        waited = true;
+    }
 }
 
 /* The window's own size, which is what logical points lay out against; the
@@ -362,6 +402,20 @@ static void sdl_present(void *user_data) {
      * events; what it collects waits for the reader, where a flush would
      * drop the presses and moves a shell has not reached yet. */
     SDL_PumpEvents();
+
+    /*
+     * The shell presents every turn of its loop, including the turns in which
+     * it drew nothing. A discard-model swapchain hands over an undefined
+     * buffer when it is told to swap without new drawing, which shows the
+     * screen an older frame: the flicker of two states of one widget and a
+     * trail of where the content was. The output already carries the newest
+     * frame, so there is nothing there worth showing.
+     */
+    if (!state->damaged) {
+        return;
+    }
+
+    state->damaged = false;
 
     SDL_RenderPresent(state->renderer);
 }

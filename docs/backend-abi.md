@@ -35,7 +35,7 @@ a host that drives `cf_frame_run` itself has to make the comparison.
 | Slot | Job | May be NULL |
 |---|---|---|
 | `submit` | Receive the frame's commands, in paint order | No — the backend draws nothing |
-| `present` | Push what the last `submit` drew to the output | No |
+| `present` | Push what the last `submit` drew to the output. A shell calls it every turn of its loop, including the turns it drew nothing in | No |
 | `create_texture` | Upload RGBA8888 pixels, return an id the stream can name | Yes — image commands then draw nothing |
 | `poll_event` | Move one device event into `out`, answer whether one came | Yes — the page runs without input |
 | `surface` | The output's extent in logical points | Yes — the page lays out against a zero offer |
@@ -141,7 +141,11 @@ table with fixed numbers.
 2. Implement `submit` as: clear, walk front to back, per kind map to the device's
    fill / stroke / glyph-run / textured-quad call, scaled by pixel density, each
    one under the scissor its `clip` names.
-3. Implement `present` as the device's swap. Do not pump events here.
+3. Implement `present` as the device's swap, and skip the swap when no `submit`
+   has drawn since the last one. A shell presents at idle, and a discard-model
+   swapchain answers a swap with no drawing in it by showing an undefined buffer
+   — a trail of the frame before the last, and two states of one widget
+   flickering on the screen.
 4. Implement `surface` in points.
 5. Translate input in `poll_event`; consume what has no `cf_event` word.
 6. Add `create_texture` only when image commands are wanted; return 0 when an

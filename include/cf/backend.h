@@ -22,7 +22,10 @@ typedef struct cf_backend {
     /* Hands the frame's stream over. The commands are borrowed for the call
      * alone - a backend that draws after it returns copies them first. */
     void (*submit)(void *user_data, const cf_command *commands, uint32_t count);
-    /* Draws what the last submit carried, to the output the backend owns. */
+    /* Shows what the last submit carried, to the output the backend owns. A
+     * shell presents every turn of its loop, so a call may follow one with no
+     * submit between them, and keeping the output honest then is the
+     * backend's. */
     void (*present)(void *user_data);
     /* Uploads RGBA8888 pixels, one byte per channel, row after row, as a
      * texture the stream's image commands name. Zero names a texture the
