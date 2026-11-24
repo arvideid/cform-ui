@@ -47,7 +47,9 @@ _install/
 *~
 
 # --- Personal IDE / machine-specific state ---
-.vscode/launch.json
+# Everything the build already states in .clang-format, .clang-tidy,
+# .editorconfig and CMakePresets.json.
+.vscode/
 CMakeUserPresets.json
 .idea/
 .qoder/

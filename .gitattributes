@@ -40,7 +40,6 @@
 .clang-tidy       export-ignore
 .clangd           export-ignore
 .github/          export-ignore
-.vscode/          export-ignore
 CMakePresets.json export-ignore
 CMakeUserPresets.json export-ignore
 examples/         export-ignore
