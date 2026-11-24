@@ -719,7 +719,7 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
 
     /* Two rows are written and six cells want more, so the rest land in rows the
      * grid adds for them as content-sized tracks of their own. */
-    static const cf_track rows[] = {{CF_AUTO, CF_AUTO}, {CF_AUTO, CF_AUTO}};
+    const cf_track rows[] = {{CF_AUTO, CF_AUTO}, {CF_AUTO, CF_AUTO}};
 
     cf_style grid = inset_style(theme->bar, 12.0f, 12.0f);
     grid.display = CF_DISPLAY_GRID;
