@@ -420,10 +420,20 @@ static void sdl_present(void *user_data) {
     SDL_RenderPresent(state->renderer);
 }
 
+/* The library formats nothing until a sink is installed, and this is the one
+ * layer with somewhere worth sending the words to: the platform's own log. */
+static void sdl_log(cf_log_channel channel, const char *message, void *user_data) {
+    (void)channel, (void)user_data;
+    SDL_Log("%s", message);
+}
 cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     if (config == NULL || config->width == 0u || config->height == 0u) {
         return (cf_backend){0};
     }
+
+    /* Installed before the first thing that can fail, so the reason a window
+     * did not open is readable rather than formatted into the void. */
+    cf_log_install(sdl_log, NULL);
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         cf_logf(CF_LOG_BACKEND, "backend: SDL did not start: %s", SDL_GetError());
