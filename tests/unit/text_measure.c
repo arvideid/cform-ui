@@ -280,6 +280,104 @@ static void a_forced_break_ends_its_line_before_the_break(void) {
     CF_CHECK(lines[1].text.chars[0] == 'b', "the next line follows the break");
 }
 
+/* Only the text's own breaks reach a walk that refuses to wrap. */
+static void a_walk_that_refuses_to_wrap_lays_one_line_of_all_it_holds(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc"));
+    content.nowrap = true;
+    cf_text_line lines[4u];
+
+    const cf_size offered = wrapped(content, 25.0f);
+
+    CF_NEAR(offered.width, 80.0f); /* the whole value, though the box is a quarter as wide */
+    CF_NEAR(offered.height, 20.0f);
+
+    const cf_size tight = intrinsic(content, CF_INTRINSIC_MIN_CONTENT);
+
+    CF_NEAR(tight.width, 80.0f); /* nothing breaks it, so nothing bounds it tighter */
+    CF_NEAR(tight.height, 20.0f);
+
+    CF_CHECK(cf_text_lines(&content, 25.0f, lines, 4u) == 1u, "one line holds all eight glyphs");
+
+    cf_text_content forced = content_of(cf_string_of("aa\nbb"));
+    forced.nowrap = true;
+    const cf_size own_breaks = wrapped(forced, 25.0f);
+
+    CF_NEAR(own_breaks.width, 20.0f);
+    CF_NEAR(own_breaks.height, 40.0f); /* a break the text states still ends a line */
+}
+
+/* The caret's distance and the click's offset answer each other. */
+static void an_offset_answers_the_distance_and_the_distance_the_offset(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc"));
+    cf_text_line lines[4u];
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 4u);
+
+    CF_CHECK(count == 1u, "the whole value lies on one line at that width");
+
+    CF_NEAR(cf_text_caret_x(&content, &lines[0], 0u), 0.0f);
+    CF_NEAR(cf_text_caret_x(&content, &lines[0], 3u), 30.0f);
+    CF_NEAR(cf_text_caret_x(&content, &lines[0], 99u), 80.0f); /* clamped to the end of the ink */
+
+    CF_CHECK(cf_text_offset_at(&content, &lines[0], 4.0f) == 0u,
+             "the left half of a glyph is before it");
+    CF_CHECK(cf_text_offset_at(&content, &lines[0], 5.0f) == 1u, "the right half is after it");
+    CF_CHECK(cf_text_offset_at(&content, &lines[0], 25.0f) == 3u,
+             "a click between runs lands after the word");
+    CF_CHECK(cf_text_offset_at(&content, &lines[0], 1000.0f) == 8u, "past the ink is the end");
+
+    /* A line the walk never laid borrows bytes from somewhere else: the answer
+     * is nothing rather than an offset far past the content's own. */
+    const cf_text_line foreign = {
+        .text = {content.text.chars + 9u, 1u}, .width = 10.0f, .ellipsis = false};
+
+    CF_NEAR(cf_text_caret_x(&content, &foreign, 9u), 0.0f);
+    CF_CHECK(cf_text_offset_at(&content, &foreign, 5.0f) == 0u,
+             "a line outside the content is refused");
+}
+
+/* Where the caret falls among the lines a walk laid. */
+static void an_offset_names_the_line_that_holds_it(void) {
+    cf_text_content content = content_of(cf_string_of("aa\nbb"));
+    cf_text_line lines[4u];
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 4u);
+
+    CF_CHECK(count == 2u, "the text's break lays two lines");
+    CF_CHECK(cf_text_line_of(&content, lines, count, 0u) == 0u, "its first byte is on the first");
+    CF_CHECK(cf_text_line_of(&content, lines, count, 2u) == 0u,
+             "a byte before the break still sits on the first");
+    CF_CHECK(cf_text_line_of(&content, lines, count, 3u) == 1u,
+             "the byte after it opens the second");
+    CF_CHECK(cf_text_line_of(&content, lines, count, 99u) == 1u, "past every line is the last one");
+}
+
+/* A window slides a walk only as far as it must to hold the caret. */
+static void a_box_slides_along_its_value_only_to_hold_the_caret(void) {
+    cf_text_content content = content_of(cf_string_of("aa bb cc"));
+    cf_text_line lines[4u];
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 4u);
+
+    CF_NEAR(cf_text_scroll(&content, lines, count, (cf_size){30.0f, 20.0f}).x, 0.0f);
+
+    content.caret = (cf_opt_u32){.present = true, .value = 3u};
+    /* A caret the window already holds moves nothing. */
+    CF_NEAR(cf_text_scroll(&content, lines, count, (cf_size){30.0f, 20.0f}).x, 0.0f);
+
+    content.caret = (cf_opt_u32){.present = true, .value = 5u};
+    const cf_point along = cf_text_scroll(&content, lines, count, (cf_size){30.0f, 20.0f});
+
+    CF_NEAR(along.x, 20.0f); /* the caret sits at 50 and the window shows 30 */
+    CF_NEAR(along.y, 0.0f);
+
+    cf_text_content tall = content_of(cf_string_of("aa\nbb"));
+    tall.caret = (cf_opt_u32){.present = true, .value = 4u};
+    cf_text_line second[4u];
+    const uint32_t rows = cf_text_lines(&tall, 100.0f, second, 4u);
+    const cf_point down = cf_text_scroll(&tall, second, rows, (cf_size){30.0f, 20.0f});
+
+    CF_NEAR(down.x, 0.0f);
+    CF_NEAR(down.y, 20.0f); /* the second line is one row below a window that holds one */
+}
+
 int main(void) {
     printf("text measure\n");
 
@@ -302,6 +400,10 @@ int main(void) {
     CF_RUN(the_lines_the_walk_laid_close_with_the_ellipsis);
     CF_RUN(a_capacity_smaller_than_the_walk_only_fills_what_fits);
     CF_RUN(a_forced_break_ends_its_line_before_the_break);
+    CF_RUN(a_walk_that_refuses_to_wrap_lays_one_line_of_all_it_holds);
+    CF_RUN(an_offset_answers_the_distance_and_the_distance_the_offset);
+    CF_RUN(an_offset_names_the_line_that_holds_it);
+    CF_RUN(a_box_slides_along_its_value_only_to_hold_the_caret);
 
     return CF_REPORT();
 }

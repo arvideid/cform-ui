@@ -66,10 +66,11 @@ typedef struct line_scan {
  * distance the line shows - everything through its last glyph that carried
  * ink, so the spaces a break would leave behind are not counted and the
  * spaces between words are. A space wider than the line hangs instead of
- * wrapping: only a glyph that carries ink can overflow.
+ * wrapping: only a glyph that carries ink can overflow. A `nowrap` scan keeps
+ * none of those choices but the text's own break.
  */
 static line_scan scan_line(const cf_text_stack *stack, cf_string text, uint32_t start,
-                           float max_width) {
+                           float max_width, bool nowrap) {
     float width = 0.0f;         /* everything the scan consumed, spaces included */
     float inked = 0.0f;         /* width through the last glyph that carried ink */
     uint32_t inked_end = start; /* one past the last byte that carried ink */
@@ -104,7 +105,7 @@ static line_scan scan_line(const cf_text_stack *stack, cf_string text, uint32_t 
 
         const float advance = step_pen(stack, &pen, codepoint);
 
-        if (width + advance > max_width) {
+        if (!nowrap && width + advance > max_width) {
             if (may_break) {
                 return (line_scan){.next = break_at, .end = break_end, .width = break_width};
             }
@@ -140,7 +141,7 @@ static line_scan truncated_scan(const cf_text_content *content, uint32_t start, 
     const cf_font *ellipsis = font_of(stack, CF_ELLIPSIS);
     const float ellipsis_width = ellipsis->ops->advance(ellipsis->handle, CF_ELLIPSIS, 0u);
     const float budget = max_width > ellipsis_width ? max_width - ellipsis_width : 0.0f;
-    const line_scan scan = scan_line(stack, content->text, start, budget);
+    const line_scan scan = scan_line(stack, content->text, start, budget, false);
     return (line_scan){.next = scan.next, .end = scan.end, .width = scan.width + ellipsis_width};
 }
 
@@ -197,7 +198,7 @@ static text_extent walk_lines(const cf_text_content *content, float max_width, c
 
         last_start = offset;
         settled = settled > pending ? settled : pending;
-        const line_scan scan = scan_line(stack, text, offset, max_width);
+        const line_scan scan = scan_line(stack, text, offset, max_width, content->nowrap);
         pending = scan.width;
         offset = scan.next;
         extent.lines++;
@@ -311,6 +312,12 @@ cf_size cf_text_measure(void *user_data, cf_available available, cf_intrinsic ki
     const float line_height = primary->ops->metrics(primary->handle).line_height;
 
     if (kind == CF_INTRINSIC_MIN_CONTENT) {
+        /* A walk that refuses to wrap has no tighter answer than the whole of
+         * its longest line: it will never break to fit a narrower track. */
+        if (content->nowrap) {
+            const text_extent whole = walk_lines(content, FLT_MAX, NULL, 0u);
+            return (cf_size){.width = whole.widest, .height = (float)whole.lines * line_height};
+        }
         const text_extent runs = runs_of(&content->stack, content->text);
         return (cf_size){.width = runs.widest, .height = (float)runs.lines * line_height};
     }
@@ -330,4 +337,140 @@ uint32_t cf_text_lines(const cf_text_content *content, float max_width, cf_text_
     }
 
     return walk_lines(content, max_width, out, capacity).lines;
+}
+
+/*
+ * A laid line's own bytes and where they sit in the content. The line points
+ * into the content's text rather than numbering itself, so the offsets an editor
+ * keeps and the offsets a walk laid are the same numbers - and a line from
+ * somewhere else is refused here rather than read as a huge offset.
+ */
+static bool line_bounds(const cf_text_content *content, const cf_text_line *line, uint32_t *first,
+                        uint32_t *last) {
+    if (content == NULL || line == NULL || !stack_usable(&content->stack) ||
+        content->text.chars == NULL || line->text.chars == NULL ||
+        line->text.chars < content->text.chars) {
+        return false;
+    }
+
+    const size_t start = (size_t)(line->text.chars - content->text.chars);
+
+    if (start > content->text.length) {
+        return false;
+    }
+
+    *first = (uint32_t)start;
+    *last = *first + line->text.length;
+
+    return true;
+}
+
+/* The distance the pen travels across a line's first `at` bytes, with the same
+ * font switching and kerning the walk that laid the line used. */
+static float run_to(const cf_text_content *content, cf_string line, uint32_t at) {
+    const cf_text_stack *stack = &content->stack;
+    text_pen pen = {0};
+    float x = 0.0f;
+    uint32_t offset = 0u;
+
+    while (offset < at) {
+        uint32_t next = 0u;
+        const uint32_t codepoint = utf8_decode_at(line, offset, &next);
+
+        x += step_pen(stack, &pen, codepoint);
+        offset = next;
+    }
+
+    return x;
+}
+
+float cf_text_caret_x(const cf_text_content *content, const cf_text_line *line, uint32_t offset) {
+    uint32_t first = 0u;
+    uint32_t last = 0u;
+
+    if (!line_bounds(content, line, &first, &last)) {
+        return 0.0f;
+    }
+
+    const uint32_t clamped = offset < first ? first : (offset > last ? last : offset);
+
+    return run_to(content, (cf_string){line->text.chars, last - first}, clamped - first);
+}
+
+uint32_t cf_text_offset_at(const cf_text_content *content, const cf_text_line *line, float x) {
+    uint32_t first = 0u;
+    uint32_t last = 0u;
+
+    if (!line_bounds(content, line, &first, &last)) {
+        return 0u;
+    }
+
+    const cf_string run = {line->text.chars, last - first};
+    const cf_text_stack *stack = &content->stack;
+    text_pen pen = {0};
+    float pen_x = 0.0f;
+    uint32_t offset = 0u;
+
+    while (offset < run.length) {
+        uint32_t next = 0u;
+        const uint32_t codepoint = utf8_decode_at(run, offset, &next);
+        const float advance = step_pen(stack, &pen, codepoint);
+
+        /* Half a glyph belongs to the side of it the pointer came from, which is
+         * what lets a click on a wide letter land inside it instead of after it. */
+        if (pen_x + advance * 0.5f > x) {
+            return first + offset;
+        }
+
+        pen_x += advance;
+        offset = next;
+    }
+
+    return first + run.length;
+}
+
+uint32_t cf_text_line_of(const cf_text_content *content, const cf_text_line *lines, uint32_t count,
+                         uint32_t offset) {
+    if (content == NULL || lines == NULL || count == 0u) {
+        return 0u;
+    }
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        uint32_t first = 0u;
+        uint32_t last = 0u;
+
+        if (line_bounds(content, &lines[i], &first, &last) && last >= offset) {
+            return i;
+        }
+    }
+
+    /* Past every line the walk laid: the last one holds the caret at its end. */
+    return count - 1u;
+}
+
+cf_point cf_text_scroll(const cf_text_content *content, const cf_text_line *lines, uint32_t count,
+                        cf_size window) {
+    if (content == NULL || lines == NULL || count == 0u || !content->caret.present ||
+        !stack_usable(&content->stack)) {
+        return (cf_point){0.0f, 0.0f};
+    }
+
+    const cf_font *primary = &content->stack.fonts[0];
+    const float line_height = primary->ops->metrics(primary->handle).line_height;
+    const uint32_t row = cf_text_line_of(content, lines, count, content->caret.value);
+    const float caret_x = cf_text_caret_x(content, &lines[row], content->caret.value);
+    const float caret_bottom = (float)row * line_height + line_height;
+    cf_point slide = {0.0f, 0.0f};
+
+    /* Only the overflow is paid for: a caret the window already holds moves
+     * nothing, so a field that fits its value reads as a label does. */
+    if (window.width > 0.0f && caret_x > window.width) {
+        slide.x = caret_x - window.width;
+    }
+
+    if (window.height > 0.0f && caret_bottom > window.height) {
+        slide.y = caret_bottom - window.height;
+    }
+
+    return slide;
 }
