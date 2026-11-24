@@ -51,6 +51,14 @@
  * is still a box a reader can see the edge of. */
 #define GRID_CELL 44.0f
 
+/* The lane the puck crosses and how long a run of it takes. The lane's width is
+ * stated in points rather than stretched because the build places the puck by
+ * the number the tween holds, and no layout has run to say how wide anything
+ * is when the declaration is made. */
+#define SLIDE_TRAVEL 360.0f
+#define SLIDE_PUCK 40.0f
+#define SLIDE_SECONDS 0.9f
+
 /* What a drag keeps between the press that starts it and the moves that
  * follow: where the hand took hold of the thumb, and the offset then. */
 typedef struct thumb_drag {
@@ -84,6 +92,7 @@ static uint8_t checker[8u * 8u * 4u];
 static char status_bytes[32];
 static char echo_bytes[96];
 static char list_bytes[64];
+static char motion_bytes[96];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -129,6 +138,22 @@ static uint32_t *picked_rule(cf_ctx *ctx) {
 
 static uint32_t *picked_plan(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "plan"), sizeof(uint32_t));
+}
+
+static uint32_t *picked_ease(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "ease"), sizeof(uint32_t));
+}
+
+/* The one tween the motion chapter runs, in the keyed block that outlives the
+ * frame it was aimed in. */
+static cf_tween *slide_tween(cf_ctx *ctx) {
+    return cf_tween_of(ctx, cf_intern_text(&ctx->names, "slide"));
+}
+
+/* Which end the tween is aimed at: the block carries the answer, so neither the
+ * press that aims it nor the label that says so keeps a second copy. */
+static bool aimed_far(const cf_tween *tween) {
+    return tween != NULL && tween->to >= SLIDE_TRAVEL;
 }
 
 /* How many rows the list's factory was asked for this frame, read back under
@@ -185,6 +210,32 @@ static void pick_plan(cf_ctx *ctx, uint32_t slot, void *user_data) {
     if (plan != NULL) {
         *plan = (uint32_t)(uintptr_t)user_data;
     }
+}
+
+/* The chips carry the cf_ease ordinals, which are the numbers they select. */
+static void pick_ease(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot;
+    uint32_t *held = picked_ease(ctx);
+
+    if (held != NULL) {
+        *held = (uint32_t)(uintptr_t)user_data;
+    }
+}
+
+/* One press aims the tween at whichever end it is not already holding: the
+ * target is the number the block carries, so the chapter keeps no second copy of
+ * it to fall out of step with. */
+static void send_it(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot, (void)user_data;
+    cf_tween *tween = slide_tween(ctx);
+    const uint32_t *held = picked_ease(ctx);
+
+    if (tween == NULL) {
+        return;
+    }
+
+    cf_tween_to(tween, aimed_far(tween) ? 0.0f : SLIDE_TRAVEL, SLIDE_SECONDS,
+                held != NULL ? (cf_ease)*held : CF_EASE_LINEAR);
 }
 
 /* The scrollbar's whole geometry in one place, so the thumb the build places
@@ -752,6 +803,89 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
         2u);
 }
 
+/* The three curves a run of the lane may take, named as the chips read and
+ * numbered in the order cf_ease numbers them. */
+static const char *ease_names[] = {"linear", "ease out", "ease in out"};
+#define EASE_COUNT (uint32_t)(sizeof ease_names / sizeof ease_names[0])
+
+/* Chapter nine: one number, restated by every frame that moves it. The press
+ * aims the tween and the build steps it, which is the whole division between an
+ * event and an animation: nothing on the input side is left running once the
+ * button has been let go. */
+static cf_node make_motion_demo(cf_ctx *ctx) {
+    cf_tween *tween = slide_tween(ctx);
+    bool travelling = false;
+    float at = 0.0f;
+
+    if (tween != NULL) {
+        at = cf_tween_step(tween, cf_frame_seconds(ctx));
+
+        /* The step clamps what it advances, so the only reading left is whether
+         * it ran out: the frame that lands the value is the last one the page
+         * has a reason to ask for. */
+        travelling = tween->elapsed < tween->duration;
+
+        if (travelling) {
+            cf_request_frame(ctx);
+        }
+    }
+
+    /* The lane is both the containing block the puck leaves the flow to be
+     * placed against and the box that cuts it: a puck past the edge is clipped
+     * rather than painted over the chapter below. */
+    cf_style lane = inset_style(theme->bar, 0.0f, 0.0f);
+    lane.position = CF_POSITION_RELATIVE;
+    lane.width = CF_PX(SLIDE_TRAVEL + SLIDE_PUCK);
+    lane.height = CF_PX(SLIDE_PUCK);
+    lane.clips_content = true;
+
+    cf_style puck = theme->variants[CF_ROLE_BUTTON].base;
+    puck.position = CF_POSITION_ABSOLUTE;
+    puck.width = CF_PX(SLIDE_PUCK);
+    puck.height = CF_PX(SLIDE_PUCK);
+    puck.radius = 8.0f;
+    puck.inset = (cf_box){CF_PX(at), CF_PX(0.0f), CF_AUTO, CF_AUTO};
+
+    /* The same number read a second way, as a share of whatever width the card
+     * happens to be: the bar stretches with the window and the lane does not. The
+     * meter is a row, so the fill states no height of its own - the cross axis
+     * stretches what did not state one. */
+    cf_style meter = inset_style(theme->bar, 0.0f, 0.0f);
+    meter.width = CF_PERCENT(100.0f);
+    meter.height = CF_PX(12.0f);
+
+    cf_style fill = theme->variants[CF_ROLE_BUTTON].base;
+    fill.width = CF_PERCENT(at / SLIDE_TRAVEL * 100.0f);
+
+    const uint32_t *held = picked_ease(ctx);
+    const uint32_t ease = held != NULL ? *held : (uint32_t)CF_EASE_LINEAR;
+
+    cf_node chips[EASE_COUNT];
+
+    for (uint32_t i = 0u; i < EASE_COUNT; ++i) {
+        chips[i] = make_chip(ctx, ease_names[i], i == ease, pick_ease, i);
+    }
+
+    cf_style row = cf_style_default();
+    row.wrap = CF_WRAP;
+    row.column_gap = CF_PX(8.0f);
+    row.row_gap = CF_PX(8.0f);
+
+    const int length =
+        snprintf(motion_bytes, sizeof motion_bytes, "%.0f of %.0f points, %s", at, SLIDE_TRAVEL,
+                 travelling ? "and the page asked for another frame" : "and the page is at rest");
+
+    const cf_node parts[] = {
+        cf_col(ctx, lane, (cf_node[]){(cf_node){.style = puck}}, 1u),
+        cf_row(ctx, meter, (cf_node[]){(cf_node){.style = fill}}, 1u),
+        cf_row(ctx, row, chips, EASE_COUNT),
+        make_button(ctx, aimed_far(tween) ? "bring it back" : "send it", send_it, NULL),
+        cf_label(ctx, (cf_string){motion_bytes, (uint32_t)length}, &body, theme->muted),
+    };
+
+    return demo_column(ctx, 12.0f, parts, (uint32_t)(sizeof parts / sizeof parts[0]));
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
@@ -759,7 +893,7 @@ static cf_node make_note(cf_ctx *ctx, const char *chars) {
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
     const cf_node note =
-        cf_label(ctx, cf_string_of("eight rules, each with something to try"), &body, theme->muted);
+        cf_label(ctx, cf_string_of("nine rules, each with something to try"), &body, theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
@@ -871,6 +1005,17 @@ static cf_node build(cf_ctx *ctx) {
             "leaves a single content-sized column. Two rows are declared and six cells want more, "
             "so the rest land in rows the grid adds as tracks of their own.",
             make_grid_demo(ctx)),
+        make_chapter(
+            ctx, "09", "A value that moves between frames",
+            "A tween holds one number and the time it was aimed at. The press aims it and the "
+            "build steps it by the seconds this frame covers, which is the whole division between "
+            "an event and an animation - nothing is left running on the input side once the button "
+            "has been let go. The shell's idle rule can only see events and a moved surface, so a "
+            "page whose own state is mid-motion asks for the next frame by name, and stops asking "
+            "in the frame that lands the value: the line below says which of the two this frame "
+            "was. The puck is placed in points inside a lane of stated width; the bar under it is "
+            "the same number as a share, so it keeps stretching when the window does.",
+            make_motion_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against and the "
