@@ -706,6 +706,55 @@ static void an_offer_free_spine_stays_exact_below_a_percent_padded_root(void) {
     CF_NEAR(f.rects[second].width, 50.0f);
 }
 
+/*
+ * A wrapping row is offered a different room at every level above it, and a
+ * measuring leaf is never offer-free, so one small tree can ask the memo for
+ * more cells than it holds. The pass that finds the table full has to answer
+ * from the computation rather than probe for a free cell: a table with no empty
+ * cell ends no probe, and the gallery hung here on a page of wrapped text.
+ */
+static void a_full_measure_table_answers_from_the_computation(void) {
+    fixture f;
+    cf_arena wide;
+    CF_CHECK(cf_arena_init(&wide, 65536u), "the fill wants room to spare");
+
+    const foreign_content word = {.min_content = (cf_size){40.0f, 10.0f},
+                                  .max_content = (cf_size){90.0f, 10.0f}};
+
+    cf_style wrapping = cf_style_default();
+    wrapping.wrap = CF_WRAP;
+    wrapping.column_gap = CF_PX(20.0f);
+
+    uint32_t parent = begin(&f, wrapping);
+    f.styles[parent].width = CF_PX(100.0f);
+
+    for (uint32_t level = 0u; level < 5u; ++level) {
+        for (uint32_t item = 0u; item < 2u; ++item) {
+            const uint32_t leaf = append(&f, parent, cf_style_default());
+            f.measures[leaf] = measure_foreign;
+            f.measure_data[leaf] = (void *)&word;
+        }
+        /* A frame that shrinks and re-breaks as the spine goes down: the same
+         * leaf is then offered a different room by every level above it, which
+         * is what the memo runs out of cells on. */
+        parent = append(&f, parent, wrapping);
+        f.styles[parent].padding.left = CF_PX(6.0f * (float)(level + 1u));
+        f.styles[parent].column_gap = CF_PX(28.0f - 4.0f * (float)level);
+    }
+    arrange_with(&wide, &f, (cf_available){.width = CF_PX(100.0f), .height = CF_AUTO});
+
+    /* Each level breaks its two words onto separate lines and then carries the
+     * lines the next level needs, so the spine is a stack of tens all the way
+     * down: five levels of two words, and one empty line at the bottom. */
+    CF_NEAR(f.rects[0u].height, 100.0f);
+    CF_NEAR(f.rects[1u].width, 90.0f);
+    CF_NEAR(f.rects[1u].height, 10.0f);
+    CF_NEAR(f.rects[2u].y, 10.0f);
+    CF_NEAR(f.rects[3u].y, 20.0f);
+
+    cf_arena_free(&wide);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -738,6 +787,7 @@ int main(void) {
     CF_RUN(refused_scratch_leaves_the_subtree_as_it_was);
     CF_RUN(a_tree_or_rect_array_that_is_not_there_changes_nothing);
     CF_RUN(an_offer_free_spine_stays_exact_below_a_percent_padded_root);
+    CF_RUN(a_full_measure_table_answers_from_the_computation);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

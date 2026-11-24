@@ -144,13 +144,20 @@ static bool measure_same(const measure_cell *cell, uint32_t slot, uint32_t mode,
 
 /* Stores an answer found after the recursion below it may have filled
  * cells, so the probe restarts from the hash rather than a spot taken
- * before the descent. The caller guarantees an empty cell exists. */
+ * before the descent. */
 static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
                           cf_available constraint, cf_size extent, uint32_t hash) {
     /* The memo extends as the queries run: an answer stored here is the
      * answer the query that found it would have returned, so the const
      * guards the tree and the rects, not the table of answers. */
     layout_ctx *const table = (layout_ctx *)ctx;
+
+    /* The descent above the caller's decision may have filled the last cell,
+     * and a table with no empty cell ends no probe: the answer goes unmemoed
+     * rather than the pass never returns. */
+    if (table->measure_full) {
+        return;
+    }
 
     uint32_t at = measure_probe(table, hash);
 
