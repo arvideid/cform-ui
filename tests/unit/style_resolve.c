@@ -148,6 +148,57 @@ static void repeat_expands_a_pattern_whole_or_not_at_all(void) {
     CF_CHECK(cf_tracks_repeat(NULL, 4u, pattern, 2u, 3u) == 0u, "no array writes nothing");
 }
 
+/*
+ * The marks an editor paints travel through the style, so a widget that cannot
+ * know its own focus at build time still gets a caret only while it holds the
+ * keyboard. A state that says nothing about a mark leaves whatever the
+ * declaration stated, and the later enum bits overwrite the earlier ones.
+ */
+static void a_variant_hands_out_only_the_marks_it_states(void) {
+    const cf_color ink = {10u, 10u, 10u, 255u};
+    const cf_color band = {191u, 219u, 254u, 255u};
+    const cf_variants field = {
+        .base = {0},
+        .hovered = {.background = {.present = true, .value = {250u, 250u, 250u, 255u}}},
+        .focused = {.caret = {.present = true, .value = ink},
+                    .selection = {.present = true, .value = band}},
+    };
+
+    const cf_style resting = cf_style_varied(cf_style_default(), &field, CF_INTERACT_NONE);
+
+    CF_CHECK(!resting.caret.present && !resting.selection.present,
+             "a box at rest shows no editing marks");
+
+    const cf_style hovered = cf_style_varied(cf_style_default(), &field, CF_INTERACT_HOVERED);
+
+    CF_CHECK(hovered.background.present, "the state that speaks about a tone is applied");
+    CF_CHECK(!hovered.caret.present, "and the marks it says nothing about stay unstated");
+
+    const cf_style focused = cf_style_varied(cf_style_default(), &field, CF_INTERACT_FOCUSED);
+
+    CF_CHECK(focused.caret.present && focused.caret.value.red == ink.red,
+             "the focus brings the caret with it");
+    CF_CHECK(focused.selection.present && focused.selection.value.red == band.red,
+             "and the tone the selection is banded in");
+
+    /* A declaration that stated its own mark keeps it across a state silent
+     * about marks, and loses it only to a state that names one. */
+    cf_style declared = cf_style_default();
+    declared.caret = (cf_opt_color){.present = true, .value = {200u, 0u, 0u, 255u}};
+
+    const cf_style pressed = cf_style_varied(declared, &field, CF_INTERACT_PRESSED);
+
+    CF_CHECK(pressed.caret.present && pressed.caret.value.red == 200u,
+             "a state silent about the caret leaves the declared one");
+
+    const cf_variants later = {.focused = {.caret = {.present = true, .value = ink}},
+                               .disabled = {.caret = {.present = true, .value = band}}};
+    const cf_style both =
+        cf_style_varied(declared, &later, CF_INTERACT_FOCUSED | CF_INTERACT_DISABLED);
+
+    CF_CHECK(both.caret.value.red == band.red, "the later bit has the last word");
+}
+
 int main(void) {
     printf("style\n");
     CF_RUN(percent_resolves_against_the_reference_it_is_given);
@@ -161,5 +212,6 @@ int main(void) {
     CF_RUN(direction_separates_the_axis_from_the_packing_edge);
     CF_RUN(default_holds_the_css_initial_values_zero_cannot_express);
     CF_RUN(repeat_expands_a_pattern_whole_or_not_at_all);
+    CF_RUN(a_variant_hands_out_only_the_marks_it_states);
     return CF_REPORT();
 }

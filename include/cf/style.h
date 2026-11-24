@@ -185,6 +185,17 @@ typedef struct cf_style {
      * relative box always has.
      */
     bool clips_content;
+
+    /*
+     * The two marks an editing box lays over its own text: the caret the
+     * content's offset stands at, and the band under the range its offset pair
+     * selects. A mark whose tone is not stated draws nothing, which is what
+     * keeps a label - a box that only ever shows bytes - from painting marks it
+     * was never meant to hold. A theme hands them out from a state, so the caret
+     * arrives with the focus that makes it worth showing.
+     */
+    cf_opt_color caret;
+    cf_opt_color selection;
 } cf_style;
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */
@@ -277,6 +288,8 @@ typedef enum cf_role {
 typedef struct cf_variant {
     cf_opt_color background;
     cf_opt_color border_color;
+    cf_opt_color caret;
+    cf_opt_color selection;
 } cf_variant;
 
 /*

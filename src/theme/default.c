@@ -14,7 +14,8 @@
  * the single accent, reserved for the primary action, and #d4d4d4 the
  * hairline every box edges with. Text tones are chosen so every fill clears
  * WCAG-AA against its label: #0a0a0a on #fafafa is 19:1, #fafafa on #171717
- * is 16:1, #525252 on #fafafa is 7.9:1.
+ * is 16:1, #525252 on #fafafa is 7.9:1, and the selection band #bfdbfe under
+ * the same ink is 12:1.
  */
 
 /*
@@ -71,11 +72,20 @@ static const cf_theme
                                      .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
                                      .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
                                      .margin = MARGINS,
-                                     .radius = 6.0f},
+                                     .radius = 6.0f,
+                                     /* A value longer than the box slides under its edge
+                                      * rather than past its border. */
+                                     .clips_content = true},
                             .hovered = {.border_color = {.present = true,
                                                          .value = RGBA(163, 163, 163)}},
-                            .focused = {.border_color = {.present = true,
-                                                         .value = RGBA(10, 10, 10)}},
+                            .focused =
+                                {.border_color = {.present = true, .value = RGBA(10, 10, 10)},
+                                 /* A caret is only worth showing to whoever can type:
+                                  * the focus books both marks, and the caret takes the
+                                  * ink the bytes are drawn in, which is CSS's default
+                                  * for caret-color. */
+                                 .caret = {.present = true, .value = RGBA(10, 10, 10)},
+                                 .selection = {.present = true, .value = RGBA(191, 219, 254)}},
                             .disabled = {.background = {.present = true,
                                                         .value = RGBA(229, 229, 229)}}},
                     [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,

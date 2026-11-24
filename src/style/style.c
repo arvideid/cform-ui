@@ -124,6 +124,14 @@ static void variant_apply(const cf_variant *variant, cf_style *style) {
     if (variant->border_color.present) {
         style->border_color = variant->border_color;
     }
+
+    if (variant->caret.present) {
+        style->caret = variant->caret;
+    }
+
+    if (variant->selection.present) {
+        style->selection = variant->selection;
+    }
 }
 
 cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states) {
