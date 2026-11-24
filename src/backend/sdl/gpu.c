@@ -238,8 +238,7 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
  * promises. SDL's own RGBA8888 is that as a 32-bit value with red in the high
  * bits, which on a little-endian machine is a buffer whose first byte is
  * alpha: RGBA32 is the alias that follows the bytes the upload hands over. */
-static uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height,
-                                   const void *pixels) {
+uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, const void *pixels) {
     sdl_state *state = user_data;
 
     if (state == NULL || width == 0u || height == 0u || pixels == NULL) {
@@ -274,6 +273,20 @@ static uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t hei
 
     state->textures[state->texture_count++] = texture;
     return state->texture_count;
+}
+
+/* The density the window is drawing at, so an extent measured in device pixels
+ * can be handed back in the points the layout places. */
+float sdl_pixel_density(void *user_data) {
+    const sdl_state *state = user_data;
+
+    if (state == NULL) {
+        return 1.0f;
+    }
+
+    const float density = SDL_GetWindowPixelDensity(state->window);
+
+    return density > 0.0f ? density : 1.0f;
 }
 
 static void draw_submit(void *user_data, const cf_command *commands, uint32_t count) {
@@ -560,5 +573,6 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .present = sdl_present,
                         .create_texture = sdl_create_texture,
                         .poll_event = sdl_poll,
-                        .surface = sdl_surface};
+                        .surface = sdl_surface,
+                        .load_image = sdl_load_image};
 }

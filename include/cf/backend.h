@@ -14,7 +14,7 @@
  * checks it before the first submit, because data the backend misreads draws
  * wrong rather than failing.
  */
-#define CF_BACKEND_ABI_VERSION 6u
+#define CF_BACKEND_ABI_VERSION 7u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -40,6 +40,13 @@ typedef struct cf_backend {
      * resize takes without a callback. A backend without an output leaves
      * this NULL and its caller lays out against nothing. */
     cf_size (*surface)(void *user_data);
+    /* Reads an image file, uploads it, and answers the texture to draw and the
+     * extent it holds in logical points. The path is the platform's to open and
+     * the formats the backend decodes; a file that will not open, a format it
+     * cannot read or a backend with no decoder answers false and leaves `out`
+     * alone. Load once and keep the answer: an upload per frame is a texture per
+     * frame, and nothing here reclaims one. */
+    bool (*load_image)(void *user_data, const char *path, cf_image_content *out);
 } cf_backend;
 
 /*

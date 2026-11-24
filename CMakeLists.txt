@@ -203,6 +203,7 @@ if(CFORM_WITH_SDL_BACKEND)
     add_library(cf_backend_sdl STATIC
         src/backend/sdl/gpu.c
         src/backend/sdl/font.c
+        src/backend/sdl/image.c
         src/backend/sdl/text.c
     )
 

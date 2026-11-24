@@ -1025,7 +1025,7 @@ static cf_node build(cf_ctx *ctx) {
     return make_page(ctx, chapters, (uint32_t)(sizeof chapters / sizeof chapters[0]));
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     theme = cf_theme_default();
     body_font = cf_font_sdl(CFORM_GALLERY_FONT, 14.0f);
     title_font = cf_font_sdl(CFORM_GALLERY_FONT, 22.0f);
@@ -1045,9 +1045,21 @@ int main(void) {
         return 1;
     }
 
-    logo = (cf_image_content){.texture = backend.create_texture(backend.user_data, 8u, 8u, checker),
-                              .width = 32.0f,
-                              .height = 32.0f};
+    /* An image is the backend's to read, so a path named on the command line
+     * goes through its decoder and lands as a texture. Without one the page
+     * still has a texture to show - a pattern uploaded here, in the bytes the
+     * slot promises - because a demo that needs an asset it cannot ship is a
+     * demo that does not run. */
+    if (argc > 1 && backend.load_image != NULL) {
+        if (!backend.load_image(backend.user_data, argv[1], &logo)) {
+            printf("gallery: %s is not an image this backend reads\n", argv[1]);
+        }
+    } else {
+        logo = (cf_image_content){.texture =
+                                      backend.create_texture(backend.user_data, 8u, 8u, checker),
+                                  .width = 32.0f,
+                                  .height = 32.0f};
+    }
 
     cf_app_run(
         &(cf_app_config){.build = build, .backend = backend, .theme = theme, .fonts = &body});
