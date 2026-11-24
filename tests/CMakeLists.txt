@@ -186,3 +186,8 @@ cf_add_bench(bench_node bench/bench_node.c cf_node)
 # count is what the rig asserts, and the scratch it costs is what a host sizes
 # an arena against.
 cf_add_bench(bench_paint bench/bench_paint.c cf_node)
+
+# The question the time rigs cannot ask: whether a page that stays open grows.
+# The arena a 10k frame costs and the state a churning session holds are both
+# printed, and both are held flat against the frame count.
+cf_add_bench(bench_memory bench/bench_memory.c cf_node)
