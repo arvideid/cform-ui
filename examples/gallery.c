@@ -47,6 +47,10 @@
  * and paints the narrower, and the last lines land outside the box. */
 #define TEXT_NARROW 380.0f
 
+/* The floor a grid cell keeps for itself, so a track the content does not fill
+ * is still a box a reader can see the edge of. */
+#define GRID_CELL 44.0f
+
 /* What a drag keeps between the press that starts it and the moves that
  * follow: where the hand took hold of the thumb, and the offset then. */
 typedef struct thumb_drag {
@@ -123,6 +127,10 @@ static uint32_t *picked_rule(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "rule"), sizeof(uint32_t));
 }
 
+static uint32_t *picked_plan(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "plan"), sizeof(uint32_t));
+}
+
 /* How many rows the list's factory was asked for this frame, read back under
  * the list as the virtualization it is meant to show. */
 static uint32_t *rows_built(cf_ctx *ctx) {
@@ -167,6 +175,15 @@ static void pick_rule(cf_ctx *ctx, uint32_t slot, void *user_data) {
 
     if (rule != NULL) {
         *rule = (uint32_t)(uintptr_t)user_data;
+    }
+}
+
+static void pick_plan(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot;
+    uint32_t *plan = picked_plan(ctx);
+
+    if (plan != NULL) {
+        *plan = (uint32_t)(uintptr_t)user_data;
     }
 }
 
@@ -651,6 +668,90 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
     return CF_ROW(ctx, row, cf_col(ctx, over, (cf_node[]){image, badge_box}, 2u), flip_button);
 }
 
+/* The three track plans the grid chapter switches between, named for what each
+ * one declares: a written set of columns, a pattern the helper repeats, or no
+ * columns at all. */
+enum { PLAN_COLUMNS, PLAN_REPEAT, PLAN_FREE };
+
+static const char *plan_names[] = {"three tracks", "repeated pair", "no tracks"};
+#define PLAN_COUNT (uint32_t)(sizeof plan_names / sizeof plan_names[0])
+
+/* Chapter eight: the six cells the container places. What an item says about the
+ * grid is only how many tracks it takes; which tracks there are is the
+ * container's declaration. */
+static cf_node make_grid_cell(cf_ctx *ctx, const char *mark, uint32_t column_span,
+                              uint32_t row_span) {
+    cf_style cell = inset_style(theme->body, 8.0f, 0.0f);
+    cell.min_height = CF_PX(GRID_CELL);
+    cell.justify_content = CF_JUSTIFY_CENTER;
+    cell.align_items = CF_ALIGN_CENTER;
+    /* Zero is the grid's own auto: one track, at whatever cell the placement
+     * cursor had reached. The cells that state a number are the chapter. */
+    cell.column_span = column_span;
+    cell.row_span = row_span;
+
+    const cf_node label = cf_label(ctx, cf_string_of(mark), &body, theme->ink);
+
+    return cf_col(ctx, cell, &label, 1u);
+}
+
+static cf_node make_grid_demo(cf_ctx *ctx) {
+    const uint32_t *held = picked_plan(ctx);
+    const uint32_t plan = held != NULL ? *held : PLAN_COLUMNS;
+
+    /* The engine reads a flat array and a count, so a pattern handed to the
+     * helper and a list written out by longhand are one declaration by the time
+     * the pass runs. Both ride this frame's stack, which is the borrowing the
+     * style states: outliving the pass, not the page. */
+    cf_track columns[4];
+    uint32_t column_count = 0u;
+
+    if (plan == PLAN_COLUMNS) {
+        columns[0] = (cf_track){CF_PX(120.0f), CF_PX(120.0f)};
+        columns[1] = (cf_track){CF_PX(64.0f), CF_FR(1.0f)};
+        columns[2] = (cf_track){CF_AUTO, CF_FR(2.0f)};
+        column_count = 3u;
+    } else if (plan == PLAN_REPEAT) {
+        const cf_track pattern[] = {{CF_AUTO, CF_FR(1.0f)}, {CF_PX(72.0f), CF_PX(72.0f)}};
+
+        column_count = cf_tracks_repeat(columns, 4u, pattern, 2u, 2u);
+    }
+
+    /* Two rows are written and six cells want more, so the rest land in rows the
+     * grid adds for them as content-sized tracks of their own. */
+    static const cf_track rows[] = {{CF_AUTO, CF_AUTO}, {CF_AUTO, CF_AUTO}};
+
+    cf_style grid = inset_style(theme->bar, 12.0f, 12.0f);
+    grid.display = CF_DISPLAY_GRID;
+    grid.width = CF_PERCENT(100.0f);
+    grid.column_tracks = column_count != 0u ? columns : NULL;
+    grid.column_count = column_count;
+    grid.row_tracks = plan == PLAN_FREE ? NULL : rows;
+    grid.row_count = plan == PLAN_FREE ? 0u : 2u;
+
+    const cf_node cells[] = {
+        make_grid_cell(ctx, "two columns", 2u, 0u), make_grid_cell(ctx, "auto", 0u, 0u),
+        make_grid_cell(ctx, "auto", 0u, 0u),        make_grid_cell(ctx, "two rows", 0u, 2u),
+        make_grid_cell(ctx, "auto", 0u, 0u),        make_grid_cell(ctx, "auto", 0u, 0u),
+    };
+
+    cf_node chips[PLAN_COUNT];
+
+    for (uint32_t i = 0u; i < PLAN_COUNT; ++i) {
+        chips[i] = make_chip(ctx, plan_names[i], i == plan, pick_plan, i);
+    }
+
+    cf_style row = cf_style_default();
+    row.wrap = CF_WRAP;
+    row.column_gap = CF_PX(8.0f);
+    row.row_gap = CF_PX(8.0f);
+    row.align_items = CF_ALIGN_START;
+
+    return demo_column(
+        ctx, 12.0f, (cf_node[]){cf_row(ctx, row, chips, PLAN_COUNT), cf_row(ctx, grid, cells, 6u)},
+        2u);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
@@ -658,7 +759,8 @@ static cf_node make_note(cf_ctx *ctx, const char *chars) {
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
     const cf_node note =
-        cf_label(ctx, cf_string_of("seven rules, each with something to try"), &body, theme->muted);
+        cf_label(ctx, cf_string_of("eight rules, each with something to try"), &body,
+                 theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
@@ -759,6 +861,17 @@ static cf_node build(cf_ctx *ctx) {
             "hangs past the corner. Put it back in the flow and it takes its own line under the "
             "logo, gap and all.",
             make_badge_demo(ctx)),
+        make_chapter(
+            ctx, "08", "Tracks a container declares",
+            "A grid is the one layout whose sizes come from the parent rather than from the "
+            "children: the style states the column tracks and the cells are placed into them. An "
+            "item says only how many tracks it takes - the first cell here claims two columns and "
+            "the fourth two rows, and zero on either is the grid's own auto of one track at the "
+            "next free cell. Press a plan and only the track array changes: three written out, one "
+            "pair repeated by the helper into the same flat array the pass reads, or none, which "
+            "leaves a single content-sized column. Two rows are declared and six cells want more, "
+            "so the rest land in rows the grid adds as tracks of their own.",
+            make_grid_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against and the "
