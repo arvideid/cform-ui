@@ -20,18 +20,24 @@
 /*
  * A resting box states its margins: the zero length reads as auto, and auto
  * margins absorb the container's free space, which would center the widget
- * instead of letting its container place it.
+ * instead of letting its container place it. Every box this theme hands out is
+ * a resting box, the three surfaces above them included - a card that hugs its
+ * label instead of filling its column is the same mistake wearing a border.
  */
 #define MARGINS {PX(0.0f), PX(0.0f), PX(0.0f), PX(0.0f)}
 
 static const cf_theme
     theme =
         {
-            .page = {.background = {.present = true, .value = RGBA(245, 245, 245)}},
-            .bar = {.background = {.present = true, .value = RGBA(229, 229, 229)}, .radius = 8.0f},
+            .page = {.background = {.present = true, .value = RGBA(245, 245, 245)},
+                     .margin = MARGINS},
+            .bar = {.background = {.present = true, .value = RGBA(229, 229, 229)},
+                    .margin = MARGINS,
+                    .radius = 8.0f},
             .body = {.background = {.present = true, .value = RGBA(250, 250, 250)},
                      .border_color = {.present = true, .value = RGBA(212, 212, 212)},
                      .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
+                     .margin = MARGINS,
                      .radius = 8.0f},
             .ink = RGBA(10, 10, 10),
             .muted = RGBA(82, 82, 82),
