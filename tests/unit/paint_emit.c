@@ -597,6 +597,118 @@ static void an_image_inside_a_clip_cuts_to_the_clip(void) {
     CF_NEAR(list.commands[0].rect.width, 20.0f);
 }
 
+/*
+ * The two marks an editor states. "aa bb cc" at ten points a glyph and a box
+ * thirty wide lays three lines - "aa", "bb", "cc" over bytes 0..2, 3..5 and
+ * 6..8 - so the pair 3 and 5 is the whole of the middle one.
+ */
+static void a_stated_caret_and_selection_paint_with_the_lines(void) {
+    fixture f;
+    begin(&f);
+    cf_text_content edited = label_text;
+    edited.caret = (cf_opt_u32){.present = true, .value = 5u};
+    edited.mark = (cf_opt_u32){.present = true, .value = 3u};
+
+    f.styles[0] = cf_style_default();
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.styles[0].caret = (cf_opt_color){.present = true, .value = (cf_color){23u, 23u, 23u, 255u}};
+    f.styles[0].selection =
+        (cf_opt_color){.present = true, .value = (cf_color){191u, 219u, 254u, 255u}};
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&edited;
+    f.node_count = 1u;
+    f.rects[0] = box_at(0.0f, 0.0f, 30.0f, 60.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+
+    CF_CHECK(list.count == 5u, "a band, three lines and a caret");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "the band is laid before the glyphs");
+    CF_NEAR(list.commands[0].rect.x, 0.0f);
+    CF_NEAR(list.commands[0].rect.y, 20.0f);
+    CF_NEAR(list.commands[0].rect.width, 20.0f);
+    CF_NEAR(list.commands[0].rect.height, 20.0f);
+    CF_CHECK(list.commands[1].kind == CF_COMMAND_TEXT, "and the lines ride over it");
+    CF_CHECK(list.commands[4].kind == CF_COMMAND_FILL, "the caret closes the box's paint");
+    CF_NEAR(list.commands[4].rect.x, 20.0f);
+    CF_NEAR(list.commands[4].rect.y, 20.0f);
+    CF_NEAR(list.commands[4].rect.width, 1.0f);
+    CF_NEAR(list.commands[4].rect.height, 20.0f);
+
+    /* A mark the style hands out no tone for is a mark nothing paints, which is
+     * how a label that carries an offset stays a label. */
+    f.styles[0].caret.present = false;
+    f.styles[0].selection.present = false;
+    list.count = 0u; /* the arena rewind hands the array back; clearing the count
+                      * is the caller's */
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+    CF_CHECK(list.count == 3u, "without the tones the bytes stand alone");
+}
+
+/* A range that crosses a line needs no case for the lines it only passes
+ * through: each end clamps into the line it is read against, so a middle line
+ * answers both its own edges. */
+static void a_range_across_lines_bands_every_one_it_touches(void) {
+    fixture f;
+    begin(&f);
+    cf_text_content edited = label_text;
+    edited.caret = (cf_opt_u32){.present = true, .value = 7u};
+    edited.mark = (cf_opt_u32){.present = true, .value = 1u};
+
+    f.styles[0] = cf_style_default();
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.styles[0].selection =
+        (cf_opt_color){.present = true, .value = (cf_color){191u, 219u, 254u, 255u}};
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&edited;
+    f.node_count = 1u;
+    f.rects[0] = box_at(0.0f, 0.0f, 30.0f, 60.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+
+    CF_CHECK(list.count == 6u, "three bands over three lines, and no caret without its tone");
+    CF_NEAR(list.commands[0].rect.x, 10.0f);
+    CF_NEAR(list.commands[0].rect.y, 0.0f);
+    CF_NEAR(list.commands[0].rect.width, 10.0f);
+    CF_NEAR(list.commands[2].rect.x, 0.0f);
+    CF_NEAR(list.commands[2].rect.y, 40.0f);
+    CF_NEAR(list.commands[2].rect.width, 10.0f);
+}
+
+/* A value wider than the box that shows it: the walk keeps the line's true rect
+ * and names the clip that cuts it, and the box slides along the line to hold the
+ * caret the content states. */
+static void a_caret_past_the_edge_slides_the_line_and_is_cut_at_it(void) {
+    fixture f;
+    begin(&f);
+    cf_text_content long_value = label_text;
+    long_value.nowrap = true;
+    long_value.caret = (cf_opt_u32){.present = true, .value = 8u};
+
+    f.styles[0] = cf_style_default();
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.styles[0].caret = (cf_opt_color){.present = true, .value = (cf_color){23u, 23u, 23u, 255u}};
+    f.styles[0].clips_content = true;
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&long_value;
+    f.node_count = 1u;
+    f.rects[0] = box_at(0.0f, 0.0f, 50.0f, 20.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+
+    CF_CHECK(list.count == 2u, "one line that refuses to wrap, and the caret in it");
+    CF_NEAR(list.commands[0].rect.x, -30.0f); /* the eight bytes slid to the caret */
+    CF_NEAR(list.commands[0].clip.x, 0.0f);
+    CF_NEAR(list.commands[0].clip.width, 50.0f);
+    CF_NEAR(list.commands[0].clip.height, 20.0f);
+    /* The offset the text ends at stands on the edge itself, where a cut would
+     * erase it: the column is pulled inside instead. */
+    CF_NEAR(list.commands[1].rect.x, 49.0f);
+    CF_NEAR(list.commands[1].rect.width, 1.0f);
+}
+
 int main(void) {
     printf("paint emit\n");
     CF_CHECK(cf_arena_init(&scratch, 65536u), "paint needs scratch");
@@ -623,6 +735,9 @@ int main(void) {
     CF_RUN(a_tree_or_list_that_is_not_there_paints_nothing);
     CF_RUN(an_image_paints_its_texture_into_its_box);
     CF_RUN(an_image_inside_a_clip_cuts_to_the_clip);
+    CF_RUN(a_stated_caret_and_selection_paint_with_the_lines);
+    CF_RUN(a_range_across_lines_bands_every_one_it_touches);
+    CF_RUN(a_caret_past_the_edge_slides_the_line_and_is_cut_at_it);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

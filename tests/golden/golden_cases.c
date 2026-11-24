@@ -102,6 +102,26 @@ static uint32_t add_text(scene *s, uint32_t parent, cf_style style,
     return slot;
 }
 
+static const cf_image_content badge = {7u, 100.0f, 30.0f};
+
+static uint32_t add_image(scene *s, uint32_t parent, cf_style style,
+                          const cf_image_content *content) {
+    const uint32_t slot = s->node_count++;
+    s->styles[slot] = style;
+    s->measures[slot] = cf_image_measure;
+    s->measure_data[slot] = (void *)content;
+    s->children[parent][s->child_counts[parent]++] = slot;
+    return slot;
+}
+
+/* Out of the flow and pinned to the clipping panel's own box, so each child
+ * lands exactly where the snapshot has to account for it. */
+static void place(cf_style *style, float left, float top) {
+    style->position = CF_POSITION_ABSOLUTE;
+    style->inset.left = CF_PX(left);
+    style->inset.top = CF_PX(top);
+}
+
 /*
  * A panel with everything stated - background, border, radius - holding two
  * children, so the snapshot pins the order a frame composites in: a parent's
@@ -238,6 +258,77 @@ static void idle_frame(scene *s) {
 }
 
 /*
+ * The scroller's contract, end to end: a box that clips its content hands every
+ * command below it the rect it must not paint outside. A fill and an image are
+ * cut here, because cutting a rectangle is the whole of what they draw; a border
+ * and a text line keep their true rect and name the clip, because cutting those
+ * by rewriting the rect would move the corners and the baseline. A child past
+ * the clip is not emitted at all, and the box that clips is never clipped by
+ * itself.
+ */
+static void clipped_content(scene *s) {
+    *s = (scene){0};
+
+    cf_style root = cf_style_default();
+    root.width = CF_PX(200.0f);
+    root.height = CF_PX(160.0f);
+    root.direction = CF_DIRECTION_COLUMN;
+    (void)root_node(s, root);
+
+    /* Relative so the absolute children measure against the panel rather than
+     * the page, and clips so the descent carries its rect. */
+    cf_style panel = filled(stated(245u, 245u, 245u));
+    panel.width = CF_PX(120.0f);
+    panel.height = CF_PX(60.0f);
+    panel.position = CF_POSITION_RELATIVE;
+    panel.clips_content = true;
+    panel.border = (cf_box){CF_PX(2.0f), CF_PX(2.0f), CF_PX(2.0f), CF_PX(2.0f)};
+    panel.border_color = stated(16u, 16u, 16u);
+    panel.radius = 6.0f;
+    (void)add_node(s, 0u, panel);
+
+    /* Wider and taller than the panel: the fill arrives cut at both far edges,
+     * which is all a rectangle needs to be drawn inside a scissor. */
+    cf_style cut = filled(stated(70u, 130u, 180u));
+    place(&cut, 8.0f, 8.0f);
+    cut.width = CF_PX(200.0f);
+    cut.height = CF_PX(80.0f);
+    (void)add_node(s, 1u, cut);
+
+    /* Stroked and straddling the bottom edge: the four sides the box declared
+     * stay in the stream, and the device does the cutting. */
+    cf_style stroked = cf_style_default();
+    place(&stroked, 10.0f, 30.0f);
+    stroked.width = CF_PX(100.0f);
+    stroked.height = CF_PX(60.0f);
+    stroked.border = (cf_box){CF_PX(4.0f), CF_PX(4.0f), CF_PX(4.0f), CF_PX(4.0f)};
+    stroked.border_color = stated(255u, 165u, 0u);
+    (void)add_node(s, 1u, stroked);
+
+    /* An image cut the way a fill is: the texture draws where the rect says. */
+    cf_style picture = cf_style_default();
+    place(&picture, 60.0f, 40.0f);
+    picture.width = CF_PX(100.0f);
+    picture.height = CF_PX(30.0f);
+    (void)add_image(s, 1u, picture, &badge);
+
+    /* Lines the clip hides are never emitted, so only the first of this
+     * paragraph's reaches the stream. */
+    cf_style prose = cf_style_default();
+    place(&prose, 4.0f, 50.0f);
+    prose.width = CF_PX(100.0f);
+    prose.color = stated(10u, 10u, 10u);
+    (void)add_text(s, 1u, prose, &wrapped_text);
+
+    /* Wholly below the clip: nothing under a clipping box escapes it. */
+    cf_style outside = filled(stated(178u, 34u, 34u));
+    place(&outside, 0.0f, 200.0f);
+    outside.width = CF_PX(40.0f);
+    outside.height = CF_PX(40.0f);
+    (void)add_node(s, 1u, outside);
+}
+
+/*
  * Text a walk laid: a paragraph wraps at the content box its parent's
  * padding leaves, a capped caption closes with the ellipsis, and every line
  * lands where the measure that sized its box counted it.
@@ -267,6 +358,7 @@ static const scene_def scenes[] = {
     {"viewport_culling", {0.0f, 0.0f, 150.0f, 90.0f}, viewport_culling},
     {"nested_depth", {0.0f, 0.0f, 120.0f, 120.0f}, nested_depth},
     {"text_wrap", {0.0f, 0.0f, 200.0f, 120.0f}, text_wrap},
+    {"clipped_content", {0.0f, 0.0f, 200.0f, 160.0f}, clipped_content},
     {"idle_frame", {0.0f, 0.0f, 100.0f, 100.0f}, idle_frame},
 };
 
@@ -299,31 +391,43 @@ static void format_stream(const cf_recorder *recorder, char *text) {
         const cf_rect rect = command->rect;
         const cf_color color = command->color;
 
+        /* A command that names no clip is one the device bounds by the output
+         * itself, so the suffix only appears where paint handed a rect over. */
+        char clip[64];
+        clip[0] = '\0';
+
+        if (command->clip.width > 0.0f && command->clip.height > 0.0f) {
+            snprintf(clip, sizeof clip, " clip=%.2f %.2f %.2f %.2f", command->clip.x,
+                     command->clip.y, command->clip.width, command->clip.height);
+        }
+
         int written = 0;
 
         if (command->kind == CF_COMMAND_FILL) {
             written = snprintf(text + used, TEXT_SIZE - used,
-                               "fill %.2f %.2f %.2f %.2f #%02x%02x%02x%02x radius=%.2f\n", rect.x,
+                               "fill %.2f %.2f %.2f %.2f #%02x%02x%02x%02x radius=%.2f%s\n", rect.x,
                                rect.y, rect.width, rect.height, color.red, color.green, color.blue,
-                               color.alpha, command->radius);
+                               color.alpha, command->radius, clip);
         } else if (command->kind == CF_COMMAND_BORDER) {
-            written = snprintf(text + used, TEXT_SIZE - used,
-                               "border %.2f %.2f %.2f %.2f #%02x%02x%02x%02x l=%.2f t=%.2f r=%.2f "
-                               "b=%.2f radius=%.2f\n",
-                               rect.x, rect.y, rect.width, rect.height, color.red, color.green,
-                               color.blue, color.alpha, command->widths.left, command->widths.top,
-                               command->widths.right, command->widths.bottom, command->radius);
+            written =
+                snprintf(text + used, TEXT_SIZE - used,
+                         "border %.2f %.2f %.2f %.2f #%02x%02x%02x%02x l=%.2f t=%.2f r=%.2f "
+                         "b=%.2f radius=%.2f%s\n",
+                         rect.x, rect.y, rect.width, rect.height, color.red, color.green,
+                         color.blue, color.alpha, command->widths.left, command->widths.top,
+                         command->widths.right, command->widths.bottom, command->radius, clip);
         } else if (command->kind == CF_COMMAND_TEXT) {
             written =
                 snprintf(text + used, TEXT_SIZE - used,
-                         "text %.2f %.2f %.2f %.2f #%02x%02x%02x%02x len=%u ellipsis=%d "
+                         "text %.2f %.2f %.2f %.2f #%02x%02x%02x%02x len=%u ellipsis=%d%s "
                          "\"%.*s\"\n",
                          rect.x, rect.y, rect.width, rect.height, color.red, color.green,
                          color.blue, color.alpha, command->text.length, command->ellipsis ? 1 : 0,
-                         (int)command->text.length, command->text.chars);
+                         clip, (int)command->text.length, command->text.chars);
         } else if (command->kind == CF_COMMAND_IMAGE) {
-            written = snprintf(text + used, TEXT_SIZE - used, "image %.2f %.2f %.2f %.2f tex=%u\n",
-                               rect.x, rect.y, rect.width, rect.height, command->texture);
+            written =
+                snprintf(text + used, TEXT_SIZE - used, "image %.2f %.2f %.2f %.2f tex=%u%s\n",
+                         rect.x, rect.y, rect.width, rect.height, command->texture, clip);
         }
 
         if (written > 0 && (size_t)written < TEXT_SIZE - used) {

@@ -93,6 +93,93 @@ static cf_command *next_command(paint_walk *walk) {
     return &list->commands[list->count++];
 }
 
+/* A caret is a line, not a box: one point wide, the height of the line it
+ * stands in. */
+#define CARET_WIDTH 1.0f
+
+/* Where a walk's lines stand: the pen's start after the box's insets and the
+ * caret's slide, the rhythm the lines step by, and the clip their commands
+ * name. The marks a text box lays read the same four numbers its lines do. */
+typedef struct text_view {
+    float x;
+    float y;
+    float line_height;
+    cf_rect clip;
+} text_view;
+
+/* The part of `rect` that survives `clip`, or an empty rect for a pair that
+ * holds nothing in common - which the walk's own cut never asks for. */
+static cf_rect cut_to(cf_rect rect, cf_rect clip) {
+    const float left = rect.x > clip.x ? rect.x : clip.x;
+    const float top = rect.y > clip.y ? rect.y : clip.y;
+    const float right =
+        rect.x + rect.width < clip.x + clip.width ? rect.x + rect.width : clip.x + clip.width;
+    const float bottom =
+        rect.y + rect.height < clip.y + clip.height ? rect.y + rect.height : clip.y + clip.height;
+
+    if (right <= left || bottom <= top) {
+        return (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+
+    return (cf_rect){.x = left, .y = top, .width = right - left, .height = bottom - top};
+}
+
+/*
+ * A mark laid under or over the glyphs. It is a fill, so the walk cuts it to
+ * the clip it names instead of asking the device to; a mark the clip would
+ * erase lays no command at all.
+ */
+static void emit_mark(paint_walk *walk, cf_rect rect, cf_color color, cf_rect clip) {
+    if (clip.width > 0.0f && clip.height > 0.0f) {
+        rect = cut_to(rect, clip);
+
+        if (rect.width <= 0.0f) {
+            return;
+        }
+    }
+
+    cf_command *command = next_command(walk);
+
+    if (command == NULL) {
+        return;
+    }
+
+    *command = (cf_command){.kind = CF_COMMAND_FILL, .rect = rect, .clip = clip, .color = color};
+}
+
+/* One line's byte range in the content's own coordinates: the lines the walk
+ * answers point into the content's text, so the pair is arithmetic. */
+static void line_range(const cf_text_content *content, const cf_text_line *line, uint32_t *first,
+                       uint32_t *last) {
+    *first = (uint32_t)(size_t)(line->text.chars - content->text.chars);
+    *last = *first + line->text.length;
+}
+
+/*
+ * The band a line's part of a selection lays down. Both ends are read through
+ * cf_text_caret_x, which clamps an offset into the line, so a selection that
+ * spans lines needs no case for the lines it only passes through: each answers
+ * its own two ends.
+ */
+static void emit_band(paint_walk *walk, cf_color color, const cf_text_content *content,
+                      const cf_text_line *line, uint32_t from, uint32_t to, const text_view *view,
+                      float y) {
+    uint32_t first = 0u;
+    uint32_t last = 0u;
+
+    line_range(content, line, &first, &last);
+
+    if (to <= first || from >= last) {
+        return; /* the range sits on another line */
+    }
+
+    const float left = cf_text_caret_x(content, line, from);
+    const float right = cf_text_caret_x(content, line, to);
+
+    emit_mark(walk, (cf_rect){view->x + left, y, right - left, view->line_height}, color,
+              view->clip);
+}
+
 /*
  * A box whose measure slot is the text walk paints its own lines. The wrap
  * width is the content box the style insets from the rect - percentages
@@ -100,6 +187,12 @@ static cf_command *next_command(paint_walk *walk) {
  * carries - and each line lands one line_height below the last, where the
  * measure that sized the box counted it. A color that is not stated leaves
  * the box without text, which is why the check reads the color first.
+ *
+ * The marks an editor states ride the same geometry: the band under a selected
+ * range goes down before the glyphs so the bytes stay readable over it, and the
+ * caret after them. Where the walk states a caret the box slides to hold it,
+ * and a box that clips its content cuts its own text at its padding box, which
+ * is what lets a field scroll a value longer than itself.
  */
 static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf_rect box) {
     if (!style->color.present || walk->tree->measures == NULL ||
@@ -140,9 +233,48 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
 
     const cf_font font = content->stack.fonts[0];
     const float line_height = font.ops->metrics(font.handle).line_height;
+    const float content_height = box.height - top - insets.bottom - stroke.bottom;
+
+    /* The clip these commands name: what the walk carries, narrowed to the box's
+     * own padding box when the box clips its content. Lines and marks keep their
+     * true rects and let the clip do the cutting, because moving a baseline to
+     * fit a box would draw text the content never said.
+     */
+    cf_rect clip = carried_clip(walk);
+
+    if (style->clips_content) {
+        const cf_rect padding_box = {box.x + stroke.left, box.y + stroke.top,
+                                     box.width - stroke.left - stroke.right,
+                                     box.height - stroke.top - stroke.bottom};
+        clip = walk->clipping ? clipped_to(padding_box, clip) : padding_box;
+    }
+
+    const cf_point slide = cf_text_scroll(content, lines, count, (cf_size){wrap, content_height});
+    const text_view view = {.x = box.x + left - slide.x,
+                            .y = box.y + top - slide.y,
+                            .line_height = line_height,
+                            .clip = clip};
+
+    /* The pair in the order the band needs: a selection runs from whichever end
+     * came first, whichever one the editor calls the mark. */
+    const bool band = style->selection.present && content->caret.present && content->mark.present &&
+                      content->mark.value != content->caret.value;
+    const uint32_t sel_from =
+        band ? (content->mark.value < content->caret.value ? content->mark.value
+                                                           : content->caret.value)
+             : 0u;
+    const uint32_t sel_to =
+        band ? (content->mark.value > content->caret.value ? content->mark.value
+                                                           : content->caret.value)
+             : 0u;
+
+    for (uint32_t i = 0u; band && i < count; ++i) {
+        emit_band(walk, style->selection.value, content, &lines[i], sel_from, sel_to, &view,
+                  view.y + (float)i * line_height);
+    }
 
     for (uint32_t i = 0u; i < count; ++i) {
-        const float y = box.y + top + (float)i * line_height;
+        const float y = view.y + (float)i * line_height;
 
         if (y + line_height <= walk->clip.y) {
             continue; /* wholly above the clip */
@@ -159,12 +291,30 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
         }
 
         *command = (cf_command){.kind = CF_COMMAND_TEXT,
-                                .rect = {box.x + left, y, lines[i].width, line_height},
-                                .clip = carried_clip(walk),
+                                .rect = {view.x, y, lines[i].width, line_height},
+                                .clip = clip,
                                 .color = style->color.value,
                                 .text = lines[i].text,
                                 .font = font,
                                 .ellipsis = lines[i].ellipsis};
+    }
+
+    if (style->caret.present && content->caret.present) {
+        const uint32_t row = cf_text_line_of(content, lines, count, content->caret.value);
+        cf_rect caret = {.x = view.x + cf_text_caret_x(content, &lines[row], content->caret.value),
+                         .y = view.y + (float)row * line_height,
+                         .width = CARET_WIDTH,
+                         .height = line_height};
+
+        /* A caret at the trailing edge stands between the last glyph and the
+         * border, so the column it paints is pulled inside rather than cut to
+         * nothing - a caret nobody can see is not a caret. */
+        if (clip.width > 0.0f && clip.height > 0.0f &&
+            caret.x + CARET_WIDTH > clip.x + clip.width) {
+            caret.x = clip.x + clip.width - CARET_WIDTH;
+        }
+
+        emit_mark(walk, caret, style->caret.value, clip);
     }
 }
 
