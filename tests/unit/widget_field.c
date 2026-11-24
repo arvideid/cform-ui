@@ -62,6 +62,12 @@ static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
     return tree->child_slots[tree->child_start[slot] + index];
 }
 
+/* One run of what the keyboard wrote. The device settles shift, caps lock, the
+ * layout and the input method, and hands over the bytes they agreed on. */
+static void type(cf_ctx *ctx, const char *run, uint32_t length) {
+    cf_input(ctx, (cf_event){.type = CF_EVENT_TEXT, .text = {.chars = run, .length = length}});
+}
+
 static void the_focused_field_takes_the_keys_it_is_given(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
@@ -82,11 +88,11 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
 
     CF_CHECK(cf_focused(&ctx, field), "the press focuses the field");
 
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'h'});
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'i'});
+    type(&ctx, "h", 1u);
+    type(&ctx, "i", 1u);
 
     CF_CHECK(text.length == 2u && bytes[0] == 'h' && bytes[1] == 'i',
-             "the scalars land in the buffer in order");
+             "what the keyboard wrote lands in the buffer in order");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 8u});
 
@@ -95,7 +101,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
     cf_ctx_free(&ctx);
 }
 
-static void a_scalar_appends_whatever_bytes_it_needs(void) {
+static void a_run_appends_whatever_bytes_it_needs(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
@@ -110,11 +116,14 @@ static void a_scalar_appends_whatever_bytes_it_needs(void) {
     frame_of(&ctx, &text, false);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 233u});
+
+    const char acute[2] = {(char)0xC3u, (char)0xA9u};
+
+    type(&ctx, acute, 2u);
 
     CF_CHECK(text.length == 2u && (unsigned char)bytes[0] == 0xC3u &&
                  (unsigned char)bytes[1] == 0xA9u,
-             "a two-byte scalar lands whole");
+             "a two-byte run lands whole");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 8u});
 
@@ -140,12 +149,20 @@ static void the_field_stops_at_the_capacity_its_buffer_stated(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
     for (uint32_t i = 0u; i < 8u; ++i) {
-        cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'a'});
+        type(&ctx, "a", 1u);
     }
 
     CF_CHECK(text.length == 4u && bytes[3] == 'a', "the buffer fills and the rest refuse");
     CF_CHECK(bytes[0] == 'a' && bytes[1] == 'a' && bytes[2] == 'a',
              "what landed is what was typed");
+
+    /* Too long for what is left, so it is refused whole rather than cut: half a
+     * sequence is bytes nothing can read back. */
+    const char over[3] = {'b', (char)0xC3u, (char)0xA9u};
+
+    type(&ctx, over, 3u);
+
+    CF_CHECK(text.length == 4u && bytes[3] == 'a', "a run that does not fit does not half land");
 
     cf_ctx_free(&ctx);
 }
@@ -164,9 +181,9 @@ static void a_field_without_focus_edits_nothing(void) {
 
     frame_of(&ctx, &text, false);
 
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'x'});
+    type(&ctx, "x", 1u);
 
-    CF_CHECK(text.length == 0u, "keys go only where focus books them");
+    CF_CHECK(text.length == 0u, "written text goes only where focus books it");
 
     cf_ctx_free(&ctx);
 }
@@ -188,10 +205,42 @@ static void a_disabled_field_neither_focuses_nor_edits(void) {
     const uint32_t field = child_of(&ctx, ctx.root_slot, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'x'});
+    type(&ctx, "x", 1u);
 
     CF_CHECK(!cf_focused(&ctx, field), "a switched-off field takes no focus");
     CF_CHECK(text.length == 0u, "and edits nothing");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_key_that_carries_no_text_edits_nothing(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    frame_of(&ctx, &text, false);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+    type(&ctx, "A", 1u);
+
+    /* SDL's left shift, left control and caps lock: numbers naming a key, and
+     * encoding one as if it were a character is what filled the field with
+     * glyphs nobody typed. The capital arrived in the run above instead. */
+    const uint32_t keys[] = {0x400000e1u, 0x400000e0u, 0x40000039u};
+
+    for (uint32_t i = 0u; i < 3u; ++i) {
+        cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = keys[i]});
+    }
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'A',
+             "the keys that change what another key means write nothing of their own");
 
     cf_ctx_free(&ctx);
 }
@@ -200,10 +249,11 @@ int main(void) {
     printf("widget field\n");
 
     CF_RUN(the_focused_field_takes_the_keys_it_is_given);
-    CF_RUN(a_scalar_appends_whatever_bytes_it_needs);
+    CF_RUN(a_run_appends_whatever_bytes_it_needs);
     CF_RUN(the_field_stops_at_the_capacity_its_buffer_stated);
     CF_RUN(a_field_without_focus_edits_nothing);
     CF_RUN(a_disabled_field_neither_focuses_nor_edits);
+    CF_RUN(a_key_that_carries_no_text_edits_nothing);
 
     return CF_REPORT();
 }

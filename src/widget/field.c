@@ -1,31 +1,5 @@
 #include "cf/widget.h"
 
-static uint32_t encode(uint32_t codepoint, char *out) {
-    if (codepoint < 0x80u) {
-        out[0] = (char)codepoint;
-        return 1u;
-    }
-
-    if (codepoint < 0x800u) {
-        out[0] = (char)(0xC0u | (codepoint >> 6));
-        out[1] = (char)(0x80u | (codepoint & 0x3Fu));
-        return 2u;
-    }
-
-    if (codepoint < 0x10000u) {
-        out[0] = (char)(0xE0u | (codepoint >> 12));
-        out[1] = (char)(0x80u | ((codepoint >> 6) & 0x3Fu));
-        out[2] = (char)(0x80u | (codepoint & 0x3Fu));
-        return 3u;
-    }
-
-    out[0] = (char)(0xF0u | (codepoint >> 18));
-    out[1] = (char)(0x80u | ((codepoint >> 12) & 0x3Fu));
-    out[2] = (char)(0x80u | ((codepoint >> 6) & 0x3Fu));
-    out[3] = (char)(0x80u | (codepoint & 0x3Fu));
-    return 4u;
-}
-
 /* Backspace drops the last scalar: the continuation bytes it owns first,
  * then the lead byte that started it. */
 static void drop_last(cf_text_edit *text) {
@@ -38,31 +12,37 @@ static void drop_last(cf_text_edit *text) {
     }
 }
 
+/* A run that would pass the end of the buffer is refused whole rather than
+ * cut, because half a UTF-8 sequence is not text anything can read back. */
+static void append(cf_text_edit *text, cf_string run) {
+    if (run.chars == NULL || text->length + run.length > text->capacity) {
+        return;
+    }
+
+    for (uint32_t i = 0u; i < run.length; ++i) {
+        text->chars[text->length++] = run.chars[i];
+    }
+}
+
 static void field_key(cf_event *event, void *user_data) {
     cf_text_edit *text = user_data;
+
+    if (event->type == CF_EVENT_TEXT) {
+        append(text, event->text);
+        return;
+    }
 
     if (event->type != CF_EVENT_KEY_DOWN) {
         return;
     }
 
+    /* Only the keys that carry no text are read here. What the keyboard wrote
+     * arrives as bytes the device already settled - shift, caps lock, the
+     * layout and an input method are its business, not the field's - and a
+     * keycode turned into a code point would write the shape of the number a
+     * modifier is, which is nothing anyone typed. */
     if (event->key == 8u || event->key == 127u) {
         drop_last(text);
-        return;
-    }
-
-    if (event->key < 32u) {
-        return;
-    }
-
-    char bytes[4];
-    const uint32_t width = encode(event->key, bytes);
-
-    if (text->length + width > text->capacity) {
-        return;
-    }
-
-    for (uint32_t i = 0u; i < width; ++i) {
-        text->chars[text->length++] = bytes[i];
     }
 }
 
@@ -82,8 +62,11 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
         return node;
     }
 
+    /* The field's resting box is a light surface, so what it edits reads in the
+     * ink the page uses: the accent's own tone would draw the bytes in the
+     * color of the box behind them. */
     *child = cf_label(ctx, (cf_string){.chars = text->chars, .length = text->length}, stack,
-                      ctx->theme != NULL ? ctx->theme->on_ink : (cf_color){0u, 0u, 0u, 255u});
+                      ctx->theme != NULL ? ctx->theme->ink : (cf_color){0u, 0u, 0u, 255u});
     children[0] = *child;
 
     node.key = cf_intern_text(&ctx->names, name);

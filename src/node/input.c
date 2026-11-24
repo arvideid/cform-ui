@@ -219,7 +219,11 @@ void cf_input(cf_ctx *ctx, cf_event event) {
     }
 
     case CF_EVENT_KEY_DOWN:
-    case CF_EVENT_KEY_UP: {
+    case CF_EVENT_KEY_UP:
+    case CF_EVENT_TEXT: {
+        /* What the keyboard wrote goes to whoever holds focus, the same way
+         * the keys that carry no text do: a widget cannot be asked to sort
+         * what the device already sorted. */
         const uint32_t focused = live_slot(ctx, ctx->focus_id);
 
         if (focused != CF_NO_LINK) {

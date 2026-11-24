@@ -15,7 +15,11 @@ typedef enum cf_event_type {
     CF_EVENT_KEY_UP,
     /* The device asked the window to close. Nothing in the tree dispatches
      * it; the shell that owns the loop reads it and stops. */
-    CF_EVENT_QUIT
+    CF_EVENT_QUIT,
+    /* What the keyboard produced rather than which key moved: the shift, caps
+     * lock, layout and input method that turn a key into a letter are the
+     * device's business, and this is the answer they settled on. */
+    CF_EVENT_TEXT
 } cf_event_type;
 
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;
@@ -29,9 +33,17 @@ typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } 
 
 /*
  * One input event. Position and wheel are in the coordinate space the rects
- * were laid out in; button and key carry whichever the type names. Target,
- * stopped and captured are dispatch state: the engine writes them as the
- * event climbs the tree and a handler reads them.
+ * were laid out in; button and key carry whichever the type names. A scroll's
+ * positive axis walks the content toward its end - the wheel rolled toward the
+ * hand - whatever sign the device keeps for that. Target, stopped and captured
+ * are dispatch state: the engine writes them as the event climbs the tree and a
+ * handler reads them.
+ *
+ * A text event's bytes are UTF-8, borrowed for the handler call alone: whoever
+ * keeps them copies them, which is what a field editing a buffer does anyway.
+ * A key scalar is the platform's own keycode and means nothing on its own - the
+ * keys that carry text arrive as text, and what is left is the editing and
+ * navigation keys a widget can name.
  */
 typedef struct cf_event {
     cf_event_type type;
@@ -39,6 +51,7 @@ typedef struct cf_event {
     cf_point wheel;
     uint32_t button;
     uint32_t key;
+    cf_string text;
     /* The slot whose handler is running; meaningless outside dispatch. */
     uint32_t target;
     bool stopped;

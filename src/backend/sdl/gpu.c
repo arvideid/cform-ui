@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <string.h>
 
 #include "cf/backend.h"
 #include "cf/event.h"
@@ -310,9 +311,12 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
 
 /*
  * One device event into the vocabulary the dispatch walks, false when the event
- * has no word the tree owns. Keyboard scalars pass as SDL keycodes, so a
- * printable code point is its own scalar and the editing keys land on the
- * bytes a field already understands.
+ * has no word the tree owns. What the keyboard wrote is carried as the text the
+ * platform settled on, not as the key that produced it: shift, caps lock, the
+ * layout and an input method are decided above this file. The key events that
+ * survive are the ones that name no character - editing, navigation, the
+ * function keys - and pass as SDL keycodes, which is what a widget's own key
+ * constants are compared against.
  */
 static bool take_event(const SDL_Event *event, cf_event *out) {
     switch (event->type) {
@@ -332,10 +336,22 @@ static bool take_event(const SDL_Event *event, cf_event *out) {
                           .button = event->button.button};
         return true;
     case SDL_EVENT_MOUSE_WHEEL:
+        /* The device counts a notch away from the hand as positive, which is
+         * the way back up a page: the offset the widgets carry grows the other
+         * way, so the vertical axis is turned around. */
         *out = (cf_event){.type = CF_EVENT_SCROLL,
                           .position = {event->wheel.mouse_x, event->wheel.mouse_y},
-                          .wheel = {event->wheel.x, event->wheel.y}};
+                          .wheel = {event->wheel.x, -event->wheel.y}};
         return true;
+    case SDL_EVENT_TEXT_INPUT: {
+        /* SDL hands back one already-terminated run of UTF-8 and drops it on
+         * the next event, so the bytes are good for this dispatch alone - the
+         * lifetime the event's contract states and a field copies under. */
+        const char *const run = event->text.text;
+        *out = (cf_event){.type = CF_EVENT_TEXT,
+                          .text = {.chars = run, .length = (uint32_t)strlen(run)}};
+        return true;
+    }
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP:
         *out = (cf_event){.type = event->type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
@@ -428,6 +444,7 @@ static void sdl_log(cf_log_channel channel, const char *message, void *user_data
     (void)channel, (void)user_data;
     SDL_Log("%s", message);
 }
+
 cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     if (config == NULL || config->width == 0u || config->height == 0u) {
         return (cf_backend){0};
@@ -455,6 +472,10 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
 
     (void)SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     (void)SDL_SetRenderVSync(renderer, 1);
+
+    /* Text events are off until a window asks for them, and a window that
+     * never receives them has no way to say what the keyboard typed. */
+    SDL_StartTextInput(window);
 
     /* The state lives as long as the window does, outside every frame arena,
      * so it goes through SDL's allocator rather than cf_alloc. */

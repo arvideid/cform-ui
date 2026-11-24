@@ -35,6 +35,7 @@ static void on_pointer(cf_event *event, void *user_data) {
         break;
     case CF_EVENT_KEY_DOWN:
     case CF_EVENT_KEY_UP:
+    case CF_EVENT_TEXT:
     case CF_EVENT_QUIT:
         break;
     }
@@ -520,6 +521,40 @@ static void a_key_reaches_the_focused_node_and_bubbles(void) {
     cf_ctx_free(&ctx);
 }
 
+static void what_the_keyboard_wrote_goes_to_whoever_holds_focus(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder child_log = {0};
+    recorder root_log = {0};
+    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &child_log;
+    cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
+    root.handlers.key = on_key;
+    root.handlers.key_data = &root_log;
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t child = child_slot(&ctx, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_TEXT, .text = {.chars = "hi", .length = 2u}});
+
+    CF_CHECK(child_log.keys == 1 && root_log.keys == 1,
+             "a written run reaches the focused node and bubbles like a key does");
+    CF_CHECK(child_log.last_target == child, "the run names the focused node");
+
+    cf_ctx_free(&ctx);
+}
+
 static void focus_set_by_hand_reaches_a_node_no_press_touched(void) {
     cf_ctx ctx;
 
@@ -670,6 +705,7 @@ int main(void) {
     CF_RUN(a_wheel_finds_the_box_under_its_own_point);
     CF_RUN(a_captured_pointer_keeps_its_events_until_the_release);
     CF_RUN(a_key_reaches_the_focused_node_and_bubbles);
+    CF_RUN(what_the_keyboard_wrote_goes_to_whoever_holds_focus);
     CF_RUN(focus_set_by_hand_reaches_a_node_no_press_touched);
     CF_RUN(a_recycled_slot_reads_as_nothing);
     CF_RUN(dispatch_before_a_layout_hits_nothing);

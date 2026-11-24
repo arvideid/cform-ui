@@ -9,12 +9,12 @@
 #include "cf/text.h"
 
 /*
- * The one boundary a renderer crosses to draw a frame. `abi_version` names
- * the stream layout the backend reads; a caller checks it before the first
- * submit, because a stream the backend does not understand draws wrong rather
- * than failing.
+ * The one boundary a renderer crosses to draw a frame. `abi_version` names the
+ * stream layout the backend reads and the event struct it writes; a caller
+ * checks it before the first submit, because data the backend misreads draws
+ * wrong rather than failing.
  */
-#define CF_BACKEND_ABI_VERSION 5u
+#define CF_BACKEND_ABI_VERSION 6u
 
 typedef struct cf_backend {
     uint32_t abi_version;
