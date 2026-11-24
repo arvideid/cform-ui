@@ -274,6 +274,26 @@ static cf_node make_button(cf_ctx *ctx, const char *name, cf_on_press on_press, 
     return cf_button(ctx, name, on_press, user_data, &label, 1u);
 }
 
+/* One chip of a picker row: the chosen one wears the accent and the rest the
+ * bar, and what pressing it selects arrives as the button's own user pointer -
+ * a number small enough to fit in one, so the chapter keeps no table to look
+ * the choice up in. */
+static cf_node make_chip(cf_ctx *ctx, const char *name, bool chosen, cf_on_press on_press,
+                         uint32_t value) {
+    const cf_node label =
+        cf_label(ctx, cf_string_of(name), &body, chosen ? theme->on_ink : theme->muted);
+    cf_node chip = cf_button(ctx, name, on_press, (void *)(uintptr_t)value, &label, 1u);
+
+    if (!chosen) {
+        /* A bar rather than the accent: an unselected chip is still a press
+         * target, it is just not the answer. */
+        chip.style.background = theme->bar.background;
+        chip.style.border_color = theme->bar.border_color;
+    }
+
+    return chip;
+}
+
 /* A chapter: its number beside its title on one line, the rule in prose under
  * it, and the thing that lets a hand check the prose at the bottom. */
 static cf_node make_chapter(cf_ctx *ctx, const char *number, const char *name, const char *prose,
@@ -464,20 +484,7 @@ static cf_node make_rules_demo(cf_ctx *ctx) {
     cf_node chips[RULE_COUNT];
 
     for (uint32_t i = 0u; i < RULE_COUNT; ++i) {
-        const bool chosen = i == rule;
-        const cf_node label = cf_label(ctx, cf_string_of(rule_names[i]), &body,
-                                       chosen ? theme->on_ink : theme->muted);
-
-        cf_node chip = cf_button(ctx, rule_names[i], pick_rule, (void *)(uintptr_t)i, &label, 1u);
-
-        if (!chosen) {
-            /* A bar rather than the accent: an unselected chip is still a press
-             * target, it is just not the answer. */
-            chip.style.background = theme->bar.background;
-            chip.style.border_color = theme->bar.border_color;
-        }
-
-        chips[i] = chip;
+        chips[i] = make_chip(ctx, rule_names[i], i == rule, pick_rule, i);
     }
 
     cf_style row = cf_style_default();
