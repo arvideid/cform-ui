@@ -148,8 +148,9 @@ table with fixed numbers.
    flickering on the screen.
 4. Implement `surface` in points.
 5. Translate input in `poll_event`; consume what has no `cf_event` word.
-6. Add `create_texture` only when image commands are wanted; return 0 when an
-   upload fails and log once.
+6. Add `create_texture` only when image commands are wanted; take the bytes in
+   the memory order the slot documents rather than the packed value of the same
+   name, return 0 when an upload fails and log once.
 7. Provide a font constructor whose `ops` measure and whose `handle` your
    `submit` can draw.
 8. Register the target in `CMakeLists.txt` behind an option, next to

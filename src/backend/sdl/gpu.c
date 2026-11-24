@@ -234,7 +234,9 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
 }
 
 /* RGBA8888, one byte per channel, row after row - the layout create_texture
- * promises. The id is the table position plus one, so zero can name refusal. */
+ * promises. SDL's own RGBA8888 is that as a 32-bit value with red in the high
+ * bits, which on a little-endian machine is a buffer whose first byte is
+ * alpha: RGBA32 is the alias that follows the bytes the upload hands over. */
 static uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height,
                                    const void *pixels) {
     sdl_state *state = user_data;
@@ -255,7 +257,7 @@ static uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t hei
         state->texture_capacity = capacity;
     }
 
-    SDL_Texture *texture = SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_RGBA8888,
+    SDL_Texture *texture = SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_RGBA32,
                                              SDL_TEXTUREACCESS_STATIC, (int)width, (int)height);
 
     if (texture == NULL) {
