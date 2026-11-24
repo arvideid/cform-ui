@@ -205,8 +205,14 @@ void cf_input(cf_ctx *ctx, cf_event event) {
 
         const uint32_t hovered = live_slot(ctx, ctx->hover_id);
 
-        if (hovered != CF_NO_LINK) {
-            deliver(ctx, &event, true, hovered);
+        /* A wheel arrives with its own pointer position, so the box under the
+         * hand is knowable without a move having booked a hover first: the
+         * notch that comes the moment a window takes focus, with the cursor
+         * already resting inside it, has no move ahead of it to lean on. */
+        const uint32_t target = hovered != CF_NO_LINK ? hovered : cf_hit_test(ctx, event.position);
+
+        if (target != CF_NO_LINK) {
+            deliver(ctx, &event, true, target);
         }
 
         return;

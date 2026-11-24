@@ -385,6 +385,50 @@ static void a_role_stops_the_climb_where_a_handler_would(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A wheel arrives with the pointer's own position, so the notch that comes the
+ * moment a window takes focus - with the hand already resting inside it and no
+ * move ahead of it - still reaches the box the reader is over. */
+static void a_wheel_finds_the_box_under_its_own_point(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder left = {0};
+    recorder right = {0};
+    recorder container = {0};
+    cf_node children[] = {
+        box(50.0f, 50.0f, on_pointer, &left),
+        box(50.0f, 50.0f, on_pointer, &right),
+    };
+    cf_node root = box(200.0f, 200.0f, on_pointer, &container);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_SCROLL,
+                              .position = {.x = 60.0f, .y = 10.0f},
+                              .wheel = {.x = 0.0f, .y = 1.0f}});
+
+    CF_CHECK(right.scrolls == 1 && left.scrolls == 0, "the notch runs where the pointer is");
+    CF_CHECK(container.scrolls == 1, "and climbs from there as a pointer event does");
+
+    /* A booked hover stays the authority: a device that reports the wheel at
+     * some other point moves the column the hand was last seen on. */
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_SCROLL,
+                              .position = {.x = 60.0f, .y = 10.0f},
+                              .wheel = {.x = 0.0f, .y = 1.0f}});
+
+    CF_CHECK(left.scrolls == 1 && right.scrolls == 1, "the hover keeps the wheel it is on");
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_captured_pointer_keeps_its_events_until_the_release(void) {
     cf_ctx ctx;
 
@@ -623,6 +667,7 @@ int main(void) {
     CF_RUN(a_disabled_button_takes_no_press_and_silences_its_handlers);
     CF_RUN(a_role_stops_the_climb_where_a_handler_would);
     CF_RUN(a_stopping_handler_keeps_the_event_off_the_ancestors);
+    CF_RUN(a_wheel_finds_the_box_under_its_own_point);
     CF_RUN(a_captured_pointer_keeps_its_events_until_the_release);
     CF_RUN(a_key_reaches_the_focused_node_and_bubbles);
     CF_RUN(focus_set_by_hand_reaches_a_node_no_press_touched);
