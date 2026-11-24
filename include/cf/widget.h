@@ -83,8 +83,10 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
  * block the name keys, the children ride a content box that moves by the
  * offset, and the box clips what it cannot show. The caller sizes the box -
  * a scroller with no height of its own hugs its content and never walks.
- * A notch walks the content toward its end. A NULL context or name answers
- * a declaration that draws nothing.
+ * The walked range is the content box against the viewport's own, so padding
+ * on the viewport is spent at the top and lost at the bottom: pad the column
+ * the children ride in, not the window. A notch walks the content toward its
+ * end. A NULL context or name answers a declaration that draws nothing.
  */
 cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint32_t child_count);
 

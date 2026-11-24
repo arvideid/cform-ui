@@ -42,8 +42,17 @@ static void scroll_pointer(cf_event *event, void *user_data) {
     const float viewport_height = scroll->ctx->rects[event->target].height;
     const float content_height = scroll->ctx->rects[content_slot].height;
 
-    held->offset = cf_scroll_clamp(held->offset + event->wheel.y * WHEEL_NOTCH, viewport_height,
-                                   content_height);
+    const float walked = cf_scroll_clamp(held->offset + event->wheel.y * WHEEL_NOTCH,
+                                         viewport_height, content_height);
+
+    /* A pane that moves takes the notch and the tree hears nothing more of it.
+     * One already at its end lets the notch climb on, so a scroll inside a
+     * scroll chains to the one outside the way a reader expects instead of
+     * running out at the first column that happens to be under the pointer. */
+    if (walked != held->offset) {
+        held->offset = walked;
+        cf_stop(event);
+    }
 }
 
 cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint32_t child_count) {

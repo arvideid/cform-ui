@@ -129,11 +129,88 @@ static void a_scroller_without_a_height_of_its_own_never_walks(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A pane inside a page, both of them taller than what they show. The wheel
+ * over the inner one reaches two handlers, and which of them moves is
+ * everything a reader feels as scroll chaining. */
+static void chained_frame(cf_ctx *ctx) {
+    cf_frame_begin(ctx);
+
+    cf_node block = {.style = cf_style_default()};
+    block.style.width = CF_PX(100.0f);
+    block.style.height = CF_PX(200.0f);
+    const cf_node inside[] = {block};
+
+    cf_node first = cf_scroller(ctx, "first", inside, 1u);
+    first.style.width = CF_PX(100.0f);
+    first.style.height = CF_PX(100.0f);
+
+    cf_node second = cf_scroller(ctx, "second", inside, 1u);
+    second.style.width = CF_PX(100.0f);
+    second.style.height = CF_PX(100.0f);
+
+    const cf_node pages[] = {first, second};
+    cf_node root = cf_scroller(ctx, "page", pages, 2u);
+    root.style.width = CF_PX(100.0f);
+    root.style.height = CF_PX(100.0f);
+
+    cf_diff(ctx, &root);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(100.0f), .height = CF_PX(100.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+/* The notch that moves the pane is taken there; the one the pane has no room
+ * for climbs on to the page around it. */
+static void a_notch_the_inner_pane_cannot_take_walks_the_page(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    chained_frame(&ctx);
+
+    const uint32_t page = ctx.root_slot;
+    const uint32_t page_content = child_of(&ctx, page, 0u);
+    const uint32_t pane = child_of(&ctx, page_content, 0u);
+    const uint32_t pane_content = child_of(&ctx, pane, 0u);
+
+    wheel(&ctx, 1.0f);
+    chained_frame(&ctx);
+
+    CF_NEAR(ctx.rects[pane_content].y, -48.0f);
+    CF_NEAR(ctx.rects[page_content].y, 0.0f);
+
+    /* Two more notches than the pane has left: it still moves, so the notch
+     * stays its business and the page has not been asked for anything. */
+    wheel(&ctx, 2.0f);
+    chained_frame(&ctx);
+
+    CF_NEAR(ctx.rects[pane_content].y, -100.0f);
+    CF_NEAR(ctx.rects[page_content].y, 0.0f);
+
+    /* Now the pane is at its end. A notch it cannot spend is not its to keep,
+     * and a page that stood still for it would read as a column that has
+     * swallowed the wheel. The rects are absolute, so the pane's content rides
+     * the page's forty-eight: its own offset has not moved, and had the pane
+     * kept the notch as well this would read a hundred and ninety-six. */
+    wheel(&ctx, 1.0f);
+    chained_frame(&ctx);
+
+    CF_NEAR(ctx.rects[pane_content].y, -148.0f);
+    CF_NEAR(ctx.rects[page_content].y, -48.0f);
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget scroll\n");
 
     CF_RUN(the_wheel_walks_the_content_and_clamps_at_both_ends);
     CF_RUN(a_scroller_without_a_height_of_its_own_never_walks);
+    CF_RUN(a_notch_the_inner_pane_cannot_take_walks_the_page);
 
     return CF_REPORT();
 }

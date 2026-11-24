@@ -33,8 +33,15 @@ static void list_pointer(cf_event *event, void *user_data) {
     /* One notch walks one row: the row is the unit the list shows in. */
     const float viewport_height = list->ctx->rects[event->target].height;
 
-    held->offset = cf_scroll_clamp(held->offset + event->wheel.y * list->row_height,
-                                   viewport_height, list->content_height);
+    const float walked = cf_scroll_clamp(held->offset + event->wheel.y * list->row_height,
+                                         viewport_height, list->content_height);
+
+    /* The row the list stops on is the row it has run out of, and a list at the
+     * end of its rows is not a reason for the page under it to stand still. */
+    if (walked != held->offset) {
+        held->offset = walked;
+        cf_stop(event);
+    }
 }
 
 cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_height,
