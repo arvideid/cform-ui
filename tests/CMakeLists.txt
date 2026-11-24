@@ -21,6 +21,10 @@ function(cf_add_layer_test name source)
     set_property(TARGET ${name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CFORM_TEST_OUTPUT_DIR}")
 
     add_test(NAME ${name} COMMAND ${name})
+    # A pass that cannot finish is a hang, and a hang in a suite nobody is
+    # watching is a build that never reports. These tiers run in milliseconds,
+    # so a minute is a verdict rather than a wait.
+    set_tests_properties(${name} PROPERTIES TIMEOUT 60)
 endfunction()
 
 # The bench tier reports throughput rather than asserting it: a shared runner
