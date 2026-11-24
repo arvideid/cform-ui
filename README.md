@@ -1,232 +1,344 @@
-# cform-ui
+# cform
 
 [![Build](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/Arvideid/cform-ui/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A retained-mode, data-oriented UI framework in C17. You declare a tree of nodes;
-systems sweep parallel arrays to resolve styles, lay the tree out and emit draw
-commands. No DSL, no C++, no per-node vtables.
+A user-interface toolkit written in plain C17 — no C++, no dependencies inside
+the engine.
 
-Status: `1.0.0` in development, every layer built. The 0.2 `UI_*` API on `main` is
-not compatible and has no aliases — `cf_` names are the contract from here.
+## What a UI toolkit is, in the terms you already have
 
-## Build and run
+A window is a rectangle of pixels. Nothing about a pixel says *button*. Between
+"here is a rectangle" and "here is a screen with a title, a paragraph and a
+button in it" sits a body of work: turning nesting into positions, breaking text
+into lines, clipping a scrolled list to its window, working out which box the
+pointer is over, and redoing all of it when the window changes size.
 
-```sh
-cmake --preset dev && cmake --build --preset dev
-ctest --preset dev                       # unit, conformance and golden tiers
-ctest --preset dev -L bench              # the throughput rigs
-build/dev/bin/gallery                    # the one program that opens a window
+A **UI toolkit** is that body of work written once, so the hundredth application
+does not write it again. Every browser contains one — which is why HTML works the
+way it does:
+
+```html
+<div class="card">              <!-- a box that holds boxes -->
+  <h1>Title</h1>
+  <p>A paragraph of text that wraps when the window gets narrow.</p>
+  <button>press me</button>
+</div>
 ```
 
-CMake **3.25**+, a **C17** compiler and [Ninja](https://ninja-build.org/). The
-layers link libc alone; SDL3 and SDL3_ttf are fetched only when the backend is
-asked for, so a headless configure touches no network:
+Nowhere in that page is the button's position written down. You say which box is
+inside which, CSS says how they pack — a column, a gap, something that stretches
+— and the browser measures the tree and paints it. *Describe the nesting, get the
+positions back.* That is what a toolkit does, and cform is the part of a browser
+that does the measuring and the painting, with the parser, the stylesheet and the
+other hundred megabytes taken out.
 
-```sh
-cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON
-```
-
-`dev` is Debug with tests, examples and a compile database on; `release` is the
-same graph in Release, which is where the bench numbers come from.
-
-| Option | Default | Turns on |
-| --- | --- | --- |
-| `CFORM_BUILD_TESTS` | `OFF` | the unit, conformance, golden and bench tiers |
-| `CFORM_BUILD_EXAMPLES` | `OFF` | the programs under `examples/` |
-| `CFORM_WITH_SDL_BACKEND` | `OFF` | `cf_backend_sdl`, and the SDL fetch |
-| `CFORM_WITH_SANITIZERS` | `OFF` | ASan and UBSan; fatal when the compiler cannot link them |
-
-`bin/` holds the two programs a person runs. The 35 tier binaries build into
-`build/dev/tests/` and ctest drives them by target.
-
-## The layout floor
-
-`cf_layout` is usable on its own today: flexbox as CSS Flexible Box Layout §9
-specifies it — four directions, wrap, order, grow, shrink, basis, auto margins,
-`min`/`max` clamps, percent resolution, all of `justify-content`, `align-content`,
-`align-items`, baseline alignment and `position: absolute` children — plus a grid
-subset. Content the engine cannot see into arrives through a `cf_measure_fn`, so
-the library links nothing else.
+The `<div>` above is this in C, and this one line is the whole of a screen:
 
 ```c
-#include "cf/layout.h"
-
-/* A row with a 12-point gap: a fixed sidebar, then a child that takes what is
- * left. cf_style_default() carries the two CSS initial values the zero state
- * cannot express - margins of 0 rather than auto, and a flex-shrink of 1. */
-cf_style row = cf_style_default();
-row.column_gap = CF_PX(12.0f);
-
-cf_style sidebar = cf_style_default();
-sidebar.width = CF_PX(120.0f);
-
-cf_style content = cf_style_default();
-content.flex_grow = 1.0f;
-
-const cf_style styles[] = {row, sidebar, content};
-const uint32_t child_start[] = {0u, 2u, 2u};
-const uint32_t child_slots[] = {1u, 2u};
-cf_rect rects[3];
-
-cf_arena scratch;
-cf_arena_init(&scratch, 16384u);
-
-cf_layout(&scratch,
-          &(cf_tree){.styles = styles, .child_start = child_start,
-                     .child_slots = child_slots, .node_count = 3u},
-          0u, (cf_available){.width = CF_PX(400.0f), .height = CF_PX(200.0f)},
-          (cf_point){0.0f, 0.0f}, rects);
+return CF_COL(ctx, theme->page, title, paragraph, button);
 ```
 
-`cf_layout` is a pure function of its tree and its offer: it writes one absolute
-border-box rect per node, allocates only from the caller's arena, and reads an
-`auto` axis as the question "what extent do the children need". A declared size is
-the border box — `content-box` is not inherited on purpose. Lengths are tagged
-(`CF_AUTO`, `CF_PX`, `CF_PERCENT`, `CF_FR`), so `0` never has to be read as either
-unset or zero. The measure contract is a cache's contract: the answer must be a
-pure function of the node, the intrinsic kind and the offer, because one layout
-serves any repeat of that triple from the table it filled first.
+`CF_COL` is the `div` laid out as a column, `cf_label` is the text inside an `<h1>`,
+`cf_button` is the `button`, and a `cf_style` is a rule block whose properties
+are C fields: `width`, `margin`, `gap`, `flex_grow`, `justify_content`. You never
+write an `x` or a `y`, and you never draw anything: cform hands a flat list of
+rectangles, text and images to a backend that puts them on a surface.
 
-The grid subset is the whole contract: `minmax()` over `CF_AUTO`/`CF_PX`/
-`CF_PERCENT`/`CF_FR`, `cf_tracks_repeat()` for `repeat()`, items placed by a
-1-based start line plus a span, dense auto-placement for items naming no lines,
-and rows an item overflows into becoming content-sized tracks. It reads none of the
-alignment enums — leftover space goes to the tracks that named no ceiling, which is
-CSS's `normal` on both axes.
+| you know | here it is |
+| --- | --- |
+| an element in the DOM | a **node** — one box, named by an integer rather than a pointer |
+| the CSS box model, flexbox, grid | `cf_style` and `cf_layout` |
+| the browser's layout pass | step 2 of [how a frame happens](#how-a-frame-happens) |
+| a display list the compositor builds | `cf_command_list`, the shape list `cf_paint` emits |
+| a graphics backend (Skia, ANGLE) | a `cf_backend`: [six functions](docs/backend-abi.md) |
+| React re-rendering your component tree | describing the whole screen every frame and letting the diff decide |
+| a `click` listener on an ancestor | a handler on a parent box: they run from the one the pointer hit up through its parents, and `cf_stop` ends the walk |
 
-[`examples/layout_only.c`](examples/layout_only.c) is the same engine as a program
-linking `cf_layout` and nothing else, and
-[`tools/amalgamate.py`](tools/amalgamate.py) packs it into one header a project
-drops beside its own source; a test compiles that header and nothing from
-`include/cf`, so the promise stays checked:
+What you *don't* get from a browser: no markup language, no stylesheet, no
+cascade, no selector engine. That omission is the point. The tree is C function
+calls and the styles are structs, which is what keeps the engine small enough to
+read in an afternoon and linkable into a program that has no business carrying a
+browser.
 
-```sh
-cmake --build build/dev --target cf_amalgamate   # -> build/dev/amalgam/cf_layout.h
-```
+## Describe it, don't manage it
 
-## The whole stack
+If you learned widgets as objects, this is the one habit to swap. The usual shape
+is: make a button, keep a pointer to it, and call `set_label` on it whenever the
+data changes. You are then responsible for remembering that the button exists,
+where it is, and what else needs updating beside it.
 
-Above the layout floor, a page is a function that returns a tree. The shell owns
-the loop and the frame arenas; the backend owns pixels and density.
+Here, `build` returns the whole screen as a value and nothing is kept. The
+description is made again every frame; cform compares it with the last one, and
+when nothing changed it lays out nothing, draws nothing and allocates nothing.
+What you cannot hold in a local variable you ask `ctx` for by name:
 
 ```c
-#include "cf/app.h"
-#include "cf/build.h"
-#include "cf/widget.h"
+/* The number of clicks survives the rebuild because the name does, not the box. */
+uint32_t *clicks = cf_state(ctx, cf_intern_text(&ctx->names, "clicks"), sizeof *clicks);
+```
 
-static const cf_theme *theme;
-static cf_text_stack fonts;
+That answers the same bytes every frame (NULL if the heap refused), and they go
+back to the heap the frame after the builds stop asking for that name. That is the
+whole trick, and it is why "declarative" is not a marketing word here — you state
+what the screen looks like rather than how it got that way.
 
-static void on_press(cf_ctx *ctx, uint32_t slot, void *user_data) {
+## Goals
+
+The things this repository is trying to do, in the order it tries them:
+
+1. **Layout that is right, not approximately right.** Flexbox follows the
+   [CSS specification](https://www.w3.org/TR/css-flexbox-1/) and is scored
+   against [Yoga](https://github.com/facebook/yoga)'s own test corpus — someone
+   else's answers, not ours. [The score](docs/conformance.md) is public.
+2. **A frame that costs nothing at rest.** An idle screen lays out nothing, emits
+   nothing, allocates nothing. Numbers, not a claim: [bench.md](docs/bench.md).
+3. **Readable end to end.** C17, no templates, no code generation, no reflection.
+   Every layer is a CMake target you can open and finish reading.
+4. **Runs where C runs**, including a browser tab through WebAssembly.
+
+Just as deliberate are the things this is *not* trying to be: not a CSS engine,
+not a widget catalog, not an application framework, not a browser. The gaps that
+follow from those choices are the **Honest limits** list below.
+
+## Is this the right tool?
+
+**Good for**
+
+- Learning how a UI toolkit works end to end. "End to end" means the whole
+  pipeline above — describe, measure, place, emit, draw — with no layer hidden
+  behind a generated header or a platform SDK. Every one of them is small,
+  headless and readable, and the layout maths is proved against a real engine
+  rather than against our own opinion of it.
+- A project that wants layout only — a game HUD, an embedded screen, a renderer
+  of your own — and can link `cf_layout` with nothing else.
+- Small binaries and browsers: the same C compiles to
+  [WebAssembly](https://emscripten.org/) and runs in a tab.
+- People who want their own widgets. There is no designer tool and no styling
+  language; you write C, and you get the whole tree.
+
+**Honest limits**
+
+Read this list before planning an application around it. None of it is silently
+accepted and ignored — there is no field that pretends to take these things.
+
+- **Not production-ready.** Version 1.0 is in development, and the API numbers
+  still move: the backend contract is at ABI 7 and has been broken on purpose.
+- **Six widgets**: label, button, field, list, scroller, image. No checkbox,
+  radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
+  your app needs is expected and is a few dozen lines.
+- **Text is Latin-shaped only.** Wrapping honours spaces, hyphens, ideographs and
+  the text's own breaks, and a font stack falls back glyph by glyph. There is no
+  right-to-left, no bidirectional text, no shaping for Arabic or Indic, no
+  justification, no ligatures and no variable fonts. An editor's field deletes
+  one whole scalar at a time, so a combining mark comes apart as two steps rather
+  than one.
+- **Accessibility is a tree, not a feature.** `cf_semantic_export` writes the
+  role, the text and the disabled state of every box — the data a screen reader
+  reads — and that is where it stops. Nothing reaches Narrator, VoiceOver or
+  AT-SPI, there is no focus order announced, no live region, no ARIA and no
+  hit-target or contrast checking. A `cf_label` in this project is a box that
+  draws glyphs, not an accessible name for the box beside it.
+- **Keyboard focus follows the pointer.** Clicking a box focuses it and
+  `cf_focus` moves it by hand; nothing implements **Tab**, and a field cannot be
+  reached without the mouse.
+- **An editing field has no clipboard.** Cut, copy and paste are not wired to
+  the platform. Enter submits nothing. There is no undo, no selection by word,
+  no caret blink and no IME, so composing Japanese types nothing.
+- **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
+  own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
+  repository hands to the host, and the `load_image` slot is where your decoder
+  goes. Uploaded textures are never reclaimed, so a screen that keeps loading
+  images keeps growing.
+- **The cursor never changes.** A hovered field reports that it wants an I-beam
+  and the frame carries that as far as the backend, which ignores it: no backend
+  here sets a system cursor.
+- **Missing CSS, in full:** `overflow`, `display: none`, `calc()`,
+  `aspect-ratio`, container queries, `content-box` sizing, grid named lines and
+  areas, and every transition and animation but the ones you write in C against
+  the frame's elapsed seconds.
+- No drag-and-drop building, no theming tool, no loading a font from memory
+  (`cf_font_sdl` takes a path), no multiline field. Device pixels stop at the
+  backend: only the SDL one reads a pixel density, and a window whose surface
+  changes shape is resized by relayout, not by scaling a bitmap.
+
+Each gap above has a row in [docs/backlog.md](docs/backlog.md) naming the test tier
+that would prove it closed, and the backlog is the place to look for what to work
+on next.
+
+## Try it
+
+You need [CMake](https://cmake.org/) 3.25+, [Ninja](https://ninja-build.org/),
+and a C17 compiler ([GCC](https://gcc.gnu.org/) or
+[Clang](https://clang.llvm.org/)). Then:
+
+```sh
+cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON   # set up a Debug build
+cmake --build --preset dev                        # compile everything
+ctest --preset dev                                # run the 36 headless checks
+build/dev/bin/gallery                             # open the demo window
+```
+
+`gallery` is a scrolling page that demonstrates every widget and reacts to the
+mouse: type in the field, drag the scrollbars, watch the box the frame clock
+animates. Press **F12** in it to see the frame's numbers on screen.
+
+The first configure downloads [SDL3](https://github.com/libsdl-org/SDL) (the
+library that opens a window) and takes a few minutes. Without
+`-DCFORM_WITH_SDL_BACKEND=ON` nothing is downloaded at all, because the engine
+never needs a window.
+
+## What using it looks like
+
+This is a complete program: a button that prints when you click it.
+
+```c
+#include <stdio.h>
+
+#include "cf/app.h"     /* the run loop          */
+#include "cf/build.h"   /* CF_COL, CF_ROW        */
+#include "cf/widget.h"  /* cf_label, cf_button   */
+
+static const cf_theme *theme;   /* the stock colors and spacing */
+static cf_font font;            /* one loaded typeface          */
+static cf_text_stack fonts;     /* the stack a walk reads it through */
+
+static void say_hello(cf_ctx *ctx, uint32_t slot, void *user_data) {
     (void)ctx, (void)slot, (void)user_data;
-    printf("pressed\n");
+    printf("hello\n");
 }
 
+/* Runs whenever cform needs to know what the screen should look like. */
 static cf_node build(cf_ctx *ctx) {
-    const cf_node label = cf_label(ctx, cf_string_of("press me"), &fonts, theme->on_ink);
-    const cf_node press = cf_button(ctx, "press", on_press, NULL, &label, 1u);
+    const cf_node text = cf_label(ctx, cf_string_of("press me"), &fonts, theme->on_ink);
+    const cf_node button = cf_button(ctx, "greet", say_hello, NULL, &text, 1u);
 
-    return CF_COL(ctx, theme->page, press);
+    return CF_COL(ctx, theme->page, button);
 }
 
-cf_app_run(&(cf_app_config){.build = build, .backend = cf_backend_sdl(&(cf_sdl_config){
-                                .title = "cform", .width = 480u, .height = 320u}),
-                            .theme = theme, .fonts = &fonts});
+int main(void) {
+    theme = cf_theme_default();
+    font = cf_font_sdl("Lato-Regular.ttf", 14.0f);
+    fonts = (cf_text_stack){.fonts = &font, .count = 1u};
+
+    cf_app_run(&(cf_app_config){.build = build, .theme = theme, .fonts = &fonts,
+                                .backend = cf_backend_sdl(&(cf_sdl_config){
+                                    .title = "hello", .width = 480u, .height = 320u})});
+}
 ```
 
-`cf_app_run` drains the backend's events into the dispatch, rebuilds only when a
-signature moved, and presents without repainting when nothing woke — an undamaged
-frame lays out nothing, emits zero commands and allocates zero bytes. `F12` opens
-the inspector: node and dirty counts, commands, the page's rect, the frame's cost.
-[`examples/gallery.c`](examples/gallery.c) is every widget on one page, and the
-same source under Emscripten is the WebAssembly playground (CI pins the SDK in
-`.github/workflows/ci.yml`; serve the output over HTTP, since a tab will not fetch
-a `.wasm` over `file://`).
+That is the `<div>` above in C: a column, and inside it a button holding a label.
+`cf_app_run` opens the window and keeps calling `build` as often as the screen
+needs. The string `"greet"` is the button's name: it is how cform recognises the
+same button from one frame to the next, so the count of clicks, the scroll
+position and the keyboard focus survive a rebuild.
 
-## Layers
+[`examples/gallery.c`](examples/gallery.c) is the same API stretched over every
+widget, and [`examples/layout_only.c`](examples/layout_only.c) is the layout
+engine as a program that links nothing else.
 
-| Target | Owns | Reaches |
-| --- | --- | --- |
-| `cf_base` | arena, generational store, interner, hash, log sink | libc |
-| `cf_style` | `cf_style`, length and box math | `cf_base` |
-| `cf_theme` | the default palette, one `cf_theme` value | `cf_style` |
-| `cf_layout` | `cf_tree`, flex, grid, absolute, intrinsic measurement | `cf_style`, `cf_base` |
-| `cf_text` | UTF-8 decode, break opportunities, line walking, measurement | `cf_base` |
-| `cf_paint` | the command stream: fills, borders, text, images | `cf_layout`, `cf_text` |
-| `cf_node` | context, keyed diff, state, input, focus, scroll, tweens | `cf_layout`, `cf_paint` |
-| `cf_widget` | label, button, field, list, scroll, image declarations | `cf_node`, `cf_paint`, `cf_text` |
-| `cf_app` | the run loop, the damage rule, the inspector | `cf_widget` |
-| `cf_backend_headless` | a recorder that keeps the submitted stream | `cf_paint` |
-| `cf_backend_sdl` | window, draw, rasterisation, event pump | `cf_paint`, `cf_text`, SDL3 |
+> `cf_font_sdl` takes a path to a `.ttf` you actually have. A file that won't open
+> measures nothing — logged once on `CF_LOG_BACKEND` — so the window, the button
+> and the click all still work, but the text is invisible. The demo build
+> downloads `build/dev/fonts/Lato-Regular.ttf` and passes that path in.
 
-One CMake target per layer is the dependency rule, and
-[`tools/check_includes.py`](tools/check_includes.py) checks the include graph
-against it. Two edges carry the design: SDL appears in exactly one target, and
-device pixels stop there, so every layer above counts logical points.
+## How a frame happens
 
-A node is a slot in a `cf_store` addressed by a generation-checked `cf_id`, and
-identity inside the tree is `(depth, key, ordinal)` rather than a pointer, so a
-stale handle reads `NULL` instead of editing the next occupant of a recycled slot.
-`cf_ctx` owns everything a page keeps and takes no lock — one context per thread —
-and the installed log sink is the only process-wide state in the library.
+```
+your build()  →  tree of boxes  →  sizes worked out  →  list of shapes  →  backend
+   (cf_widget)       (cf_node)         (cf_layout)         (cf_paint)     (cf_backend_sdl)
+```
 
-## Embedding
+Four steps, and each one can be used on its own:
 
-`cmake --install build --prefix <prefix>` lays down the ten headless archives,
-`include/cf/`, a CMake package config and a `cform.pc`. Each target carries its own
-dependencies, so `cform::cf_layout` is the layout floor and nothing more:
+1. **Describe.** `build` returns boxes carrying a `cf_style` — the same
+   vocabulary as CSS: `width`, `margin`, `flex_grow`, `justify_content`, `gap`.
+2. **Measure.** `cf_layout` is pure arithmetic: give it the tree and the room
+   available, and it writes one position and size per box. It implements
+   [flexbox](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_flexible_box_layout/Basic_concepts_of_flexbox)
+   the way the [CSS specification](https://www.w3.org/TR/css-flexbox-1/) defines
+   it — directions, wrapping, grow and shrink, gaps, percentages, `auto` margins,
+   baseline alignment, absolutely positioned children — plus a useful subset of
+   CSS grid. Ask it for the size of text you never drew by handing it a measure
+   function.
+3. **Emit.** `cf_paint` walks the laid-out tree and appends the shapes to draw:
+   fills, borders, lines of text, images. In order, back to front, each one
+   carrying the rectangle it may not be seen outside — that is how a scrolled
+   list stays inside its window. A frame that changed nothing emits zero of them.
+4. **Draw.** A backend turns that list onto a real surface, reports clicks and
+   keystrokes back, answers how big the surface is and reads an image file. One
+   over SDL3 ships here, a headless recorder exists for tests, and writing your
+   own means filling in [six functions](docs/backend-abi.md).
+
+## Words this repository uses
+
+| Word | What it means here |
+| --- | --- |
+| **node** | One box in the tree. An integer, not a pointer, so an out-of-date handle fails safely. |
+| **ctx** | Everything a frame is allowed to keep: its memory, its state, its events. |
+| **arena** | Memory handed out in one block and thrown away in one block, so a frame cannot leak. [Region-based allocation](https://en.wikipedia.org/wiki/Region-based_memory_management). |
+| **state** | What a named box keeps across frames: a click count, a scroll offset, a typed buffer. It lives in `ctx`, not in your node, because your node is thrown away every frame. |
+| **backend** | The only part that knows about windows, GPUs and pixels. Everything above counts logical points. |
+| **ABI** | The exact list of functions two separately-compiled pieces of code agree on, plus the version of that agreement. [More.](https://en.wikipedia.org/wiki/Application_binary_interface) |
+| **unit test** | A small check of one layer, run without a window. |
+| **conformance** | Checking our flexbox against someone else's answer, not against our own. [Details.](docs/conformance.md) |
+| **golden test** | Saving a whole frame's shape list as a text file, then failing if a change writes a different one. You review the diff. [Characterization test.](https://en.wikipedia.org/wiki/Characterization_test) |
+| **bench** | Timing how long a big screen takes, so a slowdown cannot arrive unnoticed. [Details.](docs/bench.md) |
+
+## Using it as a library
+
+```sh
+cmake --install build/dev --prefix /where/you/want
+```
 
 ```cmake
 find_package(cform-ui REQUIRED CONFIG)
 target_link_libraries(my_app PRIVATE cform::cf_app)   # or cform::cf_layout alone
 ```
 
-`pkg-config --cflags --libs cform` serves a build that does not use CMake.
-`cf_backend_sdl` is deliberately not installed — its interface names `SDL3::SDL3`,
-a target the fetch creates inside this tree, and a host that opens a window already
-owns an SDL link line. Write the platform's own against
-[`docs/backend-abi.md`](docs/backend-abi.md): five function pointers, and
-`src/backend/headless/record.c` is a legal two-slot skeleton.
+`pkg-config --cflags --libs cform` covers builds that don't use CMake. The SDL
+backend isn't installed on purpose — a program that opens a window already links
+SDL itself.
 
-## Testing
+### Build options
 
-Four tiers, all headless — nothing here looks at the screen.
+| Option | Default | Does |
+| --- | --- | --- |
+| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the 36 checks `ctest` runs |
+| `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `gallery` and `layout_only` |
+| `CFORM_WITH_SDL_BACKEND` | `OFF` | the SDL window backend, and the SDL download |
+| `CFORM_WITH_SANITIZERS` | `OFF` | memory and undefined-behaviour checkers |
 
-- **unit** — one binary per layer, linking that layer and nothing else, so a reach
-  outside its dependencies fails at link. A new rule is usually a row in a data
-  table rather than a function.
-- **conformance** — 485 of Yoga's flexbox fixtures, ported by `tools/gentest.py`
-  and scored against a floor that only moves up.
-  [`docs/conformance.md`](docs/conformance.md) publishes the score and the misses.
-- **golden** — whole frames through the recorder backend, diffed as a command
-  stream. `golden_cases --update` rewrites a snapshot, so a draw that moved is data
-  a reviewer reads.
-- **bench** — the 10,000-node rigs. They assert geometry and command counts and
-  print timing; [`docs/bench.md`](docs/bench.md) publishes the numbers a change
-  moves.
+`--preset dev` is Debug with tests and examples on; `--preset release` is the
+same graph optimised, which is where the timing numbers come from.
 
-The renderer is verified by running `gallery` and looking at it — never by mocking
-the backend or asserting pixels. A change that draws differently says what to look
-at.
+### In a browser
 
-## Not implemented
+With [Emscripten](https://emscripten.org/) installed, configure through its
+wrapper the way CI does:
 
-Writing modes and right-to-left, logical properties, `aspect-ratio`, container
-queries, `calc()`, grid named lines and areas, `display: none`, `overflow`,
-`box-sizing: content-box`, bidirectional text, variable fonts. None are in the
-vocabulary and no field pretends to accept them; anything on this list lands in
-`include/cf/` first and in the layout files second.
+```sh
+emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
+cmake --build build-wasm
+python -m http.server 8080 --directory build-wasm/bin   # then open http://localhost:8080/gallery.html
+```
 
-## Conventions
+Serving it is required — a tab won't load a `.wasm` from a `file://` path.
 
-C17 with no extensions, `snake_case` with the verb first, `cf_function` /
-`CF_Type` at the API edge, allocation only through `src/base/`, and comments that
-say *why* — an invariant, a lifetime rule, a spec step. The compiler, the standard,
-the include paths and the warnings are stated once in `CMakeLists.txt`, and clangd,
-CI and your terminal read the same `compile_commands.json`. `.clang-format` and
-`.clang-tidy` are not suggestions. Commits are
-[Conventional Commits](https://www.conventionalcommits.org/), one logical change
-each.
+### The three scripts
+
+CI runs all three, so they aren't optional. `check_includes.py` fails a layer
+that `#include`s a neighbour it isn't allowed to link. `amalgamate.py` bundles
+the layout headers into one droppable `cf_layout.h`
+(`cmake --build build/dev --target cf_amalgamate`). `gentest.py` rebuilds the
+Yoga test corpus from a checkout in `.vendor/yoga`, and is only needed to
+re-sync those tests.
+
+## Contributing
+
+Same rules CI checks: `clang-format --dry-run --Werror` clean on the files you
+touched ([.clang-format](.clang-format)), one logical [Conventional
+Commit](https://www.conventionalcommits.org/) each, allocation only through
+`src/base/`, and no platform header outside `src/backend/`.
 
 Distributed under the MIT License. See [`LICENSE`](LICENSE).
