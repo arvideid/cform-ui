@@ -310,13 +310,76 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
 }
 
 /*
+ * A device's code for a key into the number the tree reads. One it has no word
+ * for keeps its own code: no widget above this file reads that, and inventing a
+ * number for it would be worse than passing the platform's through.
+ */
+static uint32_t named_key(SDL_Keycode key) {
+    switch (key) {
+    case SDLK_BACKSPACE:
+        return (uint32_t)CF_KEY_BACKSPACE;
+    case SDLK_RETURN:
+    case SDLK_KP_ENTER:
+        return (uint32_t)CF_KEY_ENTER;
+    case SDLK_LEFT:
+        return (uint32_t)CF_KEY_LEFT;
+    case SDLK_RIGHT:
+        return (uint32_t)CF_KEY_RIGHT;
+    case SDLK_UP:
+        return (uint32_t)CF_KEY_UP;
+    case SDLK_DOWN:
+        return (uint32_t)CF_KEY_DOWN;
+    case SDLK_HOME:
+        return (uint32_t)CF_KEY_HOME;
+    case SDLK_END:
+        return (uint32_t)CF_KEY_END;
+    case SDLK_DELETE:
+        return (uint32_t)CF_KEY_DELETE;
+    case SDLK_ESCAPE:
+        return (uint32_t)CF_KEY_ESCAPE;
+    case SDLK_TAB:
+        return (uint32_t)CF_KEY_TAB;
+    case SDLK_F12:
+        return (uint32_t)CF_KEY_F12;
+    default:
+        return (uint32_t)key;
+    }
+}
+
+/*
+ * The held modifier keys as the bits the event carries. SDL's GUI is the
+ * platform's windows key, its Command key or its Super key - one word here.
+ */
+static uint32_t named_mods(SDL_Keymod mod) {
+    uint32_t mods = (uint32_t)CF_MOD_NONE;
+
+    if ((mod & SDL_KMOD_SHIFT) != 0u) {
+        mods |= (uint32_t)CF_MOD_SHIFT;
+    }
+
+    if ((mod & SDL_KMOD_CTRL) != 0u) {
+        mods |= (uint32_t)CF_MOD_CONTROL;
+    }
+
+    if ((mod & SDL_KMOD_ALT) != 0u) {
+        mods |= (uint32_t)CF_MOD_ALT;
+    }
+
+    if ((mod & SDL_KMOD_GUI) != 0u) {
+        mods |= (uint32_t)CF_MOD_META;
+    }
+
+    return mods;
+}
+
+/*
  * One device event into the vocabulary the dispatch walks, false when the event
  * has no word the tree owns. What the keyboard wrote is carried as the text the
  * platform settled on, not as the key that produced it: shift, caps lock, the
  * layout and an input method are decided above this file. The key events that
  * survive are the ones that name no character - editing, navigation, the
- * function keys - and pass as SDL keycodes, which is what a widget's own key
- * constants are compared against.
+ * function keys - and arrive under the numbers cf_event names, so a widget reads
+ * the same word here that it writes in its own source.
  */
 static bool take_event(const SDL_Event *event, cf_event *out) {
     switch (event->type) {
@@ -356,7 +419,8 @@ static bool take_event(const SDL_Event *event, cf_event *out) {
     case SDL_EVENT_KEY_UP:
         *out = (cf_event){.type = event->type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
                                                                     : CF_EVENT_KEY_UP,
-                          .key = (uint32_t)event->key.key};
+                          .key = named_key(event->key.key),
+                          .mods = named_mods(event->key.mod)};
         return true;
     default:
         return false;

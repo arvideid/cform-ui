@@ -25,11 +25,45 @@ typedef enum cf_event_type {
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;
 
 /*
- * The shell's own key, in the value the SDL backend hands key events: F12 is
- * scan-code 69 under the scan-code bit there. Nothing in the tree dispatches
- * it; the shell that owns the loop reads it and toggles the inspector.
+ * The keys a widget names, in the number an event carries. What a device calls a
+ * key stays the device's business: the backend turns its codes into these, and a
+ * key with no word here keeps its platform number, which no widget reads. A key
+ * that types a character types it as a text event, so nothing here names a
+ * letter. The numbers are the agreement a backend and a build share, so a value
+ * is appended and never renumbered.
  */
-#define CF_KEY_F12 0x40000045u
+typedef enum cf_key {
+    CF_KEY_NONE = 0,
+    CF_KEY_BACKSPACE = 1,
+    CF_KEY_ENTER = 2,
+    CF_KEY_LEFT = 3,
+    CF_KEY_RIGHT = 4,
+    CF_KEY_UP = 5,
+    CF_KEY_DOWN = 6,
+    CF_KEY_HOME = 7,
+    CF_KEY_END = 8,
+    CF_KEY_DELETE = 9,
+    CF_KEY_ESCAPE = 10,
+    CF_KEY_TAB = 11,
+    /* The shell's own key: nothing in the tree dispatches it, the loop that
+     * owns the inspector reads it and toggles the frame's numbers. */
+    CF_KEY_F12 = 12
+} cf_key;
+
+/*
+ * The modifier keys held when an event was produced, one bit each. Whether a
+ * shift makes a capital is settled by the device and arrives inside the text;
+ * whether it means "extend what is selected" is the widget's to read, and this is
+ * the only place it can. A backend that reports no modifier state leaves the
+ * field zero, and a widget sees the keys it names with no shift on them.
+ */
+typedef enum cf_mod {
+    CF_MOD_NONE = 0,
+    CF_MOD_SHIFT = 1 << 0,
+    CF_MOD_CONTROL = 1 << 1,
+    CF_MOD_ALT = 1 << 2,
+    CF_MOD_META = 1 << 3
+} cf_mod;
 
 /*
  * One input event. Position and wheel are in the coordinate space the rects
@@ -41,9 +75,8 @@ typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } 
  *
  * A text event's bytes are UTF-8, borrowed for the handler call alone: whoever
  * keeps them copies them, which is what a field editing a buffer does anyway.
- * A key scalar is the platform's own keycode and means nothing on its own - the
- * keys that carry text arrive as text, and what is left is the editing and
- * navigation keys a widget can name.
+ * A key scalar is one of the cf_key values the widget can name, and the modifier
+ * bits say what was held while it went down.
  */
 typedef struct cf_event {
     cf_event_type type;
@@ -52,6 +85,8 @@ typedef struct cf_event {
     uint32_t button;
     uint32_t key;
     cf_string text;
+    /* The cf_mod bits held for this event. */
+    uint32_t mods;
     /* The slot whose handler is running; meaningless outside dispatch. */
     uint32_t target;
     bool stopped;
