@@ -70,6 +70,12 @@ static bool list_room(cf_arena *arena, cf_command_list *out) {
         return false;
     }
 
+    /* The page's stream is already in the list, and a frame that fills its
+     * capacity exactly is the ordinary case rather than a rare one: grow
+     * without carrying the old commands over and the panel is drawn on a
+     * window the page has vanished from. */
+    memcpy(store, out->commands, (size_t)out->count * sizeof *store);
+
     out->commands = store;
     out->capacity = capacity;
     return true;
