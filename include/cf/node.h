@@ -78,9 +78,11 @@ typedef struct cf_ctx {
     cf_id focus_id;
     uint32_t root_slot;
     uint32_t frame_id;
-    /* The interval cf_frame_run was handed for the frame being run: the begin
-     * of the next one clears it back to nothing. */
+    /* The interval cf_frame_run was handed for the frame being run, and
+     * whether the build running now asked for the next one. Both belong to
+     * one frame: the begin of the next clears them. */
     float frame_seconds;
+    bool frame_requested;
     /* The reason the last boundary refused since this frame began, or NULL.
      * Every message is a literal the library owns, so the answer outlives the
      * call that recorded it. */
@@ -200,6 +202,18 @@ float cf_tween_step(cf_tween *tween, float seconds);
  * reads - and why nothing moves there until the caller says how long it was.
  */
 float cf_frame_seconds(const cf_ctx *ctx);
+
+/*
+ * Asks for another frame whatever the tree looks like: a build that moved
+ * something no event will move again - a tween still running, content that
+ * landed - has a next frame to draw and nothing to wake a resting shell
+ * with. The ask lives one frame, the way a dirty bit does, so a build that
+ * still wants a frame has to say so in each one.
+ */
+void cf_request_frame(cf_ctx *ctx);
+
+/* Whether this frame's build asked for the one after it. */
+bool cf_frame_requested(const cf_ctx *ctx);
 
 /*
  * Whether this frame changed the node - a fresh slot, or a declaration

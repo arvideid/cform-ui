@@ -46,6 +46,14 @@ static cf_node counting_box(cf_ctx *ctx) {
     return root;
 }
 
+/* A page mid-motion asks for the frame after this one, the only way a build
+ * can keep running once the device stops handing events. */
+static cf_node animating_box(cf_ctx *ctx) {
+    cf_request_frame(ctx);
+
+    return counting_box(ctx);
+}
+
 typedef struct fake_hand {
     cf_event event;
     bool hands;
@@ -143,6 +151,27 @@ static void the_shell_skips_undamaged_frames(void) {
     CF_CHECK(presents == 3u, "the window keeps being served while nothing changes");
 }
 
+static void the_shell_keeps_frames_a_moving_page_asks_for(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    /* Two drains the device hands nothing on, past the one that ended the
+     * frame's own drain: without an ask the shell would build once and then
+     * only present, so the count is the proof the ask was honored rather than
+     * the tree having moved. */
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 5u);
+
+    cf_app_run(&(cf_app_config){.build = animating_box, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 3u, "an ask builds the frame it asks for, event or no event");
+}
+
 static void the_inspector_toggles_on_f12(void) {
     cf_recorder recorder = {.arena = &store};
     const cf_backend backend = driven_backend(&recorder);
@@ -197,6 +226,7 @@ int main(void) {
 
     CF_RUN(the_shell_runs_until_the_device_quits);
     CF_RUN(the_shell_skips_undamaged_frames);
+    CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 

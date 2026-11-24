@@ -75,8 +75,10 @@ void cf_frame_begin(cf_ctx *ctx) {
     ctx->frame_id++;
     state_gc(ctx);
     ctx->layout_ready = false;
-    /* The frame covers no interval until the run that begins it states one. */
+    /* The frame's own two answers start fresh: no interval until the run
+     * states one, no ask until a build makes one. */
     ctx->frame_seconds = 0.0f;
+    ctx->frame_requested = false;
     /* A refusal belongs to the frame that made it; the rects lived in the
      * arena just cleared. */
     ctx->rejection = NULL;

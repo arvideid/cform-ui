@@ -32,3 +32,15 @@ void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
 float cf_frame_seconds(const cf_ctx *ctx) {
     return ctx == NULL ? 0.0f : ctx->frame_seconds;
 }
+
+void cf_request_frame(cf_ctx *ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    ctx->frame_requested = true;
+}
+
+bool cf_frame_requested(const cf_ctx *ctx) {
+    return ctx != NULL && ctx->frame_requested;
+}

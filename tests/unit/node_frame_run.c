@@ -4,8 +4,8 @@
 
 /*
  * cf_frame_run is the pipeline the shell and the golden scenes play by hand:
- * these cases hand it a build and read the stream and the interval the whole
- * pass leaves behind.
+ * these cases hand it a build and read the stream, the interval and the ask for
+ * another frame that the whole pass leaves behind.
  */
 static bool context_of(cf_ctx *ctx) {
     if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
@@ -40,6 +40,7 @@ static float seconds_seen;
 
 static cf_node ticking(cf_ctx *ctx) {
     seconds_seen = cf_frame_seconds(ctx);
+    cf_request_frame(ctx);
 
     return one_box(ctx);
 }
@@ -99,7 +100,7 @@ static void a_run_without_a_build_or_a_list_is_a_no_op(void) {
     cf_ctx_free(&ctx);
 }
 
-static void a_frame_carries_the_seconds_it_was_handed(void) {
+static void a_frame_carries_its_seconds_and_may_ask_for_another(void) {
     cf_ctx ctx;
 
     if (!context_of(&ctx)) {
@@ -111,15 +112,16 @@ static void a_frame_carries_the_seconds_it_was_handed(void) {
     cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, 0.25f, &list);
 
     CF_NEAR(seconds_seen, 0.25f);
-    CF_CHECK(list.count == 1u, "the interval is a reading, not another command");
+    CF_CHECK(cf_frame_requested(&ctx), "the ask outlives the build that made it");
 
-    /* A frame run without an interval covers none, so a tween stepped against it
-     * keeps the value it had rather than jumping on a number nobody measured. */
-    seconds_seen = -1.0f;
-    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, 0.0f, &list);
-    CF_NEAR(seconds_seen, 0.0f);
+    /* The ask is one frame's answer rather than a switch a build leaves on: the
+     * next begin clears it, so a page that stops moving stops being drawn for. */
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(!cf_frame_requested(&ctx), "a build that never asked leaves no ask standing");
+    CF_CHECK(cf_frame_seconds(&ctx) == 0.0f, "a frame handed no interval covers none");
 
     CF_CHECK(cf_frame_seconds(NULL) == 0.0f, "no context covers no interval");
+    CF_CHECK(!cf_frame_requested(NULL), "no context asked for nothing");
 
     cf_ctx_free(&ctx);
 }
@@ -129,7 +131,7 @@ int main(void) {
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
     CF_RUN(a_build_that_answers_nothing_paints_nothing);
     CF_RUN(a_run_without_a_build_or_a_list_is_a_no_op);
-    CF_RUN(a_frame_carries_the_seconds_it_was_handed);
+    CF_RUN(a_frame_carries_its_seconds_and_may_ask_for_another);
 
     return CF_REPORT();
 }

@@ -103,12 +103,14 @@ void cf_app_run(const cf_app_config *config) {
                                 ? config->backend.surface(config->backend.user_data)
                                 : (cf_size){0.0f, 0.0f};
 
-        /* An undamaged frame redraws nothing: no event moved the tree and the
-         * surface did not move under it. A build whose per-frame state moves
-         * without events - a tween it steps, content that landed - is the one
-         * thing this rule cannot see; the shell asks for frames again when a
-         * build needs that door. */
-        if (painted && !woke && now.width == offer.width && now.height == offer.height) {
+        /* An undamaged frame redraws nothing: no event moved the tree, the
+         * surface did not move under it, and the frame that ran did not ask for
+         * another. The ask is the door a build steps through when its own state
+         * is what is moving - a tween it runs, content that landed - and it is
+         * re-asked every frame the motion lasts, so a page at rest still costs
+         * one present and no build. */
+        if (painted && !woke && !cf_frame_requested(&ctx) && now.width == offer.width &&
+            now.height == offer.height) {
             config->backend.present(config->backend.user_data);
             continue;
         }
