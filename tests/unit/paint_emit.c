@@ -479,6 +479,58 @@ static void a_clip_narrows_as_it_descends(void) {
     CF_NEAR(list.commands[0].rect.height, 90.0f);
 }
 
+/* A stroke cannot be cut without moving the corners it rounds, so a border
+ * keeps its own rect and names the region the drawing must stop at instead. */
+static void a_border_at_a_clip_names_the_clip_it_is_cut_by(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+
+    cf_style edge = cf_style_default();
+    edge.border_color = (cf_opt_color){.present = true, .value = CF_COLOR(0, 0, 0)};
+    edge.border = (cf_box){CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f)};
+
+    (void)append(&f, 0, edge);
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(0.0f, 60.0f, 100.0f, 80.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the stroked child paints its border");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_BORDER, "and the command is a border");
+    CF_NEAR(list.commands[0].rect.height, 80.0f);
+    CF_NEAR(list.commands[0].clip.y, 0.0f);
+    CF_NEAR(list.commands[0].clip.height, 100.0f);
+}
+
+/* The clip a page outside every clipping box carries is no clip at all: the
+ * screen bounds itself, and a stream that said otherwise would make every
+ * backend pay a state change for the whole frame. */
+static void a_page_with_no_clipping_box_names_no_clip(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.node_count = 1u;
+
+    cf_style edge = cf_style_default();
+    edge.border_color = (cf_opt_color){.present = true, .value = CF_COLOR(0, 0, 0)};
+    edge.border = (cf_box){CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f)};
+
+    (void)append(&f, 0, edge);
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(0.0f, 60.0f, 100.0f, 80.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 100.0f, 100.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the border paints");
+    CF_NEAR(list.commands[0].clip.width, 0.0f);
+    CF_NEAR(list.commands[0].clip.height, 0.0f);
+}
+
 static void text_culls_per_line_inside_a_clip(void) {
     fixture f;
     begin(&f);
@@ -563,6 +615,8 @@ int main(void) {
     CF_RUN(a_box_that_clips_cuts_its_children_fills);
     CF_RUN(a_child_outside_a_clipping_box_paints_nothing);
     CF_RUN(a_clip_narrows_as_it_descends);
+    CF_RUN(a_border_at_a_clip_names_the_clip_it_is_cut_by);
+    CF_RUN(a_page_with_no_clipping_box_names_no_clip);
     CF_RUN(text_culls_per_line_inside_a_clip);
     CF_RUN(an_exhausted_scratch_paints_nothing_and_says_so);
     CF_RUN(a_truncated_list_keeps_the_commands_that_fit);

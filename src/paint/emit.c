@@ -49,13 +49,23 @@ typedef struct paint_walk {
     const cf_tree *tree;
     const cf_rect *rects;
     /* The active clip: the screen until a box that clips its content is
-     * entered, then that box's own rect. Inside it, fills cut to the clip -
-     * the screen itself is no clip, the device already bounds it. */
+     * entered, then that box's own rect. Inside it, fills cut to the clip and
+     * every command names it, so a stroke and a line can be cut without being
+     * moved. */
     cf_rect clip;
     bool clipping;
     cf_command_list *out;
     bool truncated;
 } paint_walk;
+
+/*
+ * The clip a command carries. Outside every clipping box the walk names none,
+ * rather than the viewport it happens to hold: the screen bounds itself, and a
+ * backend told to scissor there would pay a state change to say nothing.
+ */
+static cf_rect carried_clip(const paint_walk *walk) {
+    return walk->clipping ? walk->clip : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
 
 /*
  * The next slot in the list, growing it by doubling first. NULL once the arena
@@ -150,6 +160,7 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
 
         *command = (cf_command){.kind = CF_COMMAND_TEXT,
                                 .rect = {box.x + left, y, lines[i].width, line_height},
+                                .clip = carried_clip(walk),
                                 .color = style->color.value,
                                 .text = lines[i].text,
                                 .font = font,
@@ -193,6 +204,7 @@ static void emit_image(paint_walk *walk, uint32_t slot, cf_rect box) {
 
     *command = (cf_command){.kind = CF_COMMAND_IMAGE,
                             .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
+                            .clip = carried_clip(walk),
                             .texture = content->texture};
 }
 
@@ -224,6 +236,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
 
         *fill = (cf_command){.kind = CF_COMMAND_FILL,
                              .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
+                             .clip = carried_clip(walk),
                              .color = style->background.value,
                              .radius = radius};
     }
@@ -244,6 +257,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
 
         *border = (cf_command){.kind = CF_COMMAND_BORDER,
                                .rect = box,
+                               .clip = carried_clip(walk),
                                .color = style->border_color.value,
                                .widths = widths,
                                .radius = radius};
@@ -254,8 +268,9 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
 
     /* A box that clips its content bounds the descent: the children see the
      * box's rect as their clip, narrowed by whatever clipped their parent.
-     * A border strokes its true edges - a clipped one would grow lines the
-     * box never declared at the cut - so borders reach-check only. */
+     * A border strokes its true edges and names this clip to be cut by -
+     * cutting the rect instead would draw lines the box never declared at the
+     * cut. */
     const cf_rect outer_clip = walk->clip;
     const bool outer_clipping = walk->clipping;
 

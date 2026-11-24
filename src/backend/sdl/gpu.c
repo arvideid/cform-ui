@@ -20,6 +20,11 @@ typedef struct sdl_state {
     SDL_Texture **textures;
     uint32_t texture_count;
     uint32_t texture_capacity;
+    /* The scissor the target is under, and whether one is on at all. Held
+     * between the commands of a submit because a stream that scrolls repeats
+     * one clip down a whole column of boxes, and the state call is not free. */
+    SDL_Rect clip;
+    bool clip_set;
 } sdl_state;
 
 /*
@@ -144,6 +149,37 @@ static void draw_border(SDL_Renderer *renderer, SDL_FRect rect, float radius, cf
                        (int)(PERIMETER_POINTS * 6u));
 }
 
+/*
+ * The scissor a command's clip asks for. A clip with no extent is the whole
+ * output, which SDL draws when handed NULL; the boxes a scroll cuts in half
+ * are the ones that need the region, and without it their borders and text
+ * lines paint the part that is off the pane.
+ */
+static void apply_clip(sdl_state *state, cf_rect clip, float scale) {
+    if (clip.width <= 0.0f || clip.height <= 0.0f) {
+        if (state->clip_set) {
+            SDL_SetRenderClipRect(state->renderer, NULL);
+            state->clip_set = false;
+        }
+
+        return;
+    }
+
+    const SDL_Rect rect = {.x = (int)(clip.x * scale + 0.5f),
+                           .y = (int)(clip.y * scale + 0.5f),
+                           .w = (int)(clip.width * scale + 0.5f),
+                           .h = (int)(clip.height * scale + 0.5f)};
+
+    if (state->clip_set && rect.x == state->clip.x && rect.y == state->clip.y &&
+        rect.w == state->clip.w && rect.h == state->clip.h) {
+        return;
+    }
+
+    SDL_SetRenderClipRect(state->renderer, &rect);
+    state->clip = rect;
+    state->clip_set = true;
+}
+
 static void draw_command(sdl_state *state, const cf_command *command, float scale) {
     const SDL_FRect rect = {command->rect.x * scale, command->rect.y * scale,
                             command->rect.width * scale, command->rect.height * scale};
@@ -151,6 +187,8 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
     const SDL_FColor color = {
         (float)command->color.red / 255.0f, (float)command->color.green / 255.0f,
         (float)command->color.blue / 255.0f, (float)command->color.alpha / 255.0f};
+
+    apply_clip(state, command->clip, scale);
 
     if (command->kind == CF_COMMAND_FILL) {
         if (radius > 0.0f) {
@@ -235,6 +273,10 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
      * window's own color, not the last frame's leftovers. */
     SDL_SetRenderDrawColorFloat(state->renderer, 0.0f, 0.0f, 0.0f, 1.0f);
     SDL_RenderClear(state->renderer);
+
+    /* A resize can hand the renderer a new target with the state that went
+     * with it forgotten, so the cached scissor is not trusted across it. */
+    state->clip_set = false;
 
     const float scale = SDL_GetWindowPixelDensity(state->window);
 

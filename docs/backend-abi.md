@@ -79,10 +79,10 @@ whole compositing rule.
 
 | Kind | Fields that matter |
 |---|---|
-| `CF_COMMAND_FILL` | `rect`, `color`, `radius` |
-| `CF_COMMAND_BORDER` | `rect`, `color`, `radius`, `widths` (per side, painted inside `rect`) |
-| `CF_COMMAND_TEXT` | `rect` (one laid line), `text`, `font`, `color`, `ellipsis` |
-| `CF_COMMAND_IMAGE` | `rect`, `texture` |
+| `CF_COMMAND_FILL` | `rect`, `clip`, `color`, `radius` |
+| `CF_COMMAND_BORDER` | `rect`, `clip`, `color`, `radius`, `widths` (per side, painted inside `rect`) |
+| `CF_COMMAND_TEXT` | `rect` (one laid line), `clip`, `text`, `font`, `color`, `ellipsis` |
+| `CF_COMMAND_IMAGE` | `rect`, `clip`, `texture` |
 
 `radius` is clamped by the sender's intent, not by the stream: a radius past
 half the shorter extent is a corner the backend should read as a half-circle.
@@ -95,8 +95,15 @@ never priced. When `ellipsis` is set the line's bytes stop short and the
 backend appends U+2026 (`CF_ELLIPSIS`) after the text; the width already counts
 its advance.
 
-A straddling rect keeps its full extent: cutting it is the backend's scissor
-decision, and `cf_paint` only drops commands that miss the viewport entirely.
+A straddling rect keeps its full extent, and `cf_paint` only drops commands that
+miss the viewport entirely. What cuts it is `clip`: the nearest box that clips
+its content, which a scrolling pane is. A fill and an image arrive already cut
+to it, because cutting a rectangle is the whole of what they draw; a border and
+a text line cannot be, because cutting their rect would move the corner the
+stroke rounds and the baseline the line sits on. Draw those two inside `clip`
+with the device's scissor, and nothing a scroll half-hides lands outside the box
+that hides it. A `clip` with no extent is the whole output — the device bounds
+that without being told, so a page that never clips should cost no state change.
 
 ## Events
 
@@ -132,7 +139,8 @@ table with fixed numbers.
 1. Fill the struct, set `abi_version = CF_BACKEND_ABI_VERSION`, keep state in
    `user_data`.
 2. Implement `submit` as: clear, walk front to back, per kind map to the device's
-   fill / stroke / glyph-run / textured-quad call, scaled by pixel density.
+   fill / stroke / glyph-run / textured-quad call, scaled by pixel density, each
+   one under the scissor its `clip` names.
 3. Implement `present` as the device's swap. Do not pump events here.
 4. Implement `surface` in points.
 5. Translate input in `poll_event`; consume what has no `cf_event` word.

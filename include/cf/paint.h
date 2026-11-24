@@ -26,6 +26,14 @@ typedef enum cf_command_kind {
 typedef struct cf_command {
     cf_command_kind kind;
     cf_rect rect;
+    /* The box this command must not paint outside: the nearest ancestor that
+     * clips its content, narrowed by whatever clipped that ancestor. A fill
+     * and an image arrive already cut to it, but a stroke and a text line
+     * cannot be cut by rewriting their own rect - the corners would move and
+     * the baseline would shift - so they keep their true rect and the backend
+     * scissors. A clip with no extent is the output itself, which the device
+     * bounds without being told. */
+    cf_rect clip;
     cf_color color;
     /* The stroke widths of a border, painted inside rect in cf_edges order;
      * a side with no width paints nothing. Zero for a fill. */
@@ -82,8 +90,11 @@ cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kin
  * cf_text_measure lays its content's lines over its own paint, one command
  * per line, and a box whose measure slot is cf_image_measure paints its
  * content's texture into its rect. A box that does not
- * reach `viewport` paints nothing; one that straddles it keeps its whole rect,
- * because cutting it is the backend's scissor decision, not the stream's.
+ * reach `viewport` paints nothing; one that straddles a clip keeps its whole
+ * rect and names that clip in `cf_command.clip`, because cutting a stroke or
+ * a line by changing what it draws is not the stream's decision - the backend
+ * scissors to it. Fills and images are already cut, since cutting a rectangle
+ * is the whole of what they draw.
  *
  * `scratch` holds the command array and the line table a text node asks for.
  * The walk visits a node once and does not allocate per node beyond the
