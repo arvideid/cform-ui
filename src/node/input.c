@@ -271,7 +271,13 @@ cf_cursor cf_frame_cursor(const cf_ctx *ctx) {
         return CF_CURSOR_DEFAULT;
     }
 
-    return record_of(ctx, hovered)->handlers.pointer != NULL && !record_of(ctx, hovered)->disabled
-               ? CF_CURSOR_POINTER
-               : CF_CURSOR_DEFAULT;
+    const node_record *record = record_of(ctx, hovered);
+
+    if (record->disabled || record->handlers.pointer == NULL) {
+        return CF_CURSOR_DEFAULT;
+    }
+
+    /* The hand promises a press; a text box wants the pointer set where the
+     * bytes are, which is the other ask a node can make. */
+    return record->role == CF_ROLE_FIELD ? CF_CURSOR_TEXT : CF_CURSOR_POINTER;
 }

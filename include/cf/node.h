@@ -340,8 +340,13 @@ bool cf_hovered(const cf_ctx *ctx, uint32_t slot);
 bool cf_pressed(const cf_ctx *ctx, uint32_t slot);
 bool cf_focused(const cf_ctx *ctx, uint32_t slot);
 
-/* The cursor the hovered node asks for: the pointer hand over a node that
- * answers pointer events, the default everywhere else. */
+/*
+ * The cursor the hovered node asks for: the pointer hand over a node that acts
+ * on the pointer, the I-beam over a field that edits the bytes under it, the
+ * default everywhere else. Nothing in the backends applies it yet - the
+ * surface has no slot to name the ask through - so the answer is the node
+ * layer's and a host reads it when it has a cursor to set.
+ */
 cf_cursor cf_frame_cursor(const cf_ctx *ctx);
 
 #endif
