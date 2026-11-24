@@ -759,8 +759,7 @@ static cf_node make_note(cf_ctx *ctx, const char *chars) {
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
     const cf_node note =
-        cf_label(ctx, cf_string_of("eight rules, each with something to try"), &body,
-                 theme->muted);
+        cf_label(ctx, cf_string_of("eight rules, each with something to try"), &body, theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
