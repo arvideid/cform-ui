@@ -51,7 +51,7 @@ static bool tone_is(cf_opt_color color, uint8_t red, uint8_t green, uint8_t blue
 }
 
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

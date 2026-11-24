@@ -5,7 +5,7 @@
  * move? Every case drives two or more frames through one context, because
  * the bit only means something against the frame before it. */
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

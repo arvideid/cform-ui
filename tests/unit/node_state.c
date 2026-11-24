@@ -4,7 +4,7 @@
 /* Every case builds in its own context so a leak or a bad state in one does
  * not dress up as a state bug in another. */
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }
@@ -164,6 +164,99 @@ static void a_grown_block_keeps_its_contents(void) {
     cf_ctx_free(&ctx);
 }
 
+static void a_retired_block_returns_its_bytes(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name first = cf_intern_text(&ctx.names, "first");
+    const cf_name second = cf_intern_text(&ctx.names, "second");
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_state(&ctx, first, 256u) != NULL, "the first block is served");
+    CF_CHECK(cf_state(&ctx, second, 256u) != NULL, "the second block is served");
+    CF_CHECK(cf_state_bytes(&ctx) == 512u, "both blocks are counted");
+
+    /* One frame that asks for neither keeps them, since a pointer into state
+     * is good through the frame after the one that obtained it; the next
+     * frame is the one that gives the bytes back. */
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_state_bytes(&ctx) == 512u, "a frame that did not ask yet keeps the block");
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_state_bytes(&ctx) == 0u, "a retired name hands its bytes back");
+
+    cf_ctx_free(&ctx);
+}
+
+/* A page open for an hour asks for state under names it never asked under
+ * before - a chat thread, a document list, a wizard with a step per record.
+ * What matters is not the count of names it ever minted but the count it is
+ * holding now, so the bytes stay inside two rounds no matter how many rounds
+ * have run. */
+static void state_does_not_accrue_as_a_page_runs(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    bool served = true;
+    size_t held_peak = 0u;
+
+    for (uint32_t round = 0u; round < 200u; ++round) {
+        cf_frame_begin(&ctx);
+
+        for (uint32_t i = 0u; i < 40u; ++i) {
+            char name[16];
+            snprintf(name, sizeof name, "r%u-%u", round, i);
+
+            if (cf_state(&ctx, cf_intern_text(&ctx.names, name), 64u) == NULL) {
+                served = false;
+            }
+        }
+
+        const size_t held = cf_state_bytes(&ctx);
+
+        if (held > held_peak) {
+            held_peak = held;
+        }
+    }
+
+    CF_CHECK(served, "every round's fresh names are served");
+    CF_CHECK(held_peak <= 2u * 40u * 64u, "8 000 names minted never held past two rounds");
+
+    cf_frame_begin(&ctx);
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_state_bytes(&ctx) == 0u, "a page that stops asking holds nothing");
+
+    cf_ctx_free(&ctx);
+}
+
+/* A block wants the bytes it asked for, not a share of a budget settled when
+ * the context began: the state a page keeps is bounded by what it uses. */
+static void a_block_larger_than_the_context_starts_with_is_served(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_frame_begin(&ctx);
+    char *block = cf_state(&ctx, cf_intern_text(&ctx.names, "buffer"), 1024u * 1024u);
+    CF_CHECK(block != NULL, "a state block is not capped by the arena a context began with");
+
+    if (block != NULL) {
+        block[0] = 'x';
+        block[1024u * 1024u - 1u] = 'y';
+        CF_CHECK(block[1024u * 1024u - 1u] == 'y', "the whole block is the caller's to write");
+    }
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_nameless_request_is_refused(void) {
     cf_ctx ctx;
 
@@ -189,6 +282,9 @@ int main(void) {
     CF_RUN(a_block_outlives_the_node_that_requested_it);
     CF_RUN(an_unrequested_block_retires);
     CF_RUN(a_grown_block_keeps_its_contents);
+    CF_RUN(a_retired_block_returns_its_bytes);
+    CF_RUN(state_does_not_accrue_as_a_page_runs);
+    CF_RUN(a_block_larger_than_the_context_starts_with_is_served);
     CF_RUN(a_nameless_request_is_refused);
 
     return CF_REPORT();

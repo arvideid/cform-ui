@@ -5,15 +5,14 @@
 #include <time.h>
 
 /*
- * The arena sizes the shell's context starts with. The frame side holds the
- * view, the rects and the paint list of the one frame in flight; the
- * persistent side holds the state blocks, scroll offsets and interned names
- * a page accrues. A page that outgrows either degrades in its own frame -
- * declarations the frame arena cannot serve paint nothing - rather than
- * failing the run, which is the no-op the shell's one failure mode allows.
+ * The arena size the shell's context starts with. It holds the view, the rects
+ * and the paint list of the one frame in flight; the state a page keeps across
+ * frames is not the arena's business, so nothing accrues here between one frame
+ * and the next. A page that outgrows it degrades in its own frame - declarations
+ * the arena cannot serve paint nothing - rather than failing the run, which is
+ * the no-op the shell's one failure mode allows.
  */
 #define APP_FRAME_BYTES (1024u * 1024u)
-#define APP_PERSISTENT_BYTES (256u * 1024u)
 
 /* The toggle lives in the same keyed memory a build's state does, so the
  * shell keeps no globals of its own. */
@@ -63,7 +62,7 @@ void cf_app_run(const cf_app_config *config) {
 
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, APP_FRAME_BYTES, APP_PERSISTENT_BYTES)) {
+    if (!cf_ctx_init(&ctx, APP_FRAME_BYTES)) {
         return;
     }
 

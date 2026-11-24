@@ -9,7 +9,7 @@
  * these cases declare a page, lay it out and read the dump line by line.
  */
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

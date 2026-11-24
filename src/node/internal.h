@@ -112,9 +112,9 @@ typedef struct claim_entry {
 bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared);
 
 /*
- * One state block, addressed by store slot. The block's bytes sit in the
- * persistent arena and are orphaned when the entry retires; the record is
- * what retires, and the store hands its slot to the next request.
+ * One state block, addressed by store slot. The block's bytes are the heap's and
+ * the entry owns them: retiring the record hands the bytes back, and the store
+ * gives the slot to the next request.
  */
 typedef struct state_entry {
     cf_name key;
@@ -125,6 +125,9 @@ typedef struct state_entry {
 
 /* Drops every entry the frame that just ended did not request. */
 void state_gc(cf_ctx *ctx);
+
+/* Hands back every block the context dies holding. */
+void state_free(cf_ctx *ctx);
 
 /*
  * States why this frame could not be completed: the console reads it as it

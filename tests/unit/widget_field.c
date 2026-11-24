@@ -94,7 +94,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
     CF_CHECK(text.length == 2u && bytes[0] == 'h' && bytes[1] == 'i',
              "what the keyboard wrote lands in the buffer in order");
 
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 8u});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)CF_KEY_BACKSPACE});
 
     CF_CHECK(text.length == 1u && bytes[0] == 'h', "backspace drops the last scalar");
 
@@ -106,7 +106,7 @@ static void a_run_appends_whatever_bytes_it_needs(void) {
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return;
     }
@@ -125,7 +125,7 @@ static void a_run_appends_whatever_bytes_it_needs(void) {
                  (unsigned char)bytes[1] == 0xA9u,
              "a two-byte run lands whole");
 
-    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 8u});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)CF_KEY_BACKSPACE});
 
     CF_CHECK(text.length == 0u, "and backspace drops it whole");
 
@@ -137,7 +137,7 @@ static void the_field_stops_at_the_capacity_its_buffer_stated(void) {
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 4u};
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return;
     }
@@ -193,7 +193,7 @@ static void a_disabled_field_neither_focuses_nor_edits(void) {
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return;
     }
@@ -218,7 +218,7 @@ static void a_key_that_carries_no_text_edits_nothing(void) {
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return;
     }

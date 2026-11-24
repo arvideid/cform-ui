@@ -48,13 +48,14 @@ typedef struct cf_node {
  * The context a build declares into and the diff reconciles against. The
  * frame arena holds everything one frame builds and reads - the view the
  * diff hands cf_layout, the walk's scratch - and is emptied when the next
- * frame begins. The persistent arena holds the state blocks cf_state hands
- * out; it is never cleared, so a block outlives every frame and a retired
- * one leaves its bytes orphaned until the context dies.
+ * frame begins.
  *
  * The node store holds the retained tree across frames, its slots addressed
  * by cf_id, so an id held past a rebuild reads as absent rather than as
- * someone else's node. The state store holds one record per state block.
+ * someone else's node. The state store holds one record per state block, and
+ * each block is a heap allocation the record gives back when it retires: a
+ * page that has been open for an hour holds the state it is using, not every
+ * size it ever asked for.
  *
  * The pointer and keyboard state is held the same way, as generational ids
  * rather than slot bits: a slot the store recycles inherits nothing from the
@@ -63,7 +64,6 @@ typedef struct cf_node {
  */
 typedef struct cf_ctx {
     cf_arena frame;
-    cf_arena persistent;
     cf_interner names;
     cf_store nodes;
     cf_store states;
@@ -92,7 +92,7 @@ typedef struct cf_ctx {
     cf_rect *rects;
 } cf_ctx;
 
-bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes);
+bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes);
 void cf_ctx_free(cf_ctx *ctx);
 
 /*
@@ -110,11 +110,18 @@ void cf_frame_begin(cf_ctx *ctx);
  * state is valid through the frame that obtained it and the one after.
  *
  * A name the builds stop requesting loses its block one frame later: the
- * next request under it answers fresh, zeroed memory. CF_NO_NAME names no
- * block, a zero size asks for none, and a persistent arena too small for
- * the request all answer NULL.
+ * next request under it answers fresh, zeroed memory, and the bytes the
+ * retired block held go back to the heap. CF_NO_NAME names no block, a zero
+ * size asks for none, and the heap refusing either answer NULL.
  */
 void *cf_state(cf_ctx *ctx, cf_name key, size_t size);
+
+/*
+ * The bytes every live state block holds. A page's worth is the count of its
+ * stateful nodes times what each keeps, so the number staying flat across
+ * frames is what says a long run is not growing.
+ */
+size_t cf_state_bytes(const cf_ctx *ctx);
 
 /*
  * The offset a scroller keeps under its name. The block is the same keyed

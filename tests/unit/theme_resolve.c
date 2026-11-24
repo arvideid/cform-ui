@@ -6,7 +6,7 @@
  * cases run on styles alone, the frame cases drive declarations through one
  * context and read the view the resolver leaves. */
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

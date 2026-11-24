@@ -20,7 +20,6 @@
 #define FRAMES 50u
 #define NS_PER_MS 1000000.0
 #define FRAME_BYTES (8u * 1024u * 1024u)
-#define PERSISTENT_BYTES (1u * 1024u * 1024u)
 
 #define SURFACE_WIDTH 1280.0f
 #define SURFACE_HEIGHT 720.0f
@@ -126,7 +125,7 @@ int main(void) {
 
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, FRAME_BYTES, PERSISTENT_BYTES)) {
+    if (!cf_ctx_init(&ctx, FRAME_BYTES)) {
         CF_CHECK(false, "the context starts");
         return CF_REPORT();
     }

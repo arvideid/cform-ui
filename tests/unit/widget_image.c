@@ -24,7 +24,7 @@ static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
 static void the_image_declares_its_texture_and_rests_on_the_theme(void) {
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return;
     }

@@ -16,7 +16,6 @@
 #define FRAMES 50u
 #define NS_PER_MS 1000000.0
 #define FRAME_BYTES (8u * 1024u * 1024u)
-#define PERSISTENT_BYTES (1u * 1024u * 1024u)
 
 static cf_node cells[ROWS][ROW_CHILDREN];
 static cf_node rows[ROWS];
@@ -89,7 +88,7 @@ int main(void) {
 
     cf_ctx ctx;
 
-    if (!cf_ctx_init(&ctx, FRAME_BYTES, PERSISTENT_BYTES)) {
+    if (!cf_ctx_init(&ctx, FRAME_BYTES)) {
         CF_CHECK(false, "the context starts");
         return CF_REPORT();
     }
@@ -111,15 +110,16 @@ int main(void) {
 
     /* The same declaration again and again: the idle path, where nothing
      * changes and nothing should be dirtied. */
-    const size_t idle_mark = cf_arena_mark(&ctx.persistent);
+    const size_t idle_state = cf_state_bytes(&ctx);
     const double diff_ms = frame_fastest_ms(&ctx, &root, FRAMES, false);
     printf("  idle diff, %u nodes:   %8.3f ms per frame\n", NODE_COUNT, diff_ms);
 
-    /* The budget a frame that changes nothing has to hit: no byte asked for
-     * above the cold build's, and no node left standing dirty, which is what
-     * tells the layout and the paint there is nothing to do. */
-    CF_CHECK(cf_arena_mark(&ctx.persistent) == idle_mark,
-             "an idle frame allocates nothing it did not already hold");
+    /* The budget a frame that changes nothing has to hit: no state asked for
+     * that the frame before it did not already hold, and no node left standing
+     * dirty, which is what tells the layout and the paint there is nothing to
+     * do. */
+    CF_CHECK(cf_state_bytes(&ctx) == idle_state,
+             "an idle frame holds no state the frame before it did not");
 
     uint32_t dirtied = 0u;
 

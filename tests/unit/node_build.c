@@ -11,7 +11,7 @@
  * declaration.
  */
 static bool context_of(cf_ctx *ctx, size_t frame_bytes) {
-    if (!cf_ctx_init(ctx, frame_bytes, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, frame_bytes)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

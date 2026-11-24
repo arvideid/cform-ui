@@ -2,8 +2,8 @@
 
 #include "node/internal.h"
 
-bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes) {
-    if (ctx == NULL || frame_bytes == 0u || persistent_bytes == 0u) {
+bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes) {
+    if (ctx == NULL || frame_bytes == 0u) {
         return false;
     }
 
@@ -13,14 +13,7 @@ bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes) {
         return false;
     }
 
-    if (!cf_arena_init(&ctx->persistent, persistent_bytes)) {
-        cf_arena_free(&ctx->frame);
-        *ctx = (cf_ctx){0};
-        return false;
-    }
-
     if (!cf_interner_init(&ctx->names, 0u)) {
-        cf_arena_free(&ctx->persistent);
         cf_arena_free(&ctx->frame);
         *ctx = (cf_ctx){0};
         return false;
@@ -28,7 +21,6 @@ bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes) {
 
     if (!cf_store_init(&ctx->nodes, sizeof(node_record), 0u)) {
         cf_interner_free(&ctx->names);
-        cf_arena_free(&ctx->persistent);
         cf_arena_free(&ctx->frame);
         *ctx = (cf_ctx){0};
         return false;
@@ -37,7 +29,6 @@ bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes, size_t persistent_bytes) {
     if (!cf_store_init(&ctx->states, sizeof(state_entry), 0u)) {
         cf_store_free(&ctx->nodes);
         cf_interner_free(&ctx->names);
-        cf_arena_free(&ctx->persistent);
         cf_arena_free(&ctx->frame);
         *ctx = (cf_ctx){0};
         return false;
@@ -58,10 +49,12 @@ void cf_ctx_free(cf_ctx *ctx) {
         return;
     }
 
+    /* The blocks outlive the store that indexes them, so they go first: after
+     * cf_store_free the records are gone and nothing remembers them. */
+    state_free(ctx);
     cf_store_free(&ctx->states);
     cf_store_free(&ctx->nodes);
     cf_interner_free(&ctx->names);
-    cf_arena_free(&ctx->persistent);
     cf_arena_free(&ctx->frame);
     *ctx = (cf_ctx){0};
 }

@@ -72,7 +72,7 @@ static cf_node box(float width, float height, cf_event_fn pointer, void *pointer
 }
 
 static bool context_of(cf_ctx *ctx) {
-    if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
+    if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
         return false;
     }

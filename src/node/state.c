@@ -19,19 +19,8 @@ static state_entry *entry_of_key(cf_ctx *ctx, cf_name key) {
     return NULL;
 }
 
-/* A fresh block from the persistent arena, zeroed: the zero of a state
- * block is "the build has never seen this name", the one state every
- * caller can read. */
-static void *block_alloc(cf_ctx *ctx, size_t size) {
-    void *block = cf_alloc(&ctx->persistent, size);
-
-    if (block != NULL) {
-        memset(block, 0, size);
-    }
-
-    return block;
-}
-
+/* A state block is zeroed when it is served: the zero of a block is "the build
+ * has never seen this name", the one state every caller can read. */
 void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
     if (ctx == NULL || key == CF_NO_NAME || size == 0u) {
         return NULL;
@@ -46,13 +35,13 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
             return entry->block;
         }
 
-        /* The block moves in the arena, whose old bytes are then orphaned:
-         * the copy hands the build the state it wrote before the request
-         * outgrew it. */
-        void *grown = block_alloc(ctx, size);
+        /* The block may move, and the copy hands the build the state it wrote
+         * before the request outgrew it. A refusal leaves the smaller block
+         * whole and still the entry's, so nothing is orphaned either way. */
+        void *grown = cf_resize_block(entry->block, entry->size, size);
 
         if (grown == NULL) {
-            reject_frame(ctx, "the persistent arena cannot grow a state block");
+            reject_frame(ctx, "the heap cannot grow a state block");
             return NULL;
         }
 
@@ -62,10 +51,10 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
         return grown;
     }
 
-    void *block = block_alloc(ctx, size);
+    void *block = cf_alloc_block(size);
 
     if (block == NULL) {
-        reject_frame(ctx, "the persistent arena cannot hold a state block");
+        reject_frame(ctx, "the heap cannot hold a state block");
         return NULL;
     }
 
@@ -81,18 +70,49 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
     return block;
 }
 
+size_t cf_state_bytes(const cf_ctx *ctx) {
+    if (ctx == NULL) {
+        return 0u;
+    }
+
+    size_t bytes = 0u;
+
+    for (uint32_t slot = 0; slot < ctx->states.extent; ++slot) {
+        const state_entry *entry = cf_store_get(&ctx->states, cf_store_id(&ctx->states, slot));
+
+        if (entry != NULL) {
+            bytes += entry->size;
+        }
+    }
+
+    return bytes;
+}
+
 /* Runs at cf_frame_begin with the counter already advanced. An entry is
  * kept when the frame that just ended requested it, so a name the builds
- * stop declaring loses its block one frame later and the store hands its
- * slot to the next request. The block's bytes are not freed - the
- * persistent arena has no free - they are orphaned until the context dies. */
+ * stop declaring loses its block one frame later: its bytes go back to the
+ * heap and the store hands its slot to the next request. */
 void state_gc(cf_ctx *ctx) {
     for (uint32_t slot = 0; slot < ctx->states.extent; ++slot) {
         const cf_id id = cf_store_id(&ctx->states, slot);
         const state_entry *entry = cf_store_get(&ctx->states, id);
 
         if (entry != NULL && entry->touched != ctx->frame_id - 1u) {
+            cf_free_block(entry->block);
             cf_store_remove(&ctx->states, id);
+        }
+    }
+}
+
+/* Hands back every block still live when the context dies. The store's own
+ * teardown would forget them: they were never its bytes. */
+void state_free(cf_ctx *ctx) {
+    for (uint32_t slot = 0; slot < ctx->states.extent; ++slot) {
+        const cf_id id = cf_store_id(&ctx->states, slot);
+        const state_entry *entry = cf_store_get(&ctx->states, id);
+
+        if (entry != NULL) {
+            cf_free_block(entry->block);
         }
     }
 }
