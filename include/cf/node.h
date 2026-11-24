@@ -78,6 +78,9 @@ typedef struct cf_ctx {
     cf_id focus_id;
     uint32_t root_slot;
     uint32_t frame_id;
+    /* The interval cf_frame_run was handed for the frame being run: the begin
+     * of the next one clears it back to nothing. */
+    float frame_seconds;
     /* The reason the last boundary refused since this frame began, or NULL.
      * Every message is a literal the library owns, so the answer outlives the
      * call that recorded it. */
@@ -191,6 +194,14 @@ void cf_tween_to(cf_tween *tween, float to, float duration, cf_ease ease);
 float cf_tween_step(cf_tween *tween, float seconds);
 
 /*
+ * The seconds the frame now running covers, the interval whoever ran the
+ * pipeline measured between this frame and the one before it. A frame begun
+ * without cf_frame_run covers nothing, which is what a build stepped by hand
+ * reads - and why nothing moves there until the caller says how long it was.
+ */
+float cf_frame_seconds(const cf_ctx *ctx);
+
+/*
  * Whether this frame changed the node - a fresh slot, or a declaration
  * whose style, measure, handlers or child count differs from the one the
  * slot held. The bit lives one frame: the next begin clears it, whether
@@ -253,13 +264,15 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);
 typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
 
 /*
- * One frame, end to end: begins the frame, runs the build and diffs its
- * declaration in the scope the build declared it in, resolves the theme over
- * the view, lays it out into the offer's points, and paints the commands into
- * `out`. A build that answers a page that paints nothing, or an offer of
- * nothing, empties the list instead of painting it.
+ * One frame, end to end: begins the frame, runs the build with `seconds` as
+ * the interval it may read, diffs its declaration in the scope the build
+ * declared it in, resolves the theme over the view, lays it out into the
+ * offer's points, and paints the commands into `out`. A build that answers a
+ * page that paints nothing, or an offer of nothing, empties the list instead
+ * of painting it.
  */
-void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, cf_command_list *out);
+void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
+                  cf_command_list *out);
 
 /*
  * Why the last boundary refused since this frame began, or NULL when nothing

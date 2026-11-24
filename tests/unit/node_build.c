@@ -57,7 +57,7 @@ static void the_macros_count_children_and_state_direction(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, page_of, (cf_size){100.0f, 100.0f}, &list);
+    cf_frame_run(&ctx, page_of, (cf_size){100.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(list.count == 3u, "three leaves fill, two containers paint nothing");
     CF_CHECK(command_at(&list, 0u) != NULL && command_at(&list, 0u)->rect.x == 0.0f &&

@@ -4,7 +4,8 @@
 
 /*
  * cf_frame_run is the pipeline the shell and the golden scenes play by hand:
- * these cases hand it a build and read the stream the whole pass leaves.
+ * these cases hand it a build and read the stream and the interval the whole
+ * pass leaves behind.
  */
 static bool context_of(cf_ctx *ctx) {
     if (!cf_ctx_init(ctx, 64u * 1024u, 4u * 1024u)) {
@@ -33,6 +34,16 @@ static cf_node nothing(cf_ctx *ctx) {
     return (cf_node){0};
 }
 
+/* What one frame read of its own clock, so a case can state what the build was
+ * handed rather than what it did with it. */
+static float seconds_seen;
+
+static cf_node ticking(cf_ctx *ctx) {
+    seconds_seen = cf_frame_seconds(ctx);
+
+    return one_box(ctx);
+}
+
 static void a_frame_runs_the_whole_pipeline_in_one_call(void) {
     cf_ctx ctx;
 
@@ -41,7 +52,7 @@ static void a_frame_runs_the_whole_pipeline_in_one_call(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, &list);
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(cf_frame_tree(&ctx) != NULL, "the diff built a view");
     CF_CHECK(list.count == 1u, "the box's fill is the whole stream");
@@ -62,7 +73,7 @@ static void a_build_that_answers_nothing_paints_nothing(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, &list);
+    cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(list.count == 0u, "a page that states nothing paints nothing");
     CF_CHECK(cf_error_message(&ctx) == NULL, "declaring nothing is not a refusal");
@@ -78,12 +89,37 @@ static void a_run_without_a_build_or_a_list_is_a_no_op(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, NULL, (cf_size){200.0f, 100.0f}, &list);
+    cf_frame_run(&ctx, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(list.count == 0u && cf_frame_tree(&ctx) == NULL, "no build declares nothing");
 
-    cf_frame_run(NULL, one_box, (cf_size){200.0f, 100.0f}, &list);
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, NULL);
+    cf_frame_run(NULL, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, NULL);
     CF_CHECK(list.count == 0u && cf_frame_tree(&ctx) == NULL, "the guards sit idle");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_frame_carries_the_seconds_it_was_handed(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_command_list list = {0};
+    seconds_seen = -1.0f;
+    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, 0.25f, &list);
+
+    CF_NEAR(seconds_seen, 0.25f);
+    CF_CHECK(list.count == 1u, "the interval is a reading, not another command");
+
+    /* A frame run without an interval covers none, so a tween stepped against it
+     * keeps the value it had rather than jumping on a number nobody measured. */
+    seconds_seen = -1.0f;
+    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_NEAR(seconds_seen, 0.0f);
+
+    CF_CHECK(cf_frame_seconds(NULL) == 0.0f, "no context covers no interval");
 
     cf_ctx_free(&ctx);
 }
@@ -93,6 +129,7 @@ int main(void) {
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
     CF_RUN(a_build_that_answers_nothing_paints_nothing);
     CF_RUN(a_run_without_a_build_or_a_list_is_a_no_op);
+    CF_RUN(a_frame_carries_the_seconds_it_was_handed);
 
     return CF_REPORT();
 }

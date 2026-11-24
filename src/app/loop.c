@@ -20,6 +20,13 @@
 #define INSPECTOR_KEY "cf/inspector"
 
 /*
+ * The longest interval a frame may claim. A page that was left undrawn while
+ * the window sat behind another one has nothing to catch up on: handed the whole
+ * gap, every tween it holds would jump the distance rather than move.
+ */
+#define FRAME_SECONDS_CAP 0.1f
+
+/*
  * The panel's frame time, in microseconds: what the engine spent producing
  * this frame. The draw calls and the wait for the device are not in it, so
  * the number moves when a page's build, layout or paint gets dearer and not
@@ -31,6 +38,14 @@ static uint32_t elapsed_us(const struct timespec *started, const struct timespec
     const int64_t microseconds = seconds * 1000000 + nanos / 1000;
 
     return microseconds > 0 ? (uint32_t)microseconds : 0u;
+}
+
+/* The same reading in the unit a build moves by: seconds, and capped for the
+ * reason FRAME_SECONDS_CAP states. */
+static float frame_interval(const struct timespec *last, const struct timespec *now) {
+    const float seconds = (float)elapsed_us(last, now) / 1000000.0f;
+
+    return seconds > FRAME_SECONDS_CAP ? FRAME_SECONDS_CAP : seconds;
 }
 
 void cf_app_run(const cf_app_config *config) {
@@ -56,6 +71,8 @@ void cf_app_run(const cf_app_config *config) {
     const cf_name inspector_key = cf_intern_text(&ctx.names, INSPECTOR_KEY);
     bool painted = false;
     cf_size offer = {0.0f, 0.0f};
+    struct timespec last;
+    timespec_get(&last, TIME_UTC);
 
     for (;;) {
         bool woke = false;
@@ -101,7 +118,12 @@ void cf_app_run(const cf_app_config *config) {
         struct timespec started;
         struct timespec finished;
         timespec_get(&started, TIME_UTC);
-        cf_frame_run(&ctx, config->build, offer, &list);
+        /* What passed since the frame before this one is the page's to spend:
+         * a build that steps a tween moves by the wall time the shell waited
+         * rather than by a guess at the display's rate. */
+        const float seconds = frame_interval(&last, &started);
+        last = started;
+        cf_frame_run(&ctx, config->build, offer, seconds, &list);
         timespec_get(&finished, TIME_UTC);
         const uint32_t frame_us = elapsed_us(&started, &finished);
         painted = true;
