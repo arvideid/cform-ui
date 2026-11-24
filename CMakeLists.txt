@@ -36,6 +36,7 @@ include(CMakePackageConfigHelpers)
 
 add_library(cf_base STATIC
     src/base/arena.c
+    src/base/block.c
     src/base/hash.c
     src/base/intern.c
     src/base/log.c

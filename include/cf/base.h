@@ -36,6 +36,22 @@ size_t cf_arena_mark(const cf_arena *arena);
 void cf_arena_rewind(cf_arena *arena, size_t mark);
 
 /*
+ * Bytes a caller owns until it hands them back. An arena serves what dies with
+ * the frame that built it; anything that outlives one - a state block a build
+ * keeps asking for, a name the interner holds - needs an allocation that can be
+ * released, and this is the only seam in the tree that asks the heap for it.
+ */
+void *cf_alloc_block(size_t size);
+
+/*
+ * The block at `size` bytes, the `held` it carried kept and the rest zeroed, so
+ * a grown block is still a valid start. NULL leaves the original whole and still
+ * the caller's.
+ */
+void *cf_resize_block(void *block, size_t held, size_t size);
+void cf_free_block(void *block);
+
+/*
  * Fixed-stride slots addressed by cf_id, growing by capacity doubling so no
  * element is ever relocated one at a time. Element pointers are invalidated by
  * the next cf_store_add — hold cf_id, not void *.
