@@ -107,9 +107,12 @@ jobs:
 
       - name: Configure
         run: |
+          # SDL is on so the sanitizer sees the draw path too: the recorder
+          # covers the command stream, but the texture, font and GPU tables only
+          # run their allocation through the SDL backend.
           cmake -S . -B build-san -G Ninja -DCMAKE_C_COMPILER=clang \
             -DCMAKE_BUILD_TYPE=Debug -DCFORM_BUILD_TESTS=ON \
-            -DCFORM_WITH_SANITIZERS=ON
+            -DCFORM_WITH_SANITIZERS=ON -DCFORM_WITH_SDL_BACKEND=ON
 
       - name: Build
         run: cmake --build build-san --parallel
