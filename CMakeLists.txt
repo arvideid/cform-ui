@@ -332,6 +332,11 @@ find_package(Python3 QUIET COMPONENTS Interpreter)
 set(CFORM_AMALGAMATED_LAYOUT "${CMAKE_BINARY_DIR}/amalgam/cf_layout.h")
 
 if(Python3_Interpreter_FOUND)
+    # The packer's whole input is these four headers: it reads no source file,
+    # and their intra-project includes stay inside the packed set (types.h is
+    # the only one they reach), so nothing is omitted and a stale header cannot
+    # survive a change to any of them. The implementation the header declares is
+    # linked from cf_layout by the test that compiles against it, not packed.
     add_custom_command(OUTPUT "${CFORM_AMALGAMATED_LAYOUT}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/amalgam"
         COMMAND ${Python3_EXECUTABLE} "${CMAKE_CURRENT_SOURCE_DIR}/tools/amalgamate.py"
