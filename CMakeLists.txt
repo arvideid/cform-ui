@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(cform-ui
-    VERSION 1.0.0
+    VERSION 0.1.0
     DESCRIPTION "A retained-mode, data-oriented UI framework in C."
     LANGUAGES C
 )
