@@ -28,6 +28,20 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "web",
+      "displayName": "WebAssembly",
+      "description": "Emscripten, Release: the gallery as a page a browser opens. Needs EMSDK in the environment, which emsdk_env.sh sets; a checkout in .vendor/emsdk works too.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/wasm",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CFORM_WITH_SDL_BACKEND": "ON",
+        "CFORM_BUILD_EXAMPLES": "ON",
+        "CFORM_BUILD_TESTS": "OFF"
+      }
     }
   ],
   "buildPresets": [
@@ -38,6 +52,10 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "web",
+      "configurePreset": "web"
     }
   ],
   "testPresets": [

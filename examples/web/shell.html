@@ -1,37 +1,47 @@
 <!doctype html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cform gallery</title>
-<style>
-  html, body {
-    margin: 0;
-    height: 100%;
-    background: #14151a;
-    color: #9aa0a6;
-    font: 13px/1.4 system-ui, sans-serif;
-  }
-  main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-    gap: 12px;
-  }
-  canvas {
-    background: #000;
-    box-shadow: 0 0 0 1px #2a2c34;
-  }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cform gallery</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: #14151a;
+      color: #9aa0a6;
+      font: 13px/1.4 system-ui, sans-serif;
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 12px;
+    }
+
+    canvas {
+      background: #000;
+      box-shadow: 0 0 0 1px #2a2c34;
+      /* The drawing buffer stays the size below, which is the size the page is
+     * laid out against; a smaller window scales that picture down rather than
+     * re-flowing it. */
+      max-width: 100%;
+    }
+  </style>
 </head>
+
 <body>
-<main>
-  <canvas id="canvas" width="480" height="320" tabindex="0"
-          oncontextmenu="event.preventDefault()">cform needs a browser with WebGL2.</canvas>
-  <p>Click the buttons, scroll the list, drag the field's text. F12 opens the inspector.</p>
-</main>
-{{{ SCRIPT }}}
+  <main>
+    <canvas id="canvas" width="960" height="600" tabindex="0" oncontextmenu="event.preventDefault()">cform needs a
+      browser with WebGL2.</canvas>
+    <p>Click the buttons, scroll the list, drag the field's text. F12 opens the inspector.</p>
+  </main>
+  {{{ SCRIPT }}}
 </body>
+
 </html>
