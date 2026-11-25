@@ -218,6 +218,14 @@ static void a_shell_that_cannot_run_sits_idle(void) {
         .build = counting_box,
         .backend = {.abi_version = CF_BACKEND_ABI_VERSION - 1u, .submit = fake_submit}});
     CF_CHECK(frames_built == 0u, "a backend reading an older stream is not drawn for");
+
+    /* submit present but present absent is the incomplete shell the loop must
+     * refuse before it ever paints: the old code built a frame and then called
+     * a NULL present, crashing on the first one. */
+    cf_app_run(&(cf_app_config){
+        .build = counting_box,
+        .backend = {.abi_version = CF_BACKEND_ABI_VERSION, .submit = fake_submit}});
+    CF_CHECK(frames_built == 0u, "a backend that cannot present is never entered");
 }
 
 int main(void) {

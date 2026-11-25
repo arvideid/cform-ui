@@ -52,6 +52,15 @@ void cf_app_run(const cf_app_config *config) {
         return;
     }
 
+    /* The shell presents every frame it paints, so a backend that can submit
+     * but not present is an incomplete shell rather than a working page. A
+     * host that only renders drives cf_frame_run itself and never comes here,
+     * so the loop is entered only when both halves of showing a frame exist. */
+    if (config->backend.present == NULL) {
+        cf_logf(CF_LOG_BACKEND, "app: the backend has no present, so the shell shows nothing");
+        return;
+    }
+
     /* A backend that reads a different command layout draws wrong rather than
      * failing, so the mismatch is settled before anything is submitted. */
     if (config->backend.abi_version != CF_BACKEND_ABI_VERSION) {
