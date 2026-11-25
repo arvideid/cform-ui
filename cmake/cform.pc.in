@@ -1,4 +1,8 @@
-prefix=@CMAKE_INSTALL_PREFIX@
+# The prefix is where this file sits, not where the package was configured to
+# install: a --prefix given only to `cmake --install` would otherwise leave a
+# baked configure-time path pointing somewhere the files never landed. This
+# file installs under ${exec_prefix}/lib/pkgconfig, so the prefix is two up.
+prefix=${pcfiledir}/../..
 libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
 includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 

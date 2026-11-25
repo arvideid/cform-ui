@@ -123,6 +123,60 @@ jobs:
       - name: Test
         run: ctest --test-dir build-san --output-on-failure -LE bench
 
+  # Installing is not the same as being consumable: a package whose discovery
+  # files name a build-tree path or a configure-time prefix fails on the
+  # consumer's machine, not the packager's. This job builds against an installed
+  # tree through both routes - find_package and the relocatable pkg-config file
+  # - at a prefix that was never configured, the only proof the floors reach a
+  # project outside the repository.
+  package:
+    name: Installed-consumer (CMake + pkg-config)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pkg-config
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config
+
+      - name: Install into an overridden prefix
+        run: |
+          cmake -S . -B build-pkg -DCMAKE_BUILD_TYPE=Release
+          cmake --install build-pkg --prefix "$PWD/stage"
+
+      - name: Consume through find_package
+        run: |
+          mkdir -p consumer-cmake && cd consumer-cmake
+          cat >CMakeLists.txt <<'EOF'
+cmake_minimum_required(VERSION 3.25)
+project(cform_consumer LANGUAGES C)
+find_package(cform-ui CONFIG REQUIRED)
+add_executable(consumer main.c)
+target_link_libraries(consumer PRIVATE cform::cf_base)
+EOF
+          cat >main.c <<'EOF'
+#include "cf/base.h"
+int main(void) {
+    cf_arena arena;
+    if (!cf_arena_init(&arena, 1024u)) {
+        return 1;
+    }
+    cf_arena_free(&arena);
+    return 0;
+}
+EOF
+          cmake -S . -B build -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/stage"
+          cmake --build build
+          ./build/consumer
+
+      - name: Consume through pkg-config
+        run: |
+          mkdir -p consumer-pc && cd consumer-pc
+          export PKG_CONFIG_PATH="$GITHUB_WORKSPACE/stage/lib/pkgconfig"
+          pkg-config --exists --print-errors cform
+          cc main.c $(pkg-config --cflags --libs cform) -o consumer
+          ./consumer
+
   # The browser is part of the reach claim, and the gallery in a tab is the same
   # source through the same backend, so the WebAssembly compile is a gate and not
   # a local step. The SDK is pinned because an ABI change mid-air would fail the
