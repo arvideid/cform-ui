@@ -418,6 +418,51 @@ static void a_tree_or_list_that_is_not_there_paints_nothing(void) {
     CF_CHECK(list.count == 0u, "an input that is not there paints nothing");
 }
 
+/*
+ * The fourth scratch-exhaustion class the roadmap names: the lines a text box
+ * counted have no room, even though the command array did. The box's own fill
+ * stays because the command list was allocated first, the refusal is reported
+ * once, and the next frame with a real arena paints the whole box - the walk
+ * does not remember the refusal past the arena clear.
+ */
+static void refused_text_lines_keep_their_box_and_say_so(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].background = (cf_opt_color){.present = true, .value = (cf_color){0u, 0u, 0u, 255u}};
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&label_text;
+    f.node_count = 1u;
+    /* "aa bb cc" at ten points a glyph and a box thirty wide lays three lines. */
+    f.rects[0] = box_at(0.0f, 0.0f, 30.0f, 60.0f);
+
+    /* The command-array allocation fills the arena exactly, so the walk has
+     * room for the box's own fill but none for the lines it counted. */
+    cf_arena tiny;
+    CF_CHECK(cf_arena_init(&tiny, (size_t)FIRST_CAPACITY * sizeof(cf_command)),
+             "the test needs scratch that fits one command array and nothing else");
+
+    log_count = 0;
+    cf_log_install(count_paint_logs, NULL);
+
+    cf_command_list refused = {0};
+    (void)paint_with(&tiny, &f, box_at(0.0f, 0.0f, 100.0f, 100.0f), &refused);
+
+    CF_CHECK(refused.count == 1u,
+             "the box's own fill stays; the lines it cannot lay paint nothing");
+    CF_CHECK(log_count == 1, "the refusal is reported once, on the paint channel");
+
+    cf_arena_free(&tiny);
+    cf_log_install(NULL, NULL);
+
+    /* Recovery: the same tree against the real arena paints the fill and the
+     * three lines; nothing about the last frame's refusal carries over. */
+    cf_command_list next = {0};
+    paint(&f, box_at(0.0f, 0.0f, 100.0f, 100.0f), &next);
+    CF_CHECK(next.count == 4u, "the next valid frame paints the fill and every line");
+}
+
 /* A square fill is cut rather than scissored: rewriting its rect costs the
  * picture nothing, because the rect is the whole of what the command draws. */
 static void a_box_that_clips_cuts_its_children_square_fills(void) {
@@ -854,6 +899,7 @@ int main(void) {
     CF_RUN(text_culls_per_line_inside_a_clip);
     CF_RUN(an_exhausted_scratch_paints_nothing_and_says_so);
     CF_RUN(a_truncated_list_keeps_the_commands_that_fit);
+    CF_RUN(refused_text_lines_keep_their_box_and_say_so);
     CF_RUN(a_tree_or_list_that_is_not_there_paints_nothing);
     CF_RUN(an_image_paints_its_texture_into_its_box);
     CF_RUN(an_image_at_a_clip_names_the_clip_it_is_cut_by);
