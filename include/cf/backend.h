@@ -77,6 +77,11 @@ typedef struct cf_sdl_config {
     const char *title;
     uint32_t width;
     uint32_t height;
+    /* The smallest window the drag allows, in the same logical points as the
+     * start size, so a page is never asked to lay out in less room than its
+     * own declarations can fit. Zero leaves the window unbounded. */
+    uint32_t min_width;
+    uint32_t min_height;
 } cf_sdl_config;
 
 /* A backend drawing to a new window. A window that cannot open is a backend

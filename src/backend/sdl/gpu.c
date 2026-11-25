@@ -539,9 +539,13 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
 
+    /* Resizable from the first frame: the shell re-reads the surface every
+     * frame and lays the page out against whatever it says, so a window the
+     * person drags is the same page at another width rather than a clipped
+     * one. The size in the config is where it starts, not where it stays. */
     if (!SDL_CreateWindowAndRenderer(config->title != NULL ? config->title : "cform",
-                                     (int)config->width, (int)config->height, 0, &window,
-                                     &renderer)) {
+                                     (int)config->width, (int)config->height, SDL_WINDOW_RESIZABLE,
+                                     &window, &renderer)) {
         cf_logf(CF_LOG_BACKEND, "backend: no window: %s", SDL_GetError());
         SDL_Quit();
         return (cf_backend){0};
@@ -549,6 +553,13 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
 
     (void)SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     (void)SDL_SetRenderVSync(renderer, 1);
+
+    /* A floor on the drag, in the same points SDL_GetWindowSize reports, so it
+     * bites at the size the page lays out against rather than at some pixel
+     * count the density has since moved. */
+    if (config->min_width != 0u || config->min_height != 0u) {
+        SDL_SetWindowMinimumSize(window, (int)config->min_width, (int)config->min_height);
+    }
 
     /* Text events are off until a window asks for them, and a window that
      * never receives them has no way to say what the keyboard typed. */
