@@ -1,5 +1,3 @@
-#include <string.h>
-
 #include "cf/node.h"
 
 #include "node/internal.h"
@@ -35,8 +33,10 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
             return entry->block;
         }
 
-        /* The block may move, and the copy hands the build the state it wrote
-         * before the request outgrew it. A refusal leaves the smaller block
+        /* cf_resize_block grows in place where it can and, when it must move
+         * the block, hands back the bytes already carried over and the tail
+         * zeroed. Copying from the old address after it would read memory
+         * realloc has just handed back. A refusal leaves the smaller block
          * whole and still the entry's, so nothing is orphaned either way. */
         void *grown = cf_resize_block(entry->block, entry->size, size);
 
@@ -45,7 +45,6 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
             return NULL;
         }
 
-        memcpy(grown, entry->block, entry->size);
         entry->block = grown;
         entry->size = size;
         return grown;
@@ -62,6 +61,9 @@ void *cf_state(cf_ctx *ctx, cf_name key, size_t size) {
     state_entry *fresh = cf_store_add(&ctx->states, &id);
 
     if (fresh == NULL) {
+        /* The block was already paid for; a store that will not take it hands
+         * the bytes back rather than leak them on the way out. */
+        cf_free_block(block);
         reject_frame(ctx, "the state store cannot hold another block");
         return NULL;
     }

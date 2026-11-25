@@ -276,6 +276,39 @@ static void a_nameless_request_is_refused(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A grow that moves the block must still hand back what the page wrote first:
+ * the copy that used to trail realloc read the address realloc had just
+ * released. Each step is far larger than the block it replaces, so stretching
+ * the same chunk in place is not on the table and relocation is the only
+ * answer - which is exactly the move the old memcpy read past. */
+static void a_growth_that_moves_the_block_keeps_its_contents(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+
+    cf_frame_begin(&ctx);
+    uint32_t *block = cf_state(&ctx, tab, sizeof(uint32_t));
+    CF_CHECK(block != NULL, "the first block is served");
+
+    if (block != NULL) {
+        *block = 0xDEADBEEFu;
+    }
+
+    const size_t steps[] = {1024u, 128u * 1024u, 768u * 1024u};
+
+    for (size_t i = 0u; i < 3u; ++i) {
+        uint32_t *grown = cf_state(&ctx, tab, steps[i]);
+        CF_CHECK(grown != NULL, "the block grows to the next size");
+        CF_CHECK(grown != NULL && grown[0] == 0xDEADBEEFu, "the moved block keeps its first word");
+    }
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node state\n");
 
@@ -285,6 +318,7 @@ int main(void) {
     CF_RUN(a_block_outlives_the_node_that_requested_it);
     CF_RUN(an_unrequested_block_retires);
     CF_RUN(a_grown_block_keeps_its_contents);
+    CF_RUN(a_growth_that_moves_the_block_keeps_its_contents);
     CF_RUN(a_retired_block_returns_its_bytes);
     CF_RUN(state_does_not_accrue_as_a_page_runs);
     CF_RUN(a_block_larger_than_the_context_starts_with_is_served);
