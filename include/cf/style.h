@@ -212,6 +212,18 @@ typedef struct cf_style {
     float radius;
 
     /*
+     * The preferred ratio between the box's border width and its border
+     * height, CSS's `aspect-ratio: <number>`. A ratio of zero states
+     * nothing, so a stored style from before the field existed keeps
+     * sizing the way it always did. When the ratio is stated and exactly
+     * one axis is settled, the other axis reads as its border box divided
+     * by the ratio, bounded against the box's own min and max before
+     * anything inside it is measured. Both axes declared, both auto, or
+     * no stated ratio leaves the ratio out of the answer.
+     */
+    float aspect_ratio;
+
+    /*
      * The tone this box's own text paints with. A box that states none has
      * no text to paint, so the color is the text's on-switch as well as its
      * ink; the widget that owns a box decides which theme tone it carries.

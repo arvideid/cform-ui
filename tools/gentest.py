@@ -67,6 +67,7 @@ BOX_FIELDS = ("margin", "padding", "border", "inset")
 FIELD_ORDER = SIZES + BOX_FIELDS + ("column_gap", "row_gap", "flex_grow",
                                     "flex_shrink", "position", "display",
                                     "box_sizing", "overflow_x", "overflow_y",
+                                    "aspect_ratio",
                                     "direction", "wrap", "justify_content",
                                     "align_items", "align_self", "align_content")
 
@@ -157,8 +158,7 @@ EDGE_SETTERS = {"Margin": "margin", "Padding": "padding", "Border": "border",
 # not model it. `box-sizing` is here for the same reason: `content-box` is a
 # cf_box_sizing value the BoxSizing setter handler reads, and `border-box` is
 # what cf_style's zero already gives.
-UNSUPPORTED_SUFFIXES = ("AspectRatio",
-                        "MaxContent", "MinContent", "FitContent", "Stretch",
+UNSUPPORTED_SUFFIXES = ("MaxContent", "MinContent", "FitContent", "Stretch",
                         "TemplateRows", "TemplateColumns")
 
 DECL = re.compile(r"YGNodeRef (\w+) = YGNodeNew")
@@ -315,6 +315,17 @@ class Fixture:
                 style["overflow_y"] = value
             else:
                 self._reject("needs " + variant)
+            return
+
+        if setter == "AspectRatio":
+            # A ratio of 0 is unset in cf_style's reading of the field, which
+            # is exactly the fixture's zero_aspect_ratio_behaves_like_auto.
+            # Any other number is stored as the border-box aspect rule.
+            value = measure(arguments[1])
+            if value is None:
+                self._reject("an aspect ratio that is not a number")
+            elif value > 0.0:
+                style["aspect_ratio"] = "{:.1f}f".format(value)
             return
 
         if setter in NUMBER_SETTERS:

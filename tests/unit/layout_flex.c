@@ -914,6 +914,88 @@ static void a_full_measure_table_answers_from_the_computation(void) {
     cf_arena_free(&wide);
 }
 
+/*
+ * aspect-ratio fills in the axis the box left automatic, so a 2:1 rectangle
+ * sized by its width is 50 tall when the width is 100. The ratio lives on the
+ * border box, so a padding on the box adds to what the ratio settles rather
+ * than to what it measures - the same rule CSS writes. A row container packs
+ * widths along its main axis and stretches its items to its height unless the
+ * container says otherwise, so align-items is what a test needs to fix first.
+ */
+static void an_aspect_ratio_fills_in_the_axis_the_box_left_auto(void) {
+    fixture f;
+    cf_style stacking = cf_style_default();
+    stacking.width = CF_PX(400.0f);
+    stacking.height = CF_PX(400.0f);
+    stacking.align_items = CF_ALIGN_START;
+    const uint32_t root = begin(&f, stacking);
+
+    cf_style wide = cf_style_default();
+    wide.width = CF_PX(100.0f);
+    wide.aspect_ratio = 2.0f;
+    const uint32_t leaf = append(&f, root, wide);
+
+    cf_style tall = cf_style_default();
+    tall.height = CF_PX(100.0f);
+    tall.aspect_ratio = 2.0f;
+    const uint32_t other = append(&f, root, tall);
+
+    arrange_in(&f, 400.0f, 400.0f);
+
+    /* The row packs two items side by side; each axis of each item follows its
+     * own rule. The tall item has no width and no aspect rule fires for its
+     * main axis because it is the derived one - the ratio needs a settled axis
+     * to divide, and the main axis is measured first, not settled. */
+    CF_NEAR(f.rects[leaf].width, 100.0f);
+    CF_NEAR(f.rects[leaf].height, 50.0f);
+    CF_NEAR(f.rects[other].height, 100.0f);
+}
+
+/* A ratio on a box whose both axes already read a length says nothing: the
+ * declarations are the truth and the box keeps the size it was given. Zero
+ * is unset, which is what the fixture that reads 0 for its ratio expects. */
+static void an_aspect_ratio_yields_to_both_axes_being_declared(void) {
+    fixture f;
+    cf_style stacking = cf_style_default();
+    stacking.width = CF_PX(400.0f);
+    stacking.height = CF_PX(400.0f);
+    stacking.align_items = CF_ALIGN_START;
+    const uint32_t root = begin(&f, stacking);
+
+    cf_style box = cf_style_default();
+    box.width = CF_PX(80.0f);
+    box.height = CF_PX(30.0f);
+    box.aspect_ratio = 2.0f;
+    const uint32_t leaf = append(&f, root, box);
+
+    arrange_in(&f, 400.0f, 400.0f);
+
+    CF_NEAR(f.rects[leaf].width, 80.0f);
+    CF_NEAR(f.rects[leaf].height, 30.0f);
+}
+
+/* A min on the derived axis still gets the last word when the ratio would put
+ * the box below it; the ratio is a suggestion the bounds overrule. */
+static void an_aspect_ratio_is_bounded_by_its_axis_minimum(void) {
+    fixture f;
+    cf_style stacking = cf_style_default();
+    stacking.width = CF_PX(400.0f);
+    stacking.height = CF_PX(400.0f);
+    stacking.align_items = CF_ALIGN_START;
+    const uint32_t root = begin(&f, stacking);
+
+    cf_style wide = cf_style_default();
+    wide.width = CF_PX(100.0f);
+    wide.aspect_ratio = 4.0f; /* would put the height at 25 */
+    wide.min_height = CF_PX(40.0f);
+    const uint32_t leaf = append(&f, root, wide);
+
+    arrange_in(&f, 400.0f, 400.0f);
+
+    CF_NEAR(f.rects[leaf].height, 40.0f);
+    CF_NEAR(f.rects[leaf].width, 100.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -951,6 +1033,9 @@ int main(void) {
     CF_RUN(a_tree_or_rect_array_that_is_not_there_changes_nothing);
     CF_RUN(an_offer_free_spine_stays_exact_below_a_percent_padded_root);
     CF_RUN(a_full_measure_table_answers_from_the_computation);
+    CF_RUN(an_aspect_ratio_fills_in_the_axis_the_box_left_auto);
+    CF_RUN(an_aspect_ratio_yields_to_both_axes_being_declared);
+    CF_RUN(an_aspect_ratio_is_bounded_by_its_axis_minimum);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

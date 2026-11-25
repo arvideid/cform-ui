@@ -392,10 +392,25 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
 
     float width = 0.0f;
     float height = 0.0f;
-    const bool has_width =
-        settled_length(verdict.width, width_decl, constraint.width, measuring, &width);
-    const bool has_height =
+    bool has_width = settled_length(verdict.width, width_decl, constraint.width, measuring, &width);
+    bool has_height =
         settled_length(verdict.height, height_decl, constraint.height, measuring, &height);
+
+    /* aspect-ratio §: when exactly one axis is settled and the box states a
+     * ratio, the other axis is that axis divided by the ratio, on the border
+     * box. Both axes settled, both auto, or no ratio means the ratio says
+     * nothing; a stored style from before the field reads unset (0) and keeps
+     * sizing the way it always did. The bounds below still clamp each axis,
+     * so a min or max on the derived side has the last word. */
+    if (style->aspect_ratio > 0.0f && has_width != has_height) {
+        if (has_width) {
+            height = width / style->aspect_ratio;
+        } else {
+            width = height * style->aspect_ratio;
+        }
+        has_width = true;
+        has_height = true;
+    }
 
     /* A bound settles an axis before anything is measured inside it, so children
      * wrap at the width their box really gets rather than at the one its

@@ -41,12 +41,12 @@ ones a browser would infer.
 
 ## The score
 
-**504 of 516 ported fixtures match** — 98% of what could be ported, 93% of Yoga's
-whole suite. Measured at the branch tip that added the overflow port. The tier
-prints a per-suite table on every run, so `ctest -R yoga` is the check and this
-file is only the record.
+**505 of 517 ported fixtures match** — 98% of what could be ported, 93% of Yoga's
+whole suite. Measured at the branch tip that added the aspect-ratio port. The
+tier prints a per-suite table on every run, so `ctest -R yoga` is the check and
+this file is only the record.
 
-Of Yoga's 543 fixtures, 516 can be expressed in `cf_style` at all. The other 27
+Of Yoga's 543 fixtures, 517 can be expressed in `cf_style` at all. The other 26
 need a feature the struct has no field for, and they are counted rather than
 quietly dropped, so the denominator stays the whole suite:
 
@@ -55,7 +55,6 @@ quietly dropped, so the denominator stays the whole suite:
 | 12 | a measure callback, so the answer depends on font metrics |
 | 9 | `display: contents` |
 | 5 | an `auto`-sizing keyword (`max-content`, `stretch`) |
-| 1 | `aspect-ratio` |
 
 ## The 12 misses are one bug, and it isn't a layout bug
 
