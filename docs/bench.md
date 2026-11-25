@@ -56,7 +56,10 @@ handed.
 | paint | 12,475 shapes out of 10,000 boxes | 0.28 ms |
 
 Redrawing that page needs 3,321 KiB of scratch, which is the number a shell sizes
-its memory pool against.
+its memory pool against. Part of it tracks the deepest path and part tracks the
+node count: the content-measurement cache carries a row per node in the
+declaration, so the pool does not shrink just because the tree is shallow. See
+`cf_layout` in `cf/layout.h` for what `scratch` holds.
 
 ## What a page costs, and whether it grows
 

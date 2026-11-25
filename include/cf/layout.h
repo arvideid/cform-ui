@@ -48,10 +48,13 @@ typedef struct cf_tree {
  * origin is `origin`. Nodes it does not reach keep whatever rect they had, so
  * a caller may reuse one rect array across frames.
  *
- * `scratch` holds the per-node line and item tables. Each node hands its
- * scratch back before descending, so the high-water mark tracks the deepest
- * path rather than the node count, and a caller that clears the arena once per
- * frame keeps layout allocation-free overall.
+ * `scratch` holds two kinds of table. The per-node line and item tables are
+ * handed back before a node descends, so their high-water mark tracks the
+ * deepest path, not the node count. The content-measurement cache, however,
+ * carries one offer row and one frame row per node in the declaration, so the
+ * mark also grows with `node_count` - a caller sizing a pool pays for the wider
+ * of the two, not for depth alone. A caller that clears the arena once per frame
+ * still keeps layout allocation-free overall.
  *
  * Failure policy, identical everywhere the engine can fail: when `scratch`
  * cannot serve a request, that node is laid out as a leaf - its own rect is
