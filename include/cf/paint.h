@@ -27,12 +27,13 @@ typedef struct cf_command {
     cf_command_kind kind;
     cf_rect rect;
     /* The box this command must not paint outside: the nearest ancestor that
-     * clips its content, narrowed by whatever clipped that ancestor. A fill
-     * and an image arrive already cut to it, but a stroke and a text line
-     * cannot be cut by rewriting their own rect - the corners would move and
-     * the baseline would shift - so they keep their true rect and the backend
-     * scissors. A clip with no extent is the output itself, which the device
-     * bounds without being told. */
+     * clips its content, narrowed by whatever clipped that ancestor. A sharp
+     * fill (radius 0) arrives already cut to it, since a plain rectangle is the
+     * whole of what it draws, but a rounded fill, an image, a stroke and a text
+     * line cannot be cut by rewriting their own rect - the corner, the texture
+     * UVs, the stroke and the baseline would move - so they keep their true rect
+     * and the backend scissors to this clip. A clip with no extent is the output
+     * itself, which the device bounds without being told. */
     cf_rect clip;
     cf_color color;
     /* The stroke widths of a border, painted inside rect in cf_edges order;
@@ -91,10 +92,11 @@ cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kin
  * per line, and a box whose measure slot is cf_image_measure paints its
  * content's texture into its rect. A box that does not
  * reach `viewport` paints nothing; one that straddles a clip keeps its whole
- * rect and names that clip in `cf_command.clip`, because cutting a stroke or
- * a line by changing what it draws is not the stream's decision - the backend
- * scissors to it. Fills and images are already cut, since cutting a rectangle
- * is the whole of what they draw.
+ * rect and names that clip in `cf_command.clip`, because cutting a rounded
+ * corner, a texture, a stroke or a line by changing what it draws is not the
+ * stream's decision - the backend scissors to it. Only a sharp fill (radius 0)
+ * is cut in advance, since cutting a plain rectangle is the whole of what it
+ * draws.
  *
  * `scratch` holds the command array and the line table a text node asks for.
  * The walk visits a node once and does not allocate per node beyond the

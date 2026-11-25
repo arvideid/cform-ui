@@ -106,11 +106,15 @@ scrolling box keeps its full size, because `cf_paint` only drops shapes that mis
 the viewport entirely. What cuts it is `clip`: the nearest box that hides its
 overflow.
 
-- `CF_COMMAND_FILL` and `CF_COMMAND_IMAGE` arrive **already cut** to `clip`.
-  Cutting the rectangle *is* all they draw, so the engine can do it.
-- `CF_COMMAND_BORDER` and `CF_COMMAND_TEXT` **cannot be** cut, because shrinking
-  the box would move the corner a stroke rounds and the baseline a line sits on.
-  You have to clip those two yourself, with the device's scissor set to `clip`.
+- A **sharp fill** (radius `0`) arrives **already cut** to `clip`: a plain
+  rectangle is the whole of what it draws, so cutting the rect is free and the
+  device paints fewer pixels for the same picture.
+- A **rounded fill, an image, a border and a text line cannot** be cut, because
+  shrinking the rect would move the corner a radius rounds, remap the UVs an
+  image's texture is drawn through, shift the stroke a border rounds, or lift the
+  baseline text sits on. They keep their true `rect` and the exact `clip`, and
+  you must scissor to `clip` for all four. Skipping the scissor lets them paint
+  over the pane they are meant to spill out of.
 
 A `clip` with no extent means the whole output: bound to the device edges without
 being told, so a page that never scrolls costs you no state change at all.
