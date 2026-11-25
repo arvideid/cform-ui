@@ -58,6 +58,30 @@ static void a_declaration_holds_a_length_only_when_it_can_be_measured(void) {
              "a share of leftover space is not a measurement");
 }
 
+/*
+ * The sizing keyword kinds are a rule the layout pass runs rather than a
+ * scalar it reads, so the scalar helpers treat them the way they treat auto
+ * and fr. A caller summing box edges still wants zero, and a caller asking
+ * whether a length is present wants nothing back.
+ */
+static void the_sizing_keywords_hold_no_scalar(void) {
+    float value = -1.0f;
+
+    CF_NEAR(cf_length_resolve(CF_MAX_CONTENT, 300.0f), 0.0f);
+    CF_NEAR(cf_length_resolve(CF_STRETCH, 300.0f), 0.0f);
+
+    CF_CHECK(!cf_length_of(CF_MAX_CONTENT, CF_PX(200.0f), &value),
+             "max-content is decided by the pass that measures, not by a scalar reader");
+    CF_CHECK(!cf_length_of(CF_STRETCH, CF_PX(200.0f), &value),
+             "stretch is decided by the pass that arranges, not by a scalar reader");
+
+    /* Neither keyword is auto, so a caller asking whether the box hugs its
+     * content still gets a distinct answer from a caller asking whether a
+     * scalar was stored. */
+    CF_CHECK(!cf_length_is_auto(CF_MAX_CONTENT), "max-content is not auto");
+    CF_CHECK(!cf_length_is_auto(CF_STRETCH), "stretch is not auto");
+}
+
 static void a_box_resolves_every_side_against_the_inline_size(void) {
     const cf_box padding = {
         .left = CF_PX(4.0f),
@@ -207,6 +231,7 @@ int main(void) {
     CF_RUN(clamp_bounds_are_lengths_too);
     CF_RUN(clamp_reads_a_negative_extent_as_zero);
     CF_RUN(a_declaration_holds_a_length_only_when_it_can_be_measured);
+    CF_RUN(the_sizing_keywords_hold_no_scalar);
     CF_RUN(a_box_resolves_every_side_against_the_inline_size);
     CF_RUN(negative_padding_and_border_read_as_zero);
     CF_RUN(direction_separates_the_axis_from_the_packing_edge);
