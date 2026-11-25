@@ -341,6 +341,29 @@ SDL itself.
 `--preset dev` is Debug with tests and examples on; `--preset release` is the
 same graph optimised, which is where the timing numbers come from.
 
+### What the library guarantees
+
+**Thread confinement.** A `cf_ctx` is not safe to touch from more than one
+thread at a time, and neither are the arena or interner it owns. A host may run
+several contexts in parallel, one per thread; it must not share a context
+across threads and call it from both without external synchronisation. The log
+sink is process-global and writes through one pointer: installing it while
+another thread logs is a data race.
+
+**Supported compilers and platforms.** CI compiles and tests Debug and Release
+on Windows, macOS and Linux. The default compiler on each (MSVC, Apple Clang,
+GCC) is the one exercised; the ASan/UBSan job adds Clang on Linux. Emscripten
+builds a WebAssembly gallery but does not run tests there. A C17-conforming
+compiler is the only language requirement; no GNU or vendor extensions appear
+in portable code.
+
+**Lifetime.** A built declaration (`cf_node`) is borrowed only for the duration
+of one `cf_diff` call — after it returns the retained tree is independent.
+Public rects, view arrays and the command list live in the frame arena and are
+valid until the next `cf_frame_begin`. An interned name lives until the
+interner is destroyed, and a state block until it is released or the context is
+freed.
+
 ### In a browser
 
 The tab runs the same `examples/gallery.c` through the same SDL backend — SDL's
