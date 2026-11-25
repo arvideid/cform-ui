@@ -236,6 +236,14 @@ foreach(layer IN LISTS CFORM_LAYER_TARGETS)
         PRIVATE src
     )
 
+    # The dialect travels with the target rather than with whoever configured
+    # it, so a project taking these layers through add_subdirectory inherits the
+    # same C17 contract a top-level or installed build gets - the guard at the
+    # top of this file only speaks for a build rooted here. The namespaced alias
+    # then lets both adoption routes spell the targets the same way.
+    target_compile_features(${layer} PUBLIC c_std_17)
+    add_library(cform::${layer} ALIAS ${layer})
+
     if(CFORM_WARNINGS)
         target_compile_options(${layer} PRIVATE ${CFORM_WARNINGS})
     endif()

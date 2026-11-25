@@ -315,6 +315,10 @@ find_package(cform-ui REQUIRED CONFIG)
 target_link_libraries(my_app PRIVATE cform::cf_app)   # or cform::cf_layout alone
 ```
 
+Embedding the sources instead with `add_subdirectory` is the same: the layers
+carry their own C17 requirement and the same `cform::` target names, so a host
+that states neither still builds against them.
+
 `pkg-config --cflags --libs cform` covers builds that don't use CMake. The SDL
 backend isn't installed on purpose — a program that opens a window already links
 SDL itself.
