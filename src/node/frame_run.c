@@ -18,6 +18,11 @@ void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
     }
 
     cf_frame_begin(ctx);
+    /* The frame replaces the stream rather than adding to it: a list carried
+     * over from an earlier run would append onto pointers into the arena that
+     * cf_frame_begin has just cleared. Zeroing it hands cf_paint an empty list
+     * to fill from scratch, so the run's output is only this frame's commands. */
+    *out = (cf_command_list){0};
     /* The begin clears it, so the run is the one that states it. */
     ctx->frame_seconds = seconds;
     const cf_node root = build(ctx);

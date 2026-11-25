@@ -126,12 +126,37 @@ static void a_frame_carries_its_seconds_and_may_ask_for_another(void) {
     cf_ctx_free(&ctx);
 }
 
+/* cf_frame_run replaces the stream rather than adding to it: one list handed
+ * to two identical frames must answer with a single fill each time, and an
+ * empty frame after a full one must leave nothing standing. bench_memory
+ * reuses a list this way, so the run owns the reset the old code skipped. */
+static void a_reused_list_is_replaced_not_appended(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_command_list list = {0};
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(list.count == 1u, "the first run paints one fill");
+
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(list.count == 1u, "the second run on the same list still paints one fill");
+
+    cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(list.count == 0u, "a run that paints nothing empties the reused list");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node frame run\n");
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
     CF_RUN(a_build_that_answers_nothing_paints_nothing);
     CF_RUN(a_run_without_a_build_or_a_list_is_a_no_op);
     CF_RUN(a_frame_carries_its_seconds_and_may_ask_for_another);
+    CF_RUN(a_reused_list_is_replaced_not_appended);
 
     return CF_REPORT();
 }
