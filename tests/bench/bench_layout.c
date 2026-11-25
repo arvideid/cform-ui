@@ -269,8 +269,62 @@ static void bench_measured_page(cf_available offer) {
     }
 }
 
+/*
+ * A grid pays for the same thing more than once: it collects contributions from
+ * every item on both axes and twice per axis (min-content floor, then the
+ * intrinsic mode the container is being sized at). Cells carry a callback
+ * instead of a stated height, and the ratio reports what the grid sizing walk
+ * actually asks for - Roadmap Section 6 item 3 wants that pass counted, not
+ * inferred from milliseconds.
+ */
+static void build_measured_grid(uint32_t wanted_columns) {
+    for (uint32_t column = 0u; column < wanted_columns; ++column) {
+        columns[column] = (cf_track){.min = CF_AUTO, .max = CF_FR(1.0f)};
+    }
+
+    cf_style grid = cf_style_default();
+    grid.display = CF_DISPLAY_GRID;
+    grid.column_tracks = columns;
+    grid.column_count = wanted_columns;
+    grid.column_gap = CF_PX(4.0f);
+    grid.row_gap = CF_PX(4.0f);
+    styles[0] = grid;
+    measures[0] = NULL;
+
+    for (uint32_t slot = 1u; slot < MAX_NODES; ++slot) {
+        styles[slot] = cf_style_default();
+        measured_widths[slot] = MEASURED_WIDTH;
+        measures[slot] = counted_measure;
+        measure_data[slot] = &measured_widths[slot];
+        child_start[slot] = MAX_NODES - 1u;
+        child_slots[slot - 1u] = slot;
+    }
+
+    child_start[0] = 0u;
+    child_start[MAX_NODES] = MAX_NODES - 1u;
+}
+
+static void bench_measured_grid(cf_available offer, uint32_t wanted_columns, const char *label) {
+    build_measured_grid(wanted_columns);
+    const cf_tree tree = tree_of(MAX_NODES);
+
+    measure_calls = 0u;
+    const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
+    const uint64_t calls_per_frame = measure_calls / LAYOUTS;
+    const uint32_t cells = MAX_NODES - 1u;
+
+    CF_CHECK(rects[1u].width >= 0.0f, "the first cell has a box the pass wrote");
+
+    char key[64];
+    snprintf(key, sizeof key, "measured_grid_%s_ms", label);
+    bench_result(key, ms, "ms");
+    snprintf(key, sizeof key, "measured_grid_%s_calls_per_cell", label);
+    bench_result(key, (double)calls_per_frame / (double)cells, "count");
+}
+
 int main(void) {
-    bench_meta("bench_layout", "10k-deep-flex+flat-grid-3-column-extremes+measured-page");
+    bench_meta("bench_layout",
+               "10k-deep-flex+flat-grid-3-column-extremes+measured-page+measured-grid");
 
     const cf_available offer = {.width = CF_PX(1280.0f), .height = CF_PX(720.0f)};
 
@@ -286,6 +340,7 @@ int main(void) {
     bench_flat_grid(offer, MAX_COLUMNS, "wide");
     bench_flat_grid(offer, 20u, "tall");
     bench_measured_page(offer);
+    bench_measured_grid(offer, COLUMNS, "balanced");
 
     cf_arena_free(&scratch);
 

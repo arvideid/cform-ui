@@ -24,13 +24,14 @@ recovers them if a reviewer wants to reproduce a table without typing it.
 
 ```text
 meta format=1
-meta rig=bench_layout workload=10k-deep-flex+flat-grid-3-column-extremes+measured-page
+meta rig=bench_layout workload=10k-deep-flex+flat-grid-3-column-extremes+measured-page+measured-grid
 meta c_std=201710
 meta bits=64
 meta compiler=14.2.0
 result deep_flex_10000_ms=4.8790 ms
 result flat_grid_balanced_ms=7.7900 ms
 result measured_10000_calls_per_frame=19998.0000 count
+result measured_grid_balanced_calls_per_cell=12.0000 count
 ```
 
 ## Laying out a screen
@@ -49,7 +50,8 @@ moves when you change the machine is why the tables below are read as ratios.
 | nested rows and columns | 5,000 | 1.86 ms | 372 ns |
 | nested rows and columns | 10,000 | 4.88 ms | 488 ns |
 | one flat grid of 100 columns | 10,000 | 7.79 ms | 779 ns |
-| column of measured leaves | 10,000 | 16.3 ms | 1 635 ns |
+| column of auto-sized leaves carrying a callback | 10,000 | 13.0 ms | 1 300 ns |
+| one flat grid of auto-sized leaves carrying a callback | 10,000 | 103 ms | 10 300 ns |
 
 The nested tree is a complete binary tree of alternating rows and columns, a third
 of the branches growing into the leftover space and a seventh claiming half the
@@ -60,14 +62,15 @@ width.
 doublings, which is what "it scales" means in practice: four times the boxes costs
 a little under four times the time.
 
-The measured leaves are what a page of text looks like before anyone caches
-it: each carries a callback whose body just counts the ask, and the rig reports
-callbacks per frame next to milliseconds. Every leaf answers exactly two
-requests - one at min-content, one at max-content - so 10,000 leaves means
-20,000 callback invocations per layout and the 16 ms is the engine's own
-cost around them. Roadmap Section 6 item 3 wants that number visible before
-anyone tunes the measure cache, because a regression in the cache shows up
-as a ratio above 2 before it shows up in a wall clock.
+The last two rows are what a page of text looks like before anyone caches it:
+each leaf carries a measure callback whose body just counts the ask, and the
+rig prints that count beside the milliseconds. In the flex column every leaf
+answers exactly two requests (min-content, then max-content); in the grid
+every cell answers twelve - `collect_contributions` sweeps items once per
+axis and once per intrinsic mode, and the arrangement pass re-reads them.
+That ratio, not the wall clock, is what Roadmap Section 6 item 3 asked for;
+it will show a measure-cache regression before a millisecond does, and it is
+why item 7 puts a text-preparation cache on the grid path first.
 
 ## Building a screen and drawing it
 
