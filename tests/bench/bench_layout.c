@@ -14,24 +14,32 @@
 
 #define MAX_NODES 10000u
 #define DEEP_FIRST_NODES (MAX_NODES / 8u)
+#define MEASURED_FIRST_NODES (MAX_NODES / 8u)
 #define COLUMNS 100u
 #define MAX_COLUMNS 500u
 #define LAYOUTS 50u
 #define CELL_HEIGHT 20.0f
+#define MEASURED_WIDTH 100.0f
 #define NS_PER_S 1000000000.0
 #define NS_PER_MS 1000000.0
 #define SCRATCH_CAPACITY (4u * 1024u * 1024u)
 
 static cf_style styles[MAX_NODES];
+static cf_measure_fn measures[MAX_NODES];
+static void *measure_data[MAX_NODES];
 static uint32_t child_start[MAX_NODES + 1u];
 static uint32_t child_slots[MAX_NODES];
 static cf_track columns[MAX_COLUMNS];
 static cf_rect rects[MAX_NODES];
+static float measured_widths[MAX_NODES];
+static uint64_t measure_calls;
 static cf_arena scratch;
 
 static cf_tree tree_of(uint32_t node_count) {
     return (cf_tree){
         .styles = styles,
+        .measures = measures,
+        .measure_data = measure_data,
         .child_start = child_start,
         .child_slots = child_slots,
         .node_count = node_count,
@@ -69,6 +77,7 @@ static void build_deep_tree(uint32_t node_count, cf_available offer) {
         }
 
         styles[slot] = style;
+        measures[slot] = NULL;
         child_start[slot] = edge;
 
         for (uint32_t child = 2u * slot + 1u; child <= 2u * slot + 2u; ++child) {
@@ -109,12 +118,14 @@ static void build_flat_grid(uint32_t wanted_columns) {
         }
 
         styles[slot] = cell;
+        measures[slot] = NULL;
         child_start[slot] = MAX_NODES - 1u;
         child_slots[slot - 1u] = slot;
     }
 
     child_start[0] = 0u;
     child_start[MAX_NODES] = MAX_NODES - 1u;
+    measures[0] = NULL;
 }
 
 static double elapsed_ms(const struct timespec *started, const struct timespec *finished) {
@@ -186,8 +197,80 @@ static void bench_flat_grid(cf_available offer, uint32_t wanted_columns, const c
     bench_result(key, ms * NS_PER_MS / (double)MAX_NODES, "ns");
 }
 
+/*
+ * A leaf's measure callback is the one place the engine asks a caller for
+ * content it cannot compute: text width from a font, image size from a file.
+ * Counting the calls from the callback's side shows whether a layout memoises
+ * the answer or asks the same leaf again - Roadmap Section 6 item 3 wants the
+ * number before anyone tunes the cache.
+ */
+static cf_size counted_measure(void *user_data, cf_available available, cf_intrinsic kind) {
+    (void)available;
+    (void)kind;
+    measure_calls++;
+    const float width = *(const float *)user_data;
+
+    return (cf_size){.width = width, .height = CELL_HEIGHT};
+}
+
+/*
+ * A column of leaves with no declared size: every cell asks its callback, and
+ * the callback is written to hand back the same box every time. Auto-sized
+ * leaves are the worst case the cache sees - both axes come from a call - and
+ * a page of them is what a text-heavy screen is before it settles.
+ */
+static void build_measured_page(uint32_t node_count) {
+    cf_style root = cf_style_default();
+    root.direction = CF_DIRECTION_COLUMN;
+    root.width = CF_PX(1280.0f);
+    styles[0] = root;
+    measures[0] = NULL;
+
+    for (uint32_t slot = 1u; slot < node_count; ++slot) {
+        styles[slot] = cf_style_default();
+        measured_widths[slot] = MEASURED_WIDTH;
+        measures[slot] = counted_measure;
+        measure_data[slot] = &measured_widths[slot];
+        child_slots[slot - 1u] = slot;
+    }
+
+    child_start[0] = 0u;
+
+    for (uint32_t slot = 1u; slot <= node_count; ++slot) {
+        child_start[slot] = node_count - 1u;
+    }
+}
+
+/*
+ * One pass per node count: the layout call gets the fastest time and the
+ * callback count that produced it. Ratio per leaf says how many measure
+ * passes a single layout runs - three is the engine's floor when a leaf's
+ * extent is auto on both axes, and more than that shows the cache is missing.
+ */
+static void bench_measured_page(cf_available offer) {
+    for (uint32_t nodes = MEASURED_FIRST_NODES; nodes <= MAX_NODES; nodes *= 2u) {
+        build_measured_page(nodes);
+        const cf_tree tree = tree_of(nodes);
+
+        measure_calls = 0u;
+        const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
+        const uint64_t calls_per_frame = measure_calls / LAYOUTS;
+        const uint32_t leaves = nodes - 1u;
+
+        CF_CHECK(rects[0].width == 1280.0f, "the column takes what it is offered");
+
+        char key[64];
+        snprintf(key, sizeof key, "measured_%u_ms", nodes);
+        bench_result(key, ms, "ms");
+        snprintf(key, sizeof key, "measured_%u_calls_per_frame", nodes);
+        bench_result(key, (double)calls_per_frame, "count");
+        snprintf(key, sizeof key, "measured_%u_calls_per_leaf", nodes);
+        bench_result(key, (double)calls_per_frame / (double)leaves, "count");
+    }
+}
+
 int main(void) {
-    bench_meta("bench_layout", "10k-deep-flex+flat-grid-3-column-extremes");
+    bench_meta("bench_layout", "10k-deep-flex+flat-grid-3-column-extremes+measured-page");
 
     const cf_available offer = {.width = CF_PX(1280.0f), .height = CF_PX(720.0f)};
 
@@ -202,6 +285,7 @@ int main(void) {
      * regression in the prefix or the span difference shows up on both. */
     bench_flat_grid(offer, MAX_COLUMNS, "wide");
     bench_flat_grid(offer, 20u, "tall");
+    bench_measured_page(offer);
 
     cf_arena_free(&scratch);
 
