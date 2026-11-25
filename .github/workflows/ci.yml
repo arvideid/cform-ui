@@ -48,9 +48,13 @@ jobs:
             -DCFORM_BUILD_TESTS=ON -DCFORM_WITH_SDL_BACKEND=ON
           # The amalgamated case includes a header the build generates before it
           # compiles, so it is skipped here; the same declarations are read
-          # through every other unit that includes cf/.
+          # through every other unit that includes cf/. The installed-consumer
+          # program lives beside the tests but is not built by them - it is
+          # configured by the package job against an installed tree - so its
+          # compilation flags are not in build-tidy and clang-tidy's heuristic
+          # fallback would miss the cf/ include path.
           mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/*/*.c' \
-            | grep -v '^tests/unit/layout_amalgamated\.c$')
+            | grep -Ev '^tests/(unit/layout_amalgamated\.c|consumer/)')
           clang-tidy --quiet -p build-tidy --warnings-as-errors='*' "${sources[@]}"
 
   build:
