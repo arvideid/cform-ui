@@ -691,6 +691,75 @@ static void dispatch_before_a_layout_hits_nothing(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A child cut out of a clipping ancestor's viewport takes no hit: paint never
+ * drew it there, so a point landing where the clip carved it out belongs to
+ * whatever shows beside it, not to the hidden child. The hit walk now reads the
+ * same clips_content rule the paint walk hands down, through a shared geometry
+ * helper rather than a second copy that could drift.
+ */
+static void a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder visible_log = {0};
+    recorder hidden_log = {0};
+    recorder scroller_log = {0};
+    recorder root_log = {0};
+
+    /* A row of 50-wide boxes that refuse to shrink, inside a 100-wide scroller
+     * that clips its content: the third starts at x = 100, past the clip's
+     * right edge, exactly where paint scissors it away. */
+    cf_node scroller_children[] = {
+        box(50.0f, 100.0f, on_pointer, &visible_log),
+        box(50.0f, 100.0f, on_pointer, &visible_log),
+        box(50.0f, 100.0f, on_pointer, &hidden_log),
+    };
+
+    for (uint32_t i = 0; i < 3u; ++i) {
+        scroller_children[i].style.flex_shrink = 0.0f;
+    }
+
+    cf_node scroller = box(100.0f, 100.0f, on_pointer, &scroller_log);
+    scroller.style.clips_content = true;
+    scroller.children = scroller_children;
+    scroller.child_count = 3u;
+
+    const cf_node root_children[] = {scroller};
+    cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
+    root.children = root_children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t scroller_slot = child_slot(&ctx, 0u);
+    const uint32_t first = child_of(&ctx, scroller_slot, 0u);
+    const uint32_t third = child_of(&ctx, scroller_slot, 2u);
+
+    const cf_point over_visible = {.x = 25.0f, .y = 50.0f};
+    const cf_point over_hidden = {.x = 125.0f, .y = 50.0f};
+
+    CF_CHECK(cf_hit_test(&ctx, over_visible) == first,
+             "a child still inside the clip answers the point");
+    CF_CHECK(cf_hit_test(&ctx, over_hidden) != third,
+             "a child cut out by the clip no longer answers it");
+    CF_CHECK(cf_hit_test(&ctx, over_hidden) == ctx.root_slot,
+             "the point falls through to what shows beside the scroller");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = over_hidden});
+
+    CF_CHECK(hidden_log.downs == 0, "the clipped-out child takes no press");
+    CF_CHECK(scroller_log.downs == 0, "nor the scroller, whose own box the point missed");
+    CF_CHECK(root_log.downs == 1, "the press lands on the container behind it");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -709,6 +778,7 @@ int main(void) {
     CF_RUN(focus_set_by_hand_reaches_a_node_no_press_touched);
     CF_RUN(a_recycled_slot_reads_as_nothing);
     CF_RUN(dispatch_before_a_layout_hits_nothing);
+    CF_RUN(a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out);
 
     return CF_REPORT();
 }

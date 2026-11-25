@@ -3,32 +3,13 @@
 #include "cf/paint.h"
 #include "cf/text.h"
 
+#include "layout/rect.h"
+
 /*
  * The list's first allocation. A frame's command count is unknown ahead of the
  * walk, so the list grows by doubling from here rather than being sized once.
  */
 #define PAINT_FIRST_CAPACITY 64u
-
-/* Whether the box reaches the clip at all. A zero-extent box does not. */
-static bool reaches_viewport(cf_rect box, cf_rect viewport) {
-    return box.x < viewport.x + viewport.width && viewport.x < box.x + box.width &&
-           box.y < viewport.y + viewport.height && viewport.y < box.y + box.height;
-}
-
-/* The part of the box that survives the clip. The walk never asks for a
- * disjoint pair - it has already refused the box outright. */
-static cf_rect clipped_to(cf_rect box, cf_rect clip) {
-    const float left = box.x > clip.x ? box.x : clip.x;
-    const float top = box.y > clip.y ? box.y : clip.y;
-    const float box_right = box.x + box.width;
-    const float box_bottom = box.y + box.height;
-    const float clip_right = clip.x + clip.width;
-    const float clip_bottom = clip.y + clip.height;
-    const float right = box_right < clip_right ? box_right : clip_right;
-    const float bottom = box_bottom < clip_bottom ? box_bottom : clip_bottom;
-
-    return (cf_rect){.x = left, .y = top, .width = right - left, .height = bottom - top};
-}
 
 /*
  * CSS clamps a corner radius to half the box's shorter extent: a radius past
@@ -103,7 +84,7 @@ static cf_command *next_command(paint_walk *walk) {
  * a cut preserves.
  */
 static cf_rect filled_rect(const paint_walk *walk, cf_rect box, float radius) {
-    return walk->clipping && radius == 0.0f ? clipped_to(box, walk->clip) : box;
+    return walk->clipping && radius == 0.0f ? rect_intersect(box, walk->clip) : box;
 }
 
 /* A caret is a line, not a box: one point wide, the height of the line it
@@ -259,7 +240,7 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
         const cf_rect padding_box = {box.x + stroke.left, box.y + stroke.top,
                                      box.width - stroke.left - stroke.right,
                                      box.height - stroke.top - stroke.bottom};
-        clip = walk->clipping ? clipped_to(padding_box, clip) : padding_box;
+        clip = walk->clipping ? rect_intersect(padding_box, clip) : padding_box;
     }
 
     const cf_point slide = cf_text_scroll(content, lines, count, (cf_size){wrap, content_height});
@@ -387,7 +368,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     const cf_style *style = &walk->tree->styles[slot];
     const cf_rect box = walk->rects[slot];
 
-    if (!reaches_viewport(box, walk->clip)) {
+    if (!rect_intersects(box, walk->clip)) {
         return;
     }
 
@@ -441,7 +422,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     const bool outer_clipping = walk->clipping;
 
     if (style->clips_content) {
-        walk->clip = clipped_to(box, walk->clip);
+        walk->clip = rect_intersect(box, walk->clip);
         walk->clipping = true;
     }
 

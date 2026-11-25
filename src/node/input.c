@@ -2,6 +2,8 @@
 
 #include "node/internal.h"
 
+#include "layout/rect.h"
+
 void cf_stop(cf_event *event) {
     if (event != NULL) {
         event->stopped = true;
@@ -49,13 +51,32 @@ static uint32_t interactive_of(const cf_ctx *ctx, uint32_t slot) {
  * the walk keeps the last hit and answers the topmost node. Records cannot
  * cycle - depth increases along every parent chain - which bounds the
  * recursion by construction.
+ *
+ * clip and clipping carry an ancestor's cut down the tree exactly as the paint
+ * walk does. A node wholly inside no part of the clip painted nothing, so a
+ * point landing where a clipping box carved it out belongs to whatever shows
+ * through, not to the child the clip hid.
  */
-static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position) {
+static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position, cf_rect clip,
+                         bool clipping) {
+    const cf_rect box = ctx->rects[slot];
+
+    if (clipping && !rect_intersects(box, clip)) {
+        return CF_NO_LINK;
+    }
+
+    /* A box that clips its content bounds the descent: its children see the
+     * box as their clip, narrowed by whatever already clipped this node - the
+     * same rule paint hands down. Without an active clip the box is the clip. */
+    const bool self_clips = ctx->layout.styles[slot].clips_content;
+    const cf_rect child_clip = self_clips ? (clipping ? rect_intersect(box, clip) : box) : clip;
+    const bool child_clipping = clipping || self_clips;
+
     uint32_t found = CF_NO_LINK;
 
     for (uint32_t child = record_of(ctx, slot)->child_first; child != CF_NO_LINK;
          child = record_of(ctx, child)->next_sibling) {
-        const uint32_t in_child = hit_walk(ctx, child, position);
+        const uint32_t in_child = hit_walk(ctx, child, position, child_clip, child_clipping);
 
         if (in_child != CF_NO_LINK) {
             found = in_child;
@@ -66,12 +87,13 @@ static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position) {
         return found;
     }
 
-    const cf_rect *rect = &ctx->rects[slot];
+    /* The node answers only for a point that survives both its own box and the
+     * clip it sits inside: past the clip these pixels were never drawn. */
+    if (!rect_contains(box, position) || (clipping && !rect_contains(clip, position))) {
+        return CF_NO_LINK;
+    }
 
-    return position.x >= rect->x && position.x < rect->x + rect->width && position.y >= rect->y &&
-                   position.y < rect->y + rect->height
-               ? slot
-               : CF_NO_LINK;
+    return slot;
 }
 
 uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
@@ -79,7 +101,10 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
         return CF_NO_LINK;
     }
 
-    return hit_walk(ctx, ctx->root_slot, position);
+    /* The root sits in no clip: the position is already in window coordinates,
+     * so a box off-screen cannot hold it, and only a clips_content ancestor
+     * narrows the region a click is allowed to land in. */
+    return hit_walk(ctx, ctx->root_slot, position, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f}, false);
 }
 
 /* Runs the handlers from the target up through the parents, each with fresh
