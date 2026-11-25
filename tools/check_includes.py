@@ -57,7 +57,7 @@ ALLOWED["umbrella"] = set(ALLOWED)
 
 CF_INCLUDE = re.compile(r'^\s*#\s*include\s+"cf/([a-z0-9_/]+\.h)"')
 SDL_INCLUDE = re.compile(r'^\s*#\s*include\s+[<"]SDL3')
-ALLOCATION = re.compile(r"\b(malloc|calloc|realloc|free)\s*\(")
+ALLOCATION = re.compile(r"\b(?:SDL_)?(malloc|calloc|realloc|free)\s*\(")
 PLATFORM_HEADERS = re.compile(
     r'^\s*#\s*include\s+[<"](windows\.h|unistd\.h|pthread\.h)')
 MAGIC_ZERO = re.compile(r"\b0 (means|is)\b|\bmeans 0\b|\bunset\b")
@@ -101,13 +101,15 @@ def check_source(path):
             stripped = line.split("//")[0]
             if not stripped.lstrip().startswith(("*", "/*")):
                 errors.append(
-                    f"{where}: allocation outside src/base — use cf_alloc or cf_store")
+                    f"{where}: allocation outside src/base - use cf_alloc, "
+                    "cf_store, cf_alloc_block or cf_resize_block")
 
 
 def check_public_header(path):
     owner = LAYER_OF_HEADER.get(path.name)
     if owner is None:
-        errors.append(f"{path.relative_to(ROOT)}: a public header no layer owns")
+        errors.append(
+            f"{path.relative_to(ROOT)}: a public header no layer owns")
         return
 
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
