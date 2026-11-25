@@ -8,8 +8,10 @@
 
 /*
  * The node's handlers, one table rather than a field per event. The data
- * pointers are handed back unread and unchanged, borrowed for the dispatch
- * call like measure_data.
+ * pointers are handed back unread and unchanged. They outlive the diff that
+ * stored them and every dispatch that fires before the next frame begins,
+ * because a build that owns a handler's data through the frame arena hands
+ * the arena nothing to reuse until the next cf_frame_begin clears it.
  */
 typedef struct cf_handlers {
     cf_event_fn pointer;
@@ -20,8 +22,10 @@ typedef struct cf_handlers {
 
 /*
  * One declared node: a value the build assembles and the diff reads, never
- * the engine's to keep. `children`, `measure_data` and the handler data are
- * borrowed for the diff and dispatch calls alone.
+ * the engine's to keep. `children`, `measure_data` and the handler data stay
+ * borrowed through the frame that declared them: the diff reads the child
+ * array, and every event dispatched before the next cf_frame_begin hands the
+ * data pointers back to their callbacks.
  *
  * `key` is the node's identity, an interned name that every build meaning
  * the same node reuses. A node without a key is reidentified by position:
@@ -107,7 +111,11 @@ void cf_frame_begin(cf_ctx *ctx);
  * same name answers the same memory, whatever the declaration around it
  * does, and the block starts zeroed. A request larger than the one before
  * it moves the block and keeps the bytes it already held, so a pointer into
- * state is valid through the frame that obtained it and the one after.
+ * state is valid through the frame that obtained it and the one after - with
+ * two exceptions the same frame can produce: a later larger request under
+ * the same name moves the block and the earlier pointer hangs, and a name
+ * this frame stops requesting has its block retired at the next
+ * cf_frame_begin, so no pointer into it survives.
  *
  * A name the builds stop requesting loses its block one frame later: the
  * next request under it answers fresh, zeroed memory, and the bytes the

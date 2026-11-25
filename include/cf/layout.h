@@ -51,10 +51,12 @@ typedef struct cf_tree {
  * `scratch` holds two kinds of table. The per-node line and item tables are
  * handed back before a node descends, so their high-water mark tracks the
  * deepest path, not the node count. The content-measurement cache, however,
- * carries one offer row and one frame row per node in the declaration, so the
- * mark also grows with `node_count` - a caller sizing a pool pays for the wider
- * of the two, not for depth alone. A caller that clears the arena once per frame
- * still keeps layout allocation-free overall.
+ * carries one offer row and one frame row per node in the declaration plus a
+ * hash table of measure cells sized as the smallest power of two that is at
+ * least three times `node_count`, so the mark grows with the wider of depth
+ * and node count - a caller sizing a pool pays for both, not for depth alone.
+ * A caller that clears the arena once per frame still keeps layout
+ * allocation-free overall.
  *
  * Failure policy, identical everywhere the engine can fail: when `scratch`
  * cannot serve a request, that node is laid out as a leaf - its own rect is
