@@ -40,15 +40,18 @@ jobs:
 
       - name: Static analysis
         run: |
-          # The amalgamated case includes a header the build generates, which a
-          # run without a compile database cannot find; the same declarations are
-          # analysed through every other translation unit that includes cf/.
+          # Configure once to write compile_commands.json, with tests and the SDL
+          # backend on so the database carries every target's real flags, the SDL
+          # headers among them. Hand-written include flags could not name those
+          # dependency paths, so backend sources went unanalysed.
+          cmake -S . -B build-tidy -DCMAKE_BUILD_TYPE=Debug \
+            -DCFORM_BUILD_TESTS=ON -DCFORM_WITH_SDL_BACKEND=ON
+          # The amalgamated case includes a header the build generates before it
+          # compiles, so it is skipped here; the same declarations are read
+          # through every other unit that includes cf/.
           mapfile -t sources < <(git ls-files 'src/*/*.c' 'tests/*/*.c' \
             | grep -v '^tests/unit/layout_amalgamated\.c$')
-          # No compile database: cf_base includes nothing outside libc, so the
-          # include paths below are the ones the target actually gets.
-          clang-tidy --quiet --warnings-as-errors='*' "${sources[@]}" \
-            -- -std=c17 -Iinclude -Isrc
+          clang-tidy --quiet -p build-tidy --warnings-as-errors='*' "${sources[@]}"
 
   build:
     name: ${{ matrix.os }} · ${{ matrix.type }}
