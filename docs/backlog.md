@@ -29,6 +29,7 @@ and this file is the record.
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
 | Selection is by character | no double-click to select a word and no triple-click for the line, though a drag that strays past the box keeps selecting because the press holds the pointer |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
+| The gallery is the least tested file in the tree | the three defects a person reported from looking at it lived in `examples/gallery.c` (a track array on the stack, so the grid read freed memory), in `src/theme/default.c` (no shrink, so items fell off the edge instead of giving ground) and in `src/paint/emit.c` (a rounded fill cut to a clip rounds the cut box, so its corner stops matching its own border). Only the last one has a golden. A tier that builds the gallery through the headless recorder across a range of surfaces, asserting no command lands off-screen, outside the clip it names, or with a radius past its own box, closes all three at once |
 
 ## Text, the largest known gap
 
