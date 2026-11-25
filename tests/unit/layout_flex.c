@@ -418,6 +418,102 @@ static void a_tree_that_carries_no_measure_tables_still_lays_out(void) {
     CF_NEAR(f.rects[1].width, 0.0f);
 }
 
+/*
+ * A run of text the engine cannot see inside: it breaks at the width it is
+ * handed and counts the lines that come out, which is the one behaviour every
+ * wrapped measure has. Offered no width to break at, it answers the whole run
+ * on one line, the way max-content reads.
+ */
+#define WRAP_RUN 900.0f
+#define WRAP_WORD 100.0f
+#define WRAP_LINE 10.0f
+
+static cf_size measure_wrapping_run(void *user_data, cf_available available, cf_intrinsic kind) {
+    (void)user_data;
+
+    if (kind == CF_INTRINSIC_MIN_CONTENT) {
+        return (cf_size){.width = WRAP_WORD, .height = WRAP_LINE};
+    }
+
+    float width = 0.0f;
+
+    if (!cf_length_of(available.width, CF_AUTO, &width) || width <= 0.0f) {
+        return (cf_size){.width = WRAP_RUN, .height = WRAP_LINE};
+    }
+
+    const uint32_t lines = (uint32_t)((WRAP_RUN + width - 1.0f) / width);
+
+    return (cf_size){.width = width < WRAP_RUN ? width : WRAP_RUN,
+                     .height = (float)lines * WRAP_LINE};
+}
+
+/*
+ * The height a box books for itself has to be the height its content reaches at
+ * the width the box will really have. A padded box that left its width automatic
+ * still fills the width it was offered, so the offer its content is measured at
+ * is that width taken inside the frame. Forget the frame and every automatic
+ * level hands its children room that does not exist: the lines the paint walk
+ * lays run past the box the layout booked, and the last of them sit below the
+ * range a scroller can walk.
+ */
+static void a_wrapping_measure_is_asked_at_the_width_its_box_will_get(void) {
+    fixture f;
+    cf_style root = cf_style_default();
+    root.width = CF_PX(300.0f);
+    root.height = CF_PX(400.0f);
+    root.direction = CF_DIRECTION_COLUMN;
+    begin(&f, root);
+
+    cf_style panel = cf_style_default();
+    panel.padding = (cf_box){.left = CF_PX(20.0f), .right = CF_PX(20.0f)};
+    const uint32_t framed = append(&f, 0u, panel);
+
+    const uint32_t text = append(&f, framed, cf_style_default());
+    f.measures[text] = measure_wrapping_run;
+
+    arrange_in(&f, 300.0f, 400.0f);
+
+    /* 300 taken inside 20 and 20 is 260: four lines of ten, not the three a
+     * measure against the raw 300 would have booked. */
+    CF_NEAR(f.rects[framed].width, 300.0f);
+    CF_NEAR(f.rects[text].width, 260.0f);
+    CF_NEAR(f.rects[text].height, 40.0f);
+    CF_NEAR(f.rects[framed].height, 40.0f);
+}
+
+/*
+ * A bound is a promise about the box the content sits in, so it belongs before
+ * that content is measured. A column that caps its own width still fills the cap
+ * with wrapping text, and the height it reports has to be the height the text
+ * needs at the width it will really have: book it at the width the declaration
+ * asked for and the box is painted taller than the room it won, past the end of
+ * whatever walks the height it reported.
+ */
+static void a_capped_axis_measures_its_content_at_the_cap(void) {
+    fixture f;
+    cf_style root = cf_style_default();
+    root.width = CF_PX(600.0f);
+    root.height = CF_PX(400.0f);
+    root.direction = CF_DIRECTION_COLUMN;
+    const uint32_t column = begin(&f, root);
+
+    cf_style capped = cf_style_default();
+    capped.width = CF_PERCENT(100.0f);
+    capped.max_width = CF_PX(300.0f);
+    const uint32_t box = append(&f, column, capped);
+
+    const uint32_t text = append(&f, box, cf_style_default());
+    f.measures[text] = measure_wrapping_run;
+
+    arrange_in(&f, 600.0f, 400.0f);
+
+    /* Whole percent of 600 is 600 until the cap settles it at 300, and three
+     * lines of ten are what the run needs across that. */
+    CF_NEAR(f.rects[box].width, 300.0f);
+    CF_NEAR(f.rects[text].width, 300.0f);
+    CF_NEAR(f.rects[text].height, 30.0f);
+    CF_NEAR(f.rects[box].height, 30.0f);
+}
 static void padding_and_border_inset_the_content_box(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 200.0f, 100.0f);
@@ -776,6 +872,8 @@ int main(void) {
     CF_RUN(a_measure_callback_sizes_content_the_engine_cannot_see);
     CF_RUN(a_tree_that_carries_no_measure_tables_still_lays_out);
     CF_RUN(padding_and_border_inset_the_content_box);
+    CF_RUN(a_wrapping_measure_is_asked_at_the_width_its_box_will_get);
+    CF_RUN(a_capped_axis_measures_its_content_at_the_cap);
     CF_RUN(a_declared_main_size_still_measures_its_cross_from_the_content);
     CF_RUN(child_percentages_read_the_content_box_inside_the_frame);
     CF_RUN(an_auto_box_keeps_the_width_its_content_cannot_break);

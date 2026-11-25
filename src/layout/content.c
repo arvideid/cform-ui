@@ -57,8 +57,10 @@ static bool style_offers_nothing(const cf_style *style) {
     return style->wrap == CF_NO_WRAP && !box_has_percent(style->padding) &&
            !box_has_percent(style->border) && !box_has_percent(style->margin) &&
            !length_is_percent(style->column_gap) && !length_is_percent(style->row_gap) &&
-           !length_is_percent(style->min_width) && !length_is_percent(style->max_width) &&
-           !length_is_percent(style->min_height) && !length_is_percent(style->max_height);
+           !length_is_percent(style->width) && !length_is_percent(style->height) &&
+           !length_is_percent(style->flex_basis) && !length_is_percent(style->min_width) &&
+           !length_is_percent(style->max_width) && !length_is_percent(style->min_height) &&
+           !length_is_percent(style->max_height);
 }
 
 /*
@@ -185,8 +187,9 @@ static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
  * Whether the intrinsic extent of a subtree answers the same whatever room
  * it is offered. A wrapping container breaks its lines at the offer, a
  * measure callback wraps its content at the width it is handed, a grid
- * distributes the offer across its tracks, and a percentage on the frame,
- * the gaps or the bounds resolves against it. A node free of all of those
+ * distributes the offer across its tracks, and a percentage on a size, a
+ * bound, the frame, a margin or the gaps resolves against it - the dependence
+ * `settled_length` defers in a measuring pass. A node free of all of those
  * measures to one extent, and so does every node below it that is free too.
  * The height returned is the longest run of edges down from the slot.
  */
@@ -262,6 +265,26 @@ void measure_cache_init(layout_ctx *ctx) {
 
     ctx->measures = cells;
     ctx->measure_capacity = capacity;
+}
+
+/*
+ * The room a node's content is measured at on an axis the node left
+ * automatic. Such a node is laid out at whatever it was offered - a stretched
+ * cross axis, or a block that fills its container - so its content box is the
+ * offer taken inside its own frame. Handing the children the raw offer instead
+ * lets every automatic level forget the padding it sits in, and a wrapped text
+ * then counts the lines of a wider box than the one the paint walk lays: the
+ * node measures shorter than it grows. Its bounds go the same way, because they
+ * sit on the border box the offer turns into.
+ */
+static cf_length automatic_offer(cf_length offer, cf_length min, cf_length max, float frame) {
+    float value;
+
+    if (!definite_offer(offer, &value)) {
+        return offer;
+    }
+
+    return CF_PX(clamp_non_negative(cf_size_clamp(value, min, max, offer) - frame));
 }
 
 bool extent_is_empty(const layout_ctx *ctx, uint32_t slot) {
@@ -349,16 +372,42 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
     const bool has_height =
         settled_length(verdict.height, style->height, constraint.height, measuring, &height);
 
+    /* A bound settles an axis before anything is measured inside it, so children
+     * wrap at the width their box really gets rather than at the one its
+     * declaration asked for. Booking a height against a width the max clause goes
+     * on to cut leaves a node that reports one box and grows another, and the
+     * difference is content past the reach of whatever walks the height it was
+     * given. An automatic axis is bounded through its offer instead, since the
+     * room it will fill is the room it is offered. */
+    if (has_width) {
+        width = cf_size_clamp(width, style->min_width, style->max_width, constraint.width);
+    }
+    if (has_height) {
+        height = cf_size_clamp(height, style->min_height, style->max_height, constraint.height);
+    }
+
     /* An axis that is already settled bounds the box the other axis measures
      * itself into. The measure below sizes content, so the settled border box
      * is offered taken inside the frame: a child's percentages read the box
-     * its content fills, not the one the frame wraps. */
-    const cf_available content_offer = {
-        .width = has_width ? CF_PX(clamp_non_negative(width - inset.left - inset.right))
-                           : constraint.width,
-        .height = has_height ? CF_PX(clamp_non_negative(height - inset.top - inset.bottom))
-                             : constraint.height,
-    };
+     * its content fills, not the one the frame wraps.
+     */
+    const float frame_width = inset.left + inset.right;
+    const float frame_height = inset.top + inset.bottom;
+    cf_available content_offer;
+
+    if (has_width) {
+        content_offer.width = CF_PX(clamp_non_negative(width - frame_width));
+    } else {
+        content_offer.width =
+            automatic_offer(constraint.width, style->min_width, style->max_width, frame_width);
+    }
+
+    if (has_height) {
+        content_offer.height = CF_PX(clamp_non_negative(height - frame_height));
+    } else {
+        content_offer.height =
+            automatic_offer(constraint.height, style->min_height, style->max_height, frame_height);
+    }
 
     if (!has_width || !has_height) {
         const cf_size content = content_extent_of(ctx, slot, mode, content_offer);
