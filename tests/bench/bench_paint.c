@@ -11,10 +11,45 @@
 
 #include "cf/node.h"
 #include "cf/paint.h"
+#include "cf/text.h"
 
 #include "cform_test.h"
 
 #include "bench_meta.h"
+
+/*
+ * A deterministic mono font so text nodes can join the stream without
+ * requiring SDL or a real TTF file. Every glyph advances 10 points and
+ * lines are 20 points tall, matching the fake font in paint_emit.c.
+ */
+static cf_text_metrics mono_metrics(void *font) {
+    (void)font;
+    return (cf_text_metrics){.line_height = 20.0f};
+}
+
+static float mono_advance(void *font, uint32_t codepoint, uint32_t previous) {
+    (void)font, (void)codepoint, (void)previous;
+    return 10.0f;
+}
+
+static bool mono_has_glyph(void *font, uint32_t codepoint) {
+    (void)font, (void)codepoint;
+    return true;
+}
+
+static const cf_text_ops mono_ops = {
+    .metrics = mono_metrics, .advance = mono_advance, .has_glyph = mono_has_glyph};
+static const cf_font mono_stack[] = {{.handle = NULL, .ops = &mono_ops}};
+
+static const char cell_label[] = "x";
+static const cf_text_content cell_text = {
+    .stack = {.fonts = mono_stack, .count = 1u},
+    .text = {.chars = cell_label, .length = sizeof cell_label - 1u},
+};
+
+/* One third of the cells carry text, making the stream a realistic mix of
+ * fills, borders and text lines rather than only geometry. */
+#define TEXT_EVERY 3u
 
 #define ROWS 99u
 #define CELLS_PER_ROW 100u
@@ -27,14 +62,17 @@
 #define SURFACE_HEIGHT 720.0f
 
 /*
- * Every box paints a fill and every fourth cell strokes a border over it, so
- * the stream carries both shapes a rounded rect asks a device for. The rows
- * and the cells together stay inside the surface, which is what lets the
- * count be a number rather than a range.
+ * Every box paints a fill, every fourth cell strokes a border, and every
+ * third cell lays one text line. The rows and cells together stay inside
+ * the surface, which lets the command count be deterministic: one fill per
+ * node (10000), a border on every fourth cell (2475), and one text line on
+ * every third cell whose glyph fits the 12-point box (3300).
  */
 #define BORDERED_EVERY 4u
-#define EXPECTED_COMMANDS                                                                          \
-    (1u + ROWS + ROWS * CELLS_PER_ROW + ROWS * (CELLS_PER_ROW / BORDERED_EVERY))
+#define EXPECTED_FILLS (1u + ROWS + ROWS * CELLS_PER_ROW)
+#define EXPECTED_BORDERS (ROWS * (((CELLS_PER_ROW - 1u) / BORDERED_EVERY) + 1u))
+#define EXPECTED_TEXTS (ROWS * (((CELLS_PER_ROW - 1u) / TEXT_EVERY) + 1u))
+#define EXPECTED_COMMANDS (EXPECTED_FILLS + EXPECTED_BORDERS + EXPECTED_TEXTS)
 
 static cf_node cells[ROWS][CELLS_PER_ROW];
 static cf_node rows[ROWS];
@@ -68,6 +106,12 @@ static void build_tree(void) {
                     (cf_box){CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f)};
                 cells[r][c].style.border_color = shade(220u);
                 cells[r][c].style.radius = 3.0f;
+            }
+
+            if (c % TEXT_EVERY == 0u) {
+                cells[r][c].style.color = shade(200u);
+                cells[r][c].measure = cf_text_measure;
+                cells[r][c].measure_data = (void *)&cell_text;
             }
         }
     }
@@ -110,20 +154,30 @@ static cf_command_list paint(cf_ctx *ctx, cf_rect viewport) {
 
 /* Whether every command in the stream is one of the two shapes this tree
  * declares: a fill, or a border stroked over one. */
-static bool stream_holds_fills_and_borders(const cf_command_list *list) {
-    for (uint32_t i = 0u; i < list->count; ++i) {
-        const cf_command_kind kind = list->commands[i].kind;
+static bool stream_holds_expected_kinds(const cf_command_list *list) {
+    uint32_t fills = 0u, borders = 0u, texts = 0u;
 
-        if (kind != CF_COMMAND_FILL && kind != CF_COMMAND_BORDER) {
+    for (uint32_t i = 0u; i < list->count; ++i) {
+        switch (list->commands[i].kind) {
+        case CF_COMMAND_FILL:
+            fills++;
+            break;
+        case CF_COMMAND_BORDER:
+            borders++;
+            break;
+        case CF_COMMAND_TEXT:
+            texts++;
+            break;
+        default:
             return false;
         }
     }
 
-    return true;
+    return fills == EXPECTED_FILLS && borders == EXPECTED_BORDERS && texts == EXPECTED_TEXTS;
 }
 
 int main(void) {
-    bench_meta("bench_paint", "10k-rows-of-100-cells-fill-and-border");
+    bench_meta("bench_paint", "10k-rows-of-100-cells-fill-border-text");
     bench_result("nodes", (double)NODE_COUNT, "count");
     bench_result("frames_per_point", (double)FRAMES, "count");
     bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
@@ -143,7 +197,7 @@ int main(void) {
     const cf_command_list full = paint(&ctx, surface_viewport());
 
     CF_CHECK(full.count == EXPECTED_COMMANDS, "one fill per box, a border on every fourth cell");
-    CF_CHECK(stream_holds_fills_and_borders(&full), "the stream carries fills and borders only");
+    CF_CHECK(stream_holds_expected_kinds(&full), "the stream carries fills, borders and text");
     CF_CHECK(full.count > 0u && full.commands[0].kind == CF_COMMAND_FILL,
              "the page's own fill leads the stream");
 
