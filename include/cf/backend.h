@@ -89,6 +89,17 @@ typedef struct cf_sdl_config {
 cf_backend cf_backend_sdl(const cf_sdl_config *config);
 
 /*
+ * Route the library's diagnostics through SDL's log channel. A host that
+ * owns its sink does not call this; a host that has none and wants the
+ * backend's words to reach the platform's viewer does. Installing is not
+ * automatic on `cf_backend_sdl` because the backend has no way to know
+ * whether the caller already put a sink in place, and overwriting a
+ * game engine's debug overlay with SDL_Log is exactly what a host reaching
+ * for a pluggable backend wants to avoid.
+ */
+void cf_sdl_install_log_sink(void);
+
+/*
  * The SDL font table over a TrueType or OpenType file, built when
  * CFORM_WITH_SDL_BACKEND is on. Measuring never rasterizes: the file is
  * read for its metrics alone, and the pen distances it answers are the ones

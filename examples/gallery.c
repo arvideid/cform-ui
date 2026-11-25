@@ -1091,6 +1091,11 @@ static cf_node build(cf_ctx *ctx) {
 }
 
 int main(int argc, char **argv) {
+    /* Route the library's diagnostics through SDL's log viewer. A host that
+     * owns a sink of its own would leave this out and the backend would not
+     * overwrite it. */
+    cf_sdl_install_log_sink();
+
     theme = cf_theme_default();
     body_font = cf_font_sdl(CFORM_GALLERY_FONT, 14.0f);
     title_font = cf_font_sdl(CFORM_GALLERY_FONT, 22.0f);
