@@ -24,6 +24,17 @@ bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared) {
         return false;
     }
 
+    /* The store's extent is the historical peak, not this frame's count: a
+     * slot that retired and was not reclaimed holds no claim, and its rows
+     * would otherwise read whatever the frame arena recycled into them. A
+     * zeroed cf_style is the layout engine's documented start (every length
+     * is CF_LENGTH_AUTO) and a null callback is what the walk from the root
+     * never invokes; measure_cache_init is the one scan that reads every slot
+     * unconditionally, and zeroing here is what stops it consuming stale
+     * bytes. */
+    memset(styles, 0, extent * sizeof *styles);
+    memset(measures, 0, extent * sizeof *measures);
+    memset(measure_data, 0, extent * sizeof *measure_data);
     memset(child_counts, 0, extent * sizeof *child_counts);
     memset(last_child, 0xFF, extent * sizeof *last_child);
     memset(sizes, 0, extent * sizeof *sizes);
