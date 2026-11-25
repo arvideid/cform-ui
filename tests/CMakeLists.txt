@@ -143,6 +143,22 @@ cf_add_layer_test(semantics unit/semantics.c cf_node)
 # hands an event, dries up, then quits, and counts the frames it got.
 cf_add_layer_test(app_run unit/app_run.c cf_app cf_backend_headless)
 
+# The gallery page drawn with no window: the same chapter builders examples/
+# ships, driven through cf_app_run against the recorder across surfaces and
+# scripted interactions, with every submitted stream checked for finite
+# geometry, clips inside the output, radii inside their boxes and sharp
+# fills that arrived cut. examples/ is export-ignored, so the source-only
+# paths carry the page header to a test consumer too.
+cf_add_layer_test(gallery_headless unit/gallery_headless.c
+    cf_app cf_widget cf_theme cf_backend_headless cf_base)
+
+target_include_directories(gallery_headless PRIVATE "${CMAKE_SOURCE_DIR}/examples")
+
+# The page is header-only, so the test's own source has to name it for a
+# change there to rebuild the tier.
+set_source_files_properties(unit/gallery_headless.c PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/examples/gallery_page.h")
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
