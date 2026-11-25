@@ -133,8 +133,11 @@ static void an_unrequested_block_retires(void) {
     cf_frame_begin(&ctx);
 
     int *fresh = cf_state(&ctx, tab, sizeof(int));
-    CF_CHECK(fresh != block, "the retired name answers new memory");
-    CF_CHECK(fresh != NULL && *fresh == 0, "the new block starts zeroed");
+
+    /* Which address a retired name answers with is the allocator's to decide,
+     * and reusing the one it just took back is legal. What the engine owes is a
+     * block with nothing left in it, which the seven above cannot survive. */
+    CF_CHECK(fresh != NULL && *fresh == 0, "the retired name answers a block that starts empty");
 
     cf_ctx_free(&ctx);
 }
