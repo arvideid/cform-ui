@@ -52,10 +52,9 @@ it. Each needs a design conversation before a line of code:
   snapped every edge to a whole pixel before recording it and `cf_layout` returns
   exact fractions. Closing them means deciding whether a layout engine owns
   pixel-snapping or the renderer does. Until that is settled the floor stays at
-  505.
-- 5 fixtures need `max-content`/`stretch` as sizing keywords, and 12 need a measure
-  callback whose answer depends on real font metrics — that one belongs to a
-  text-backend test rather than to this tier.
+  510.
+- 12 fixtures need a measure callback whose answer depends on real font metrics;
+  that belongs to a text-backend test rather than to this tier.
 - Grid has no named lines or areas and no subgrid.
 - Container queries have no field.
 

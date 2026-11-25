@@ -157,9 +157,17 @@ EDGE_SETTERS = {"Margin": "margin", "Padding": "padding", "Border": "border",
 # feature promotes a box's children into its parent's flow and cf_style does
 # not model it. `box-sizing` is here for the same reason: `content-box` is a
 # cf_box_sizing value the BoxSizing setter handler reads, and `border-box` is
-# what cf_style's zero already gives.
-UNSUPPORTED_SUFFIXES = ("MaxContent", "MinContent", "FitContent", "Stretch",
+# what cf_style's zero already gives. MaxContent and Stretch are absent
+# because cf_length_kind names them as sizing keywords on width, height and
+# flex_basis; MinContent and FitContent stay here because no fixture needs
+# them yet and no other caller turns those knobs.
+UNSUPPORTED_SUFFIXES = ("MinContent", "FitContent",
                         "TemplateRows", "TemplateColumns")
+
+# The size fields that read a keyword; min and max bounds only ever take a
+# scalar, so a keyword setter on them stays counted rather than guessed at.
+KEYWORD_FIELDS = ("width", "height", "flex_basis")
+KEYWORD_SUFFIXES = {"MaxContent": "CF_MAX_CONTENT", "Stretch": "CF_STRETCH"}
 
 DECL = re.compile(r"YGNodeRef (\w+) = YGNodeNew")
 INSERT = re.compile(r"YGNodeInsertChild\((\w+), (\w+), (\d+)\)")
@@ -271,7 +279,11 @@ class Fixture:
             self._reject("a node outside the fixture")
             return
 
-        if len(arguments) == 1 and setter.endswith("Auto"):
+        if len(arguments) == 1 and (setter.endswith("Auto") or
+                                    any(setter.endswith(suffix) for suffix in KEYWORD_SUFFIXES)):
+            # A keyword setter names the property and nothing else: the rule
+            # is the value. Extend so the length-2 check below does not treat
+            # it as a broken call.
             arguments = arguments + [""]
         if len(arguments) < 2:
             self._reject("a setter this script does not read: " + setter)
@@ -349,12 +361,18 @@ class Fixture:
             return "CF_AUTO"
         if setter.endswith("Percent"):
             return length("percent", text)
+        for suffix, keyword in KEYWORD_SUFFIXES.items():
+            if setter.endswith(suffix):
+                return keyword
         return length("px", text)
 
     def _size(self, style, setter, argument):
         for field in SIZES:
             stem = setter_stem(field)
-            if setter not in (stem, stem + "Percent", stem + "Auto"):
+            allowed = [stem, stem + "Percent", stem + "Auto"]
+            if field in KEYWORD_FIELDS:
+                allowed.extend(stem + suffix for suffix in KEYWORD_SUFFIXES)
+            if setter not in allowed:
                 continue
             value = self._value(setter, argument)
             if value is None:

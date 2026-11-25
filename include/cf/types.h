@@ -64,12 +64,17 @@ typedef struct cf_color {
  * A length that knows what it means. CF_LENGTH_AUTO is the zero state, so a
  * zero-initialized field means "hug the content", never "zero pixels" and never
  * "no maximum" — those two readings are what an untagged float could not hold.
+ * The keyword kinds below carry no scalar; they name a rule the layout pass
+ * runs rather than a number it reads. They append to the enum, so a stored
+ * number that predates them still means the same thing.
  */
 typedef enum cf_length_kind {
     CF_LENGTH_AUTO,
     CF_LENGTH_PX,
     CF_LENGTH_PERCENT,
-    CF_LENGTH_FR
+    CF_LENGTH_FR,
+    CF_LENGTH_MAX_CONTENT,
+    CF_LENGTH_STRETCH
 } cf_length_kind;
 
 typedef struct cf_length {
@@ -93,6 +98,20 @@ typedef struct cf_length {
 #define CF_PX(pixels) CF_PT(pixels)
 #define CF_PERCENT(portion) ((cf_length){.kind = CF_LENGTH_PERCENT, .value = (portion)})
 #define CF_FR(shares) ((cf_length){.kind = CF_LENGTH_FR, .value = (shares)})
+/*
+ * The widest the box's content can lay out without breaking, the CSS
+ * `max-content` keyword. The value field carries nothing; the layout pass
+ * measures the content on the axis that states this kind and adds the box's
+ * own frame. Appended after the FR kind, so a stored number that predates it
+ * still means the same thing.
+ */
+#define CF_MAX_CONTENT ((cf_length){.kind = CF_LENGTH_MAX_CONTENT, .value = 0.0f})
+/*
+ * The box fills the room its container offers on this axis, the CSS `stretch`
+ * keyword and Yoga's FlexBasisStretch. An indefinite offer leaves the box to
+ * read as auto; nothing can stretch into room that has not been stated.
+ */
+#define CF_STRETCH ((cf_length){.kind = CF_LENGTH_STRETCH, .value = 0.0f})
 
 /*
  * The space a node is offered. AUTO on an axis means indefinite: the node

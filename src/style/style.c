@@ -33,8 +33,9 @@ uint32_t cf_tracks_repeat(cf_track *out, uint32_t capacity, const cf_track *patt
 
 float cf_length_resolve(cf_length length, float reference) {
     /* AUTO holds no length of its own - the flex pass decides - and FR is a
-     * share of leftover space rather than a measurement. Both read as zero so
-     * a caller summing box edges can ignore them. */
+     * share of leftover space rather than a measurement. MAX_CONTENT and
+     * STRETCH are rules the layout pass runs, not numbers it reads, and a
+     * caller summing box edges still wants zero from them. */
     switch (length.kind) {
     case CF_LENGTH_PX:
         return length.value;
@@ -42,6 +43,8 @@ float cf_length_resolve(cf_length length, float reference) {
         return reference * length.value / 100.0f;
     case CF_LENGTH_AUTO:
     case CF_LENGTH_FR:
+    case CF_LENGTH_MAX_CONTENT:
+    case CF_LENGTH_STRETCH:
         break;
     }
 
@@ -61,7 +64,9 @@ bool cf_length_of(cf_length declaration, cf_length offer, float *out) {
     /* A percentage of an extent still being measured is not a length. Leaving
      * it unresolved is what lets the caller fall back to the content size
      * instead of collapsing the box to zero. Only a pixel offer can resolve
-     * one: a percentage of a percentage describes no box anybody has sized. */
+     * one: a percentage of a percentage describes no box anybody has sized.
+     * MAX_CONTENT and STRETCH are decided by the layout pass rather than by
+     * this scalar reader, so a caller asking for a length gets nothing. */
     if (declaration.kind == CF_LENGTH_PERCENT && offer.kind == CF_LENGTH_PX) {
         *out = offer.value * declaration.value / 100.0f;
         return true;

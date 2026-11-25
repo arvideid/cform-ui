@@ -996,6 +996,92 @@ static void an_aspect_ratio_is_bounded_by_its_axis_minimum(void) {
     CF_NEAR(f.rects[leaf].width, 100.0f);
 }
 
+/*
+ * An axis that states max-content names its own intrinsic size and refuses
+ * the shrink-to-fit cap the auto path applies under a definite offer. Three
+ * children of 50/100/25 on a wrapping row sum to 175; the 120 the container
+ * offers is not the answer, because a max-content declaration says the box
+ * keeps the width its content wants even when it overflows. AUTO in the
+ * same spot would cap at 120 with a wrapped line.
+ */
+static void an_axis_that_states_max_content_ignores_the_shrink_to_fit_cap(void) {
+    fixture f;
+    cf_style stack = cf_style_default();
+    stack.direction = CF_DIRECTION_COLUMN;
+    stack.align_items = CF_ALIGN_START;
+    stack.width = CF_PX(120.0f);
+    stack.height = CF_PX(200.0f);
+    const uint32_t root = begin(&f, stack);
+
+    cf_style leaf_style = cf_style_default();
+    leaf_style.direction = CF_DIRECTION_ROW;
+    leaf_style.wrap = CF_WRAP;
+    leaf_style.width = CF_MAX_CONTENT;
+    const uint32_t leaf = append(&f, root, leaf_style);
+
+    cf_style first = fixed_box(50.0f, 50.0f);
+    first.flex_shrink = 0.0f;
+    append(&f, leaf, first);
+    cf_style second = fixed_box(100.0f, 50.0f);
+    second.flex_shrink = 0.0f;
+    append(&f, leaf, second);
+    cf_style third = fixed_box(25.0f, 50.0f);
+    third.flex_shrink = 0.0f;
+    append(&f, leaf, third);
+
+    arrange_in(&f, 120.0f, 200.0f);
+
+    CF_NEAR(f.rects[leaf].width, 175.0f);
+}
+
+/*
+ * A stretched axis fills the definite offer rather than hugging its content,
+ * which is what CSS `stretch` and Yoga's WidthStretch both say. The panel
+ * sits along a column so its width is the cross axis; align-items is held
+ * at start so nothing else on the path fills the box, and the STRETCH
+ * declaration is what stretches the leaf across the 500 the panel stated.
+ */
+static void a_stretched_axis_fills_the_offer_it_is_given(void) {
+    fixture f;
+    cf_style panel = cf_style_default();
+    panel.direction = CF_DIRECTION_COLUMN;
+    panel.align_items = CF_ALIGN_START;
+    panel.width = CF_PX(500.0f);
+    panel.height = CF_PX(200.0f);
+    const uint32_t root = begin(&f, panel);
+
+    cf_style filled = cf_style_default();
+    filled.width = CF_STRETCH;
+    const uint32_t leaf = append(&f, root, filled);
+
+    append(&f, leaf, fixed_box(80.0f, 30.0f));
+
+    arrange_in(&f, 500.0f, 200.0f);
+
+    CF_NEAR(f.rects[leaf].width, 500.0f);
+}
+
+/* Nothing can stretch into room that has not been stated: an indefinite offer
+ * leaves the axis to read as auto, hugging its content rather than claiming a
+ * size nobody has committed to. The root itself carries the STRETCH
+ * declaration and the layout call hands it an indefinite width. */
+static void a_stretched_axis_under_an_indefinite_offer_reads_as_auto(void) {
+    fixture f;
+    cf_style root_style = cf_style_default();
+    root_style.direction = CF_DIRECTION_ROW;
+    root_style.align_items = CF_ALIGN_START;
+    root_style.width = CF_STRETCH;
+    const uint32_t root = begin(&f, root_style);
+
+    append(&f, root, fixed_box(100.0f, 30.0f));
+
+    arrange_with(&scratch, &f, (cf_available){.width = CF_AUTO, .height = CF_AUTO});
+
+    /* No offer to stretch into, so the axis reads as auto and the root is
+     * the 100 its one child measures rather than any unstated room. */
+    CF_NEAR(f.rects[root].width, 100.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -1036,6 +1122,9 @@ int main(void) {
     CF_RUN(an_aspect_ratio_fills_in_the_axis_the_box_left_auto);
     CF_RUN(an_aspect_ratio_yields_to_both_axes_being_declared);
     CF_RUN(an_aspect_ratio_is_bounded_by_its_axis_minimum);
+    CF_RUN(an_axis_that_states_max_content_ignores_the_shrink_to_fit_cap);
+    CF_RUN(a_stretched_axis_fills_the_offer_it_is_given);
+    CF_RUN(a_stretched_axis_under_an_indefinite_offer_reads_as_auto);
 
     cf_arena_free(&scratch);
     return CF_REPORT();

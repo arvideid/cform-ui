@@ -396,10 +396,31 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
     bool has_height =
         settled_length(verdict.height, height_decl, constraint.height, measuring, &height);
 
+    /* A keyword axis names a rule rather than a number, so settled_length
+     * cannot resolve it and the block below settles it here. STRETCH fills
+     * the definite offer; an indefinite offer leaves the axis to read as
+     * auto, because nothing can stretch into room that has not been stated.
+     * MAX_CONTENT is not settled here: it measures the content on the axis
+     * below, but the shrink-to-fit cap further down skips an axis whose
+     * declaration says max-content, so a box that names its own intrinsic
+     * size is not later shrunk to the offer it happens to sit inside. */
+    float stretched;
+    if (!has_width && width_decl.kind == CF_LENGTH_STRETCH &&
+        definite_offer(constraint.width, &stretched)) {
+        width = stretched;
+        has_width = true;
+    }
+    if (!has_height && height_decl.kind == CF_LENGTH_STRETCH &&
+        definite_offer(constraint.height, &stretched)) {
+        height = stretched;
+        has_height = true;
+    }
+    const bool width_refuses_shrink_to_fit = width_decl.kind == CF_LENGTH_MAX_CONTENT;
+
     /* aspect-ratio §: when exactly one axis is settled and the box states a
      * ratio, the other axis is that axis divided by the ratio, on the border
      * box. Both axes settled, both auto, or no ratio means the ratio says
-     * nothing; a stored style from before the field reads unset (0) and keeps
+     * nothing; a stored style from before the field reads zero and keeps
      * sizing the way it always did. The bounds below still clamp each axis,
      * so a min or max on the derived side has the last word. */
     if (style->aspect_ratio > 0.0f && has_width != has_height) {
@@ -459,9 +480,11 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
         /* Shrink-to-fit, and only on the inline axis: content with no verdict
          * takes the width it was offered rather than pushing past it, but never
          * the width below what the content cannot break. CSS caps no auto height
-         * against an offered height, so overflowing vertically stays legal. */
+         * against an offered height, so overflowing vertically stays legal. An
+         * axis that states max-content refuses the cap: the declaration names
+         * the intrinsic size the box will keep even when the offer is narrower. */
         float offered_width;
-        if (!has_width && mode == CF_INTRINSIC_MAX_CONTENT &&
+        if (!has_width && !width_refuses_shrink_to_fit && mode == CF_INTRINSIC_MAX_CONTENT &&
             definite_offer(constraint.width, &offered_width) && width > offered_width) {
             const cf_size unbreakable =
                 border_size_of(ctx, slot, CF_INTRINSIC_MIN_CONTENT, constraint, verdict, measuring);
