@@ -89,9 +89,22 @@ jobs:
       # The rigs print the numbers a reviewer reads and only fail on a geometry
       # assertion, so they get a step of their own: a passing Test step hides
       # stdout, and an instrumented allocator would time the sanitizer instead
-      # of the engine.
+      # of the engine. The rig emits `meta` and `result` lines, so the same
+      # log becomes the historical artifact a reviewer diffs against the last
+      # release rather than a wall of prose only a human can compare.
       - name: Bench
-        run: ctest --test-dir build --build-config ${{ matrix.type }} -L bench --verbose
+        shell: bash
+        run: |
+          ctest --test-dir build --build-config "${{ matrix.type }}" -L bench --verbose \
+            | tee "bench-${{ matrix.os }}-${{ matrix.type }}.log"
+
+      - name: Archive bench log
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.os }}-${{ matrix.type }}
+          path: bench-${{ matrix.os }}-${{ matrix.type }}.log
+          retention-days: 90
+          if-no-files-found: error
 
   # GCC and Clang are the only toolchains with the ASan/UBSan pair, so this is
   # one Linux job rather than a matrix row that would have to be excluded
