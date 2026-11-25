@@ -74,11 +74,15 @@ outright. The other two, a `gap` stretch and a `staticposition` centring case, h
 it the same way: 22 individual box assertions across 12 fixtures, every one of them
 off by the grade rather than missing a rule. This stays a published difference.
 
-## The floor
+## The known differences
 
-`CONFORMANCE_FLOOR` in `tests/conformance/yoga_cases.c` is `473`, and it only
-moves up. The tier prints every mismatch and asserts the floor rather than a
-verdict, so a fixture that regresses fails `ctest`, while fixtures that have never
-passed stay visible here instead of being deleted to make a run look green. Closing
-a gap means raising the floor, updating the score and the skip table above, and
-naming the fixture that got fixed — all in one commit.
+`tests/conformance/yoga_cases.c` names the twelve fixtures the corpus is known
+not to match rather than asserting a floor. A fixture outside the list that
+starts to miss fails `ctest`, and one the list still carries that starts to pass
+fails too — so a fix can no longer cancel a break, which an aggregate score
+alone would hide. The tier still prints the whole per-suite table and the score
+on every run, so `ctest -R yoga` is the check and this file is the record.
+
+Closing a gap means deleting that fixture's name from the list, raising the
+published score above, and — where it changes what could be ported at all — the
+skip table, all in one commit.
