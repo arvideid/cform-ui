@@ -60,18 +60,22 @@ a little under four times the time.
 
 ## Building a screen and drawing it
 
-`bench_node` reconciles a 10,000-box description through one context.
-`bench_paint` turns a laid-out 10,000-box page into the list a device would be
-handed.
+`bench_node` reconciles a 10,000-box description through one context in five
+modes: cold build, idle, diff+layout, warm-change (half the widths shift) and
+churn (a different tree shape retires and rebuilds). `bench_paint` turns a
+laid-out 10,000-box page into fills, borders and text lines — one third of
+cells carry a glyph and every fourth a stroke.
 
 | step | what happens | time |
 |---|---|---|
 | cold build | the description is seen for the first time | 6.60 ms |
 | idle diff | the same description again, nothing changed | 4.86 ms |
 | diff and layout | one whole frame of it | 7.02 ms |
-| paint | 12,475 shapes out of 10,000 boxes | 0.28 ms |
+| warm-change | half the cell widths moved, then diff+layout | — |
+| churn | a structurally different tree replaces it | — |
+| paint | 15,841 commands (fills + borders + text) from 10,000 boxes | 0.28 ms |
 
-Redrawing that page needs 3,321 KiB of scratch, which is the number a shell sizes
+Redrawing that page needs 3,426 KiB of scratch, which is the number a shell sizes
 its memory pool against. Part of it tracks the deepest path and part tracks the
 node count: the content-measurement cache carries a row per node in the
 declaration, so the pool does not shrink just because the tree is shallow. See
