@@ -75,7 +75,7 @@ static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position, cf
     /* A box that clips its content bounds the descent: its children see the
      * box as their clip, narrowed by whatever already clipped this node - the
      * same rule paint hands down. Without an active clip the box is the clip. */
-    const bool self_clips = ctx->layout.styles[slot].clips_content;
+    const bool self_clips = cf_style_clips_content(&ctx->layout.styles[slot]);
     const cf_rect child_clip = self_clips ? (clipping ? rect_intersect(box, clip) : box) : clip;
     const bool child_clipping = clipping || self_clips;
 

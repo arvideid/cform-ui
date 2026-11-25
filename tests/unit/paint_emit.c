@@ -458,6 +458,49 @@ static void a_child_outside_a_clipping_box_paints_nothing(void) {
     CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "and that fill is the scroller's own");
 }
 
+/* overflow_x and overflow_y are the same rule as the legacy clips_content flag,
+ * spelled per axis the way CSS writes it. A box that names HIDDEN on either
+ * axis cuts its descendants at its own rect; a box that names VISIBLE on both
+ * does not. The paint walk reads the shared helper, so the two spellings agree
+ * without either being a special case. */
+static void an_overflow_axis_clips_the_way_the_legacy_flag_does(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = painted((cf_color){0u, 0u, 0u, 255u});
+    f.styles[0].overflow_y = CF_OVERFLOW_HIDDEN;
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(50.0f, 50.0f, 100.0f, 100.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 2u, "the axis name cuts, not the flag");
+    CF_NEAR(list.commands[1].rect.width, 50.0f);
+    CF_NEAR(list.commands[1].rect.height, 50.0f);
+}
+
+/* SCROLL means the same clip at the paint walk: the scrollbar is the widget's
+ * own concern, so the descendant is cut here and the offset arrives from a
+ * different style field. CLIP is HIDDEN for the same reason until a border is
+ * drawn into the clip rectangle. */
+static void an_overflow_scroll_axis_clips_until_the_widget_draws_a_bar(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = painted((cf_color){0u, 0u, 0u, 255u});
+    f.styles[0].overflow_x = CF_OVERFLOW_SCROLL;
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(150.0f, 150.0f, 40.0f, 40.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the scroller fill survives, the child past it does not");
+}
+
 /* A box that clips nothing lets its descendants overflow past its own box.
  * An offscreen non-clipping parent with a visible child must still paint the
  * child - the hit walk already descends into it; only a clipping box culls its
@@ -800,6 +843,8 @@ int main(void) {
     CF_RUN(text_lines_cull_like_their_box_does);
     CF_RUN(a_box_that_clips_cuts_its_children_square_fills);
     CF_RUN(a_child_outside_a_clipping_box_paints_nothing);
+    CF_RUN(an_overflow_axis_clips_the_way_the_legacy_flag_does);
+    CF_RUN(an_overflow_scroll_axis_clips_until_the_widget_draws_a_bar);
     CF_RUN(a_child_overflowing_a_non_clipping_parent_paints);
     CF_RUN(a_clipping_box_wholly_offscreen_culls_its_subtree);
     CF_RUN(a_clip_narrows_as_it_descends);

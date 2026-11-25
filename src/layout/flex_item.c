@@ -109,7 +109,7 @@ static void measure_item(const flex_context *f, flex_item *item) {
      * item that cuts its own overflow is the exception - it has somewhere to put
      * the part that does not fit - and without that exemption a scroller would
      * refuse to shrink and push out of its line instead of scrolling. */
-    item->min_is_auto = cf_length_is_auto(main_min) && !child->clips_content;
+    item->min_is_auto = cf_length_is_auto(main_min) && !cf_style_clips_content(child);
     item->grow = child->flex_grow;
     item->shrink = child->flex_shrink;
 

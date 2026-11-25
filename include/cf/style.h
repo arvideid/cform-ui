@@ -93,6 +93,25 @@ typedef enum cf_display { CF_DISPLAY_FLEX, CF_DISPLAY_GRID, CF_DISPLAY_NONE } cf
 typedef enum cf_box_sizing { CF_BOX_BORDER, CF_BOX_CONTENT } cf_box_sizing;
 
 /*
+ * How a box treats content that reaches past its own border box. Layout does
+ * not care - the children measure the same either way - so the axis is a paint
+ * and hit-test contract: the walk clips descendants when it hands them off.
+ * CF_OVERFLOW_VISIBLE (the zero value) lets a child overhang; HIDDEN cuts the
+ * descendant at the box and hands the pointer to whatever shows through;
+ * SCROLL is HIDDEN for now, the scrollbar being the widget's own concern;
+ * CLIP is a stronger HIDDEN whose rule reaches the border box rather than the
+ * padding edge - the same rectangle is used either way until a border is
+ * drawn into the clip. Appended, so the display and box-sizing enums keep
+ * their numbers.
+ */
+typedef enum cf_overflow {
+    CF_OVERFLOW_VISIBLE,
+    CF_OVERFLOW_HIDDEN,
+    CF_OVERFLOW_SCROLL,
+    CF_OVERFLOW_CLIP
+} cf_overflow;
+
+/*
  * Margin, padding and border as tagged lengths, in the same physical order as
  * cf_edges so a paint pass can read the two side by side. Auto is a real value
  * for margin (§9.5.2 absorbs free space before justify-content gets any) and
@@ -202,8 +221,13 @@ typedef struct cf_style {
     /*
      * Whether the box's children paint only inside its own rect - the
      * scroller's contract. The zero state lets a child overhang, as a
-     * relative box always has.
+     * relative box always has. overflow_x and overflow_y are the same rule
+     * stated per axis and are what CSS writes; a box clips when either axis
+     * says HIDDEN/SCROLL/CLIP or when clips_content is set directly (the
+     * legacy spelling the scroller widget still uses).
      */
+    cf_overflow overflow_x;
+    cf_overflow overflow_y;
     bool clips_content;
 
     /*
@@ -220,6 +244,17 @@ typedef struct cf_style {
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */
 cf_style cf_style_default(void);
+
+/*
+ * Whether a box cuts its descendants at its own rect: true when either axis
+ * names hidden, scroll or clip, or when the legacy clips_content flag is set.
+ * The paint walk and the hit-test walk both read the answer, so the rule sits
+ * next to the style rather than being reconstructed in each caller.
+ */
+static inline bool cf_style_clips_content(const cf_style *style) {
+    return style->clips_content || style->overflow_x != CF_OVERFLOW_VISIBLE ||
+           style->overflow_y != CF_OVERFLOW_VISIBLE;
+}
 
 /*
  * `pattern` written into `out` end to end `times`, stopping at `capacity`. The

@@ -236,7 +236,7 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
      */
     cf_rect clip = carried_clip(walk);
 
-    if (style->clips_content) {
+    if (cf_style_clips_content(style)) {
         const cf_rect padding_box = {box.x + stroke.left, box.y + stroke.top,
                                      box.width - stroke.left - stroke.right,
                                      box.height - stroke.top - stroke.bottom};
@@ -436,7 +436,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     const cf_rect outer_clip = walk->clip;
     const bool outer_clipping = walk->clipping;
 
-    if (style->clips_content) {
+    if (cf_style_clips_content(style)) {
         if (!reaches) {
             return;
         }

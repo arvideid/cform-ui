@@ -18,9 +18,9 @@ corpus row places its box in the root's coordinate space, so the two numbers
 are carried down the tree before a row is written.
 
 A case is left out when it needs something `cf_style` cannot state - a measure
-callback, content-box sizing, `display: none`, an intrinsic or stretch keyword -
-and the summary counts why, so the published percentage is the ported set over
-the whole set.
+callback, an intrinsic or stretch keyword, a template shorthand - and the
+summary counts why, so the published percentage is the ported set over the
+whole set.
 
 Usage: python tools/gentest.py [yoga-dir] [out-file]
        yoga-dir defaults to .vendor/yoga, out-file to
@@ -66,9 +66,9 @@ BOX_FIELDS = ("margin", "padding", "border", "inset")
 # numbers, then the keywords.
 FIELD_ORDER = SIZES + BOX_FIELDS + ("column_gap", "row_gap", "flex_grow",
                                     "flex_shrink", "position", "display",
-                                    "box_sizing", "direction", "wrap",
-                                    "justify_content", "align_items",
-                                    "align_self", "align_content")
+                                    "box_sizing", "overflow_x", "overflow_y",
+                                    "direction", "wrap", "justify_content",
+                                    "align_items", "align_self", "align_content")
 
 # What Yoga starts a node with that cf_style's zero does not give. A margin of
 # 0 is stated in box_declaration, where the other boxes are written. Yoga's
@@ -157,7 +157,7 @@ EDGE_SETTERS = {"Margin": "margin", "Padding": "padding", "Border": "border",
 # not model it. `box-sizing` is here for the same reason: `content-box` is a
 # cf_box_sizing value the BoxSizing setter handler reads, and `border-box` is
 # what cf_style's zero already gives.
-UNSUPPORTED_SUFFIXES = ("AspectRatio", "Overflow",
+UNSUPPORTED_SUFFIXES = ("AspectRatio",
                         "MaxContent", "MinContent", "FitContent", "Stretch",
                         "TemplateRows", "TemplateColumns")
 
@@ -297,6 +297,23 @@ class Fixture:
             if variant == "YGBoxSizingContentBox":
                 style["box_sizing"] = "CF_BOX_CONTENT"
             elif variant != "YGBoxSizingBorderBox":
+                self._reject("needs " + variant)
+            return
+
+        if setter == "Overflow":
+            # cf_style names both axes; Yoga only has one word. Any non-visible
+            # value writes both axes so cf_style_clips_content reads true, and
+            # visible is what cf_style's zero already gives.
+            variant = arguments[1]
+            if variant == "YGOverflowVisible":
+                return
+            if variant in ("YGOverflowHidden", "YGOverflowScroll",
+                           "YGOverflowClip"):
+                name = variant[len("YGOverflow"):].upper()
+                value = "CF_OVERFLOW_" + name
+                style["overflow_x"] = value
+                style["overflow_y"] = value
+            else:
                 self._reject("needs " + variant)
             return
 

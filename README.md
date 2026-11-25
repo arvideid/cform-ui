@@ -156,7 +156,7 @@ accepted and ignored — there is no field that pretends to take these things.
 - **The cursor never changes.** A hovered field reports that it wants an I-beam
   and the frame carries that as far as the backend, which ignores it: no backend
   here sets a system cursor.
-- **Missing CSS, in full:** `overflow`, `calc()`, `aspect-ratio`, container
+- **Missing CSS, in full:** `calc()`, `aspect-ratio`, container
   queries, grid named lines and areas, and every transition and animation but the
   ones you write in C against the frame's elapsed seconds.
 - No drag-and-drop building, no theming tool, no loading a font from memory

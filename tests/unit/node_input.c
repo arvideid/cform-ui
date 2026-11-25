@@ -761,6 +761,58 @@ static void a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out(void) {
 }
 
 /*
+ * The per-axis overflow fields drive the same cut. A box whose overflow_x
+ * reads HIDDEN hands the hit walk the same clip that clips_content = true
+ * already gave it, because cf_style_clips_content reads one answer for both
+ * spellings and neither is a special case in the walk.
+ */
+static void a_point_past_an_overflow_axis_uses_the_same_rule(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder visible_log = {0};
+    recorder hidden_log = {0};
+
+    cf_node children[] = {
+        box(50.0f, 100.0f, on_pointer, &visible_log),
+        box(50.0f, 100.0f, on_pointer, &hidden_log),
+    };
+
+    for (uint32_t i = 0; i < 2u; ++i) {
+        children[i].style.flex_shrink = 0.0f;
+    }
+
+    cf_node rail = box(50.0f, 100.0f, on_pointer, NULL);
+    rail.style.overflow_x = CF_OVERFLOW_HIDDEN;
+    rail.style.direction = CF_DIRECTION_ROW;
+    rail.children = children;
+    rail.child_count = 2u;
+
+    const cf_node root_children[] = {rail};
+    cf_node root = box(200.0f, 200.0f, on_pointer, NULL);
+    root.children = root_children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t rail_slot = child_slot(&ctx, 0u);
+    const uint32_t first = child_of(&ctx, rail_slot, 0u);
+    const uint32_t second = child_of(&ctx, rail_slot, 1u);
+
+    CF_CHECK(cf_hit_test(&ctx, (cf_point){25.0f, 50.0f}) == first,
+             "the child inside the axis clip answers the point");
+    CF_CHECK(cf_hit_test(&ctx, (cf_point){75.0f, 50.0f}) != second,
+             "the child past the axis clip does not");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
  * A `display: none` box is out of the layout and out of input: it is not
  * placed, so its visible sibling moves into its flow slot, and a point there
  * reaches the sibling rather than the box that hid itself.
@@ -825,6 +877,7 @@ int main(void) {
     CF_RUN(a_recycled_slot_reads_as_nothing);
     CF_RUN(dispatch_before_a_layout_hits_nothing);
     CF_RUN(a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out);
+    CF_RUN(a_point_past_an_overflow_axis_uses_the_same_rule);
     CF_RUN(a_hidden_box_takes_no_input_and_yields_its_place);
 
     return CF_REPORT();
