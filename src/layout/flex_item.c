@@ -68,12 +68,37 @@ static void assign_margins(const flex_context *f, const cf_box *margin, flex_ite
 static void measure_item(const flex_context *f, flex_item *item) {
     const cf_style *child = &f->ctx->tree->styles[item->slot];
 
-    const cf_length main_declared = f->row ? child->width : child->height;
-    const cf_length cross_declared = f->row ? child->height : child->width;
-    const cf_length main_min = f->row ? child->min_width : child->min_height;
-    const cf_length main_max = f->row ? child->max_width : child->max_height;
-    const cf_length cross_min = f->row ? child->min_height : child->min_width;
-    const cf_length cross_max = f->row ? child->max_height : child->max_width;
+    /* §9.2.1 steps 1-2: padding and border are part of the border box the
+     * item reserves, so no base size is booked smaller than the frame it
+     * carries. The line that books the item advances by the box the child is
+     * really painted at, not the raw number. */
+    const cf_edges inset = content_insets(f->ctx, item->slot, f->percent_base);
+    const float main_frame = f->row ? inset.left + inset.right : inset.top + inset.bottom;
+    const float cross_frame = f->row ? inset.top + inset.bottom : inset.left + inset.right;
+
+    /* The item's own sizes and bounds, chosen for this pass's main and cross. */
+    cf_length main_declared = f->row ? child->width : child->height;
+    cf_length cross_declared = f->row ? child->height : child->width;
+    cf_length main_min = f->row ? child->min_width : child->min_height;
+    cf_length main_max = f->row ? child->max_width : child->max_height;
+    cf_length cross_min = f->row ? child->min_height : child->min_width;
+    cf_length cross_max = f->row ? child->max_height : child->max_width;
+    cf_length main_basis = child->flex_basis;
+
+    /* A content-box item measures each of these inside its frame, so each is
+     * rewritten to the border box it stands for before the flex rules reserve
+     * the item's main and cross sizes; the pass then reads border boxes. */
+    if (child->box_sizing == CF_BOX_CONTENT) {
+        main_declared =
+            border_of_declaration(main_declared, f->main_offer, main_frame, f->measuring);
+        cross_declared =
+            border_of_declaration(cross_declared, f->cross_offer, cross_frame, f->measuring);
+        main_basis = border_of_declaration(main_basis, f->main_offer, main_frame, f->measuring);
+        main_min = border_of_declaration(main_min, f->main_offer, main_frame, false);
+        main_max = border_of_declaration(main_max, f->main_offer, main_frame, false);
+        cross_min = border_of_declaration(cross_min, f->cross_offer, cross_frame, false);
+        cross_max = border_of_declaration(cross_max, f->cross_offer, cross_frame, false);
+    }
 
     item->min_main = resolve_bound(main_min, f->main_offer, 0.0f);
     item->max_main = resolve_bound(main_max, f->main_offer, FLT_MAX);
@@ -88,18 +113,10 @@ static void measure_item(const flex_context *f, flex_item *item) {
     item->grow = child->flex_grow;
     item->shrink = child->flex_shrink;
 
-    /* §9.2.1 steps 1-2: padding and border are part of the border box the
-     * item reserves, so no base size is booked smaller than the frame it
-     * carries. The line that books the item advances by the box the child is
-     * really painted at, not the raw number. */
-    const cf_edges inset = content_insets(f->ctx, item->slot, f->percent_base);
-    const float main_frame = f->row ? inset.left + inset.right : inset.top + inset.bottom;
-    const float cross_frame = f->row ? inset.top + inset.bottom : inset.left + inset.right;
-
     /* §9.2.1 steps 3-5: flex-basis, then the declared main size, then the
      * content. Nothing declared means nothing measured yet either. */
     float declared;
-    const bool main_is_declared = declared_size(f, child->flex_basis, f->main_offer, &declared) ||
+    const bool main_is_declared = declared_size(f, main_basis, f->main_offer, &declared) ||
                                   declared_size(f, main_declared, f->main_offer, &declared);
 
     float cross_settled;

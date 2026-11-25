@@ -760,3 +760,41 @@
                {STYLE(.width = CF_PX(40.0f), .height = CF_PX(40.0f),
                       .inset = SIDES(CF_PX(10.0f), CF_PX(10.0f), CF_AUTO, CF_AUTO)),
                 0u, RECT(0.0f, 0.0f, 40.0f, 40.0f)}}},
+
+    /* A `box-sizing: content-box` size measures the content it encloses; the
+     * border box the pass returns adds the frame around it. Padding and border
+     * on all four sides count once on each axis, so a 30x20 content inside a
+     * 10/5 frame lands at 60 wide and 50 tall. */
+    {.name = "a content-box size grows by the frame around its content",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+               {CONTENT_BOX(.width = CF_PX(30.0f), .height = CF_PX(20.0f), .padding = BOX(10.0f),
+                            .border = BOX(5.0f)),
+                0u, RECT(0.0f, 0.0f, 60.0f, 50.0f)}}},
+
+    /* A percentage on a content-box declaration resolves against the same
+     * containing block a border-box percentage would, then grows by the frame
+     * the box paints outside its content - the pass still returns a border box
+     * for the child to sit in. */
+    {.name = "a content-box percentage resolves then grows by its frame",
+     .available = AVAILABLE(CF_PX(200.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {{SIZE(200.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 200.0f, 100.0f)},
+               {CONTENT_BOX(.width = CF_PERCENT(50), .height = CF_PX(20.0f), .padding = BOX(10.0f)),
+                0u, RECT(0.0f, 0.0f, 120.0f, 40.0f)}}},
+
+    /* An out-of-flow child resolves its own sizes against the containing block
+     * rather than through the flex pipeline; a content-box declaration still
+     * has to grow by the frame, or the pass returns the content and the paint
+     * finds a box too small for what it encloses. The Yoga fixture of the same
+     * name caught this once; the case is here so a regression shows up in the
+     * unit tier before the corpus is regenerated. */
+    {.name = "a content-box absolute size grows by its frame",
+     .available = AVAILABLE(CF_PX(100.0f), CF_PX(100.0f)),
+     .node_count = 2u,
+     .nodes = {
+         {SIZE(100.0f, 100.0f), ROOT, RECT(0.0f, 0.0f, 100.0f, 100.0f)},
+         {ABSOLUTE(.box_sizing = CF_BOX_CONTENT, .height = CF_PERCENT(25), .padding = BOX(12.0f),
+                   .border = BOX(8.0f), .inset = SIDES(CF_PX(0.0f), CF_PX(0.0f), CF_AUTO, CF_AUTO)),
+          0u, RECT(0.0f, 0.0f, 40.0f, 65.0f)}}},

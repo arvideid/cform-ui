@@ -41,17 +41,17 @@ ones a browser would infer.
 
 ## The score
 
-**479 of 491 ported fixtures match** — 97% of what could be ported, 88% of Yoga's
-whole suite. Measured at `4bae6fc`. The tier prints a per-suite table on every
-run, so `ctest -R yoga` is the check and this file is only the record.
+**502 of 514 ported fixtures match** — 98% of what could be ported, 92% of Yoga's
+whole suite. Measured at the branch tip that added the content-box port. The tier
+prints a per-suite table on every run, so `ctest -R yoga` is the check and this
+file is only the record.
 
-Of Yoga's 543 fixtures, 491 can be expressed in `cf_style` at all. The other 52
+Of Yoga's 543 fixtures, 514 can be expressed in `cf_style` at all. The other 29
 need a feature the struct has no field for, and they are counted rather than
 quietly dropped, so the denominator stays the whole suite:
 
 | fixtures skipped | because they need |
 |---|---|
-| 23 | `box-sizing: content-box` |
 | 12 | a measure callback, so the answer depends on font metrics |
 | 9 | `display: contents` |
 | 5 | an `auto`-sizing keyword (`max-content`, `stretch`) |

@@ -81,6 +81,18 @@ typedef enum cf_position {
 typedef enum cf_display { CF_DISPLAY_FLEX, CF_DISPLAY_GRID, CF_DISPLAY_NONE } cf_display;
 
 /*
+ * What a declared width or height measures. CF_BOX_BORDER is the whole border
+ * box - padding and border sit inside it - and is the zero state, so a style
+ * written before the field existed keeps sizing the way it always did.
+ * CF_BOX_CONTENT makes the declaration measure the content area and adds the
+ * box's own padding and border outside it, the way CSS writes
+ * `box-sizing: content-box`. A stretched or parent-decided size is a border box
+ * either way; only the node's own width, height, flex-basis and bounds read as
+ * content. Appended, so CF_DISPLAY_* and the direction enums keep their numbers.
+ */
+typedef enum cf_box_sizing { CF_BOX_BORDER, CF_BOX_CONTENT } cf_box_sizing;
+
+/*
  * Margin, padding and border as tagged lengths, in the same physical order as
  * cf_edges so a paint pass can read the two side by side. Auto is a real value
  * for margin (§9.5.2 absorbs free space before justify-content gets any) and
@@ -117,10 +129,12 @@ typedef struct cf_track {
  * flex-shrink of 1, and margins of 0 rather than margins that auto-absorb every
  * bit of leftover space.
  *
- * A declared width or height is the border box: padding and border sit inside
- * it, and min and max clamp the border box with it. CSS's content-box default
- * is deliberately not inherited - a toolkit box that has to be measured twice
- * to learn its own padding is not worth the spec citation.
+ * A declared width or height is the border box by default: padding and border
+ * sit inside it, and min and max clamp the border box with it. The CSS
+ * content-box default is not inherited - a toolkit box that has to be measured
+ * twice to learn its own padding is not worth the spec citation - but a node may
+ * ask for it by setting `box_sizing` to CF_BOX_CONTENT, which makes its own
+ * width, height, flex-basis and bounds measure the content area instead.
  *
  * In a grid container the two track arrays describe the explicit grid and are
  * borrowed for the duration of the pass, like every other array the engine
@@ -158,6 +172,7 @@ typedef struct cf_style {
     float flex_shrink;
     cf_position position;
     cf_display display;
+    cf_box_sizing box_sizing;
     cf_direction direction;
     cf_wrap wrap;
     cf_justify justify_content;

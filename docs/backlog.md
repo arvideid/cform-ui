@@ -11,7 +11,6 @@ and this file is the record.
 |---|---|---|
 | **Tab order** | focus follows the pointer. A keyboard-only user cannot reach a field at all | a focus walk over the declared tree in order, shift reversing it, skipping boxes that take no focus and retired nodes. Cases in `node_input`; a golden of the focused box's paint |
 | **The clipboard** | a field cannot copy, cut or paste | one backend slot for reading and writing UTF-8 text, an answer from the headless recorder, and `CF_MOD_CONTROL`/`CF_MOD_META` paths in the field |
-| **`box-sizing: content-box`** | 23 fixtures, and every percentage width a web developer writes means the other thing | resolve padding and border outside the declared width where the box asks for it; the fixtures plus one unit case per axis |
 | **`overflow`** | 2 fixtures. A box cannot say *clip*, *scroll* or *visible*: clipping is a property of the scroller widget, not of the style | `cf_style.overflow` naming both axes, with the scroller's clip becoming one answer of the general rule. The clip contract already has a golden (`clipped_content`) to extend |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
 | **Undo** | a mistyped run is gone for good | a ring of (bytes, caret, mark) in the field's own state block. Unit cases: type, undo, redo, and an undo that stops at the buffer's edge |
@@ -54,7 +53,7 @@ it. Each needs a design conversation before a line of code:
   snapped every edge to a whole pixel before recording it and `cf_layout` returns
   exact fractions. Closing them means deciding whether a layout engine owns
   pixel-snapping or the renderer does. Until that is settled the floor stays at
-  473.
+  502.
 - 5 fixtures need `max-content`/`stretch` as sizing keywords, and 12 need a measure
   callback whose answer depends on real font metrics — that one belongs to a
   text-backend test rather than to this tier.

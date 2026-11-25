@@ -14,6 +14,7 @@
 #define ABSOLUTE(...) STYLE(.position = CF_POSITION_ABSOLUTE, __VA_ARGS__)
 #define RELATIVE(...) STYLE(.position = CF_POSITION_RELATIVE, __VA_ARGS__)
 #define GRID(...) STYLE(.display = CF_DISPLAY_GRID, __VA_ARGS__)
+#define CONTENT_BOX(...) STYLE(.box_sizing = CF_BOX_CONTENT, __VA_ARGS__)
 /* A track is minmax(min, max); a fixed one repeats its length in both slots. */
 #define TRACK(min_length, max_length) {(min_length), (max_length)}
 #define TRACKS(...)                                                                                \

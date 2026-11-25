@@ -364,13 +364,38 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
     definite_offer(constraint.width, &percent_base);
 
     const cf_edges inset = content_insets(ctx, slot, percent_base);
+    const float frame_width = inset.left + inset.right;
+    const float frame_height = inset.top + inset.bottom;
+
+    /* Content-box sizing makes the node's own width, height and bounds measure
+     * its content, so each is rewritten to the border box it stands for before
+     * the pass below runs. Every rule that settles a size, bounds it or offers
+     * its room to children then reads a border box and works exactly as it does
+     * when the node asked for one; a verdict is already the parent's border-box
+     * decision and is never rewritten. */
+    cf_length width_decl = style->width;
+    cf_length height_decl = style->height;
+    cf_length min_width = style->min_width;
+    cf_length max_width = style->max_width;
+    cf_length min_height = style->min_height;
+    cf_length max_height = style->max_height;
+
+    if (style->box_sizing == CF_BOX_CONTENT) {
+        width_decl = border_of_declaration(width_decl, constraint.width, frame_width, measuring);
+        height_decl =
+            border_of_declaration(height_decl, constraint.height, frame_height, measuring);
+        min_width = border_of_declaration(min_width, constraint.width, frame_width, false);
+        max_width = border_of_declaration(max_width, constraint.width, frame_width, false);
+        min_height = border_of_declaration(min_height, constraint.height, frame_height, false);
+        max_height = border_of_declaration(max_height, constraint.height, frame_height, false);
+    }
 
     float width = 0.0f;
     float height = 0.0f;
     const bool has_width =
-        settled_length(verdict.width, style->width, constraint.width, measuring, &width);
+        settled_length(verdict.width, width_decl, constraint.width, measuring, &width);
     const bool has_height =
-        settled_length(verdict.height, style->height, constraint.height, measuring, &height);
+        settled_length(verdict.height, height_decl, constraint.height, measuring, &height);
 
     /* A bound settles an axis before anything is measured inside it, so children
      * wrap at the width their box really gets rather than at the one its
@@ -380,10 +405,10 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
      * given. An automatic axis is bounded through its offer instead, since the
      * room it will fill is the room it is offered. */
     if (has_width) {
-        width = cf_size_clamp(width, style->min_width, style->max_width, constraint.width);
+        width = cf_size_clamp(width, min_width, max_width, constraint.width);
     }
     if (has_height) {
-        height = cf_size_clamp(height, style->min_height, style->max_height, constraint.height);
+        height = cf_size_clamp(height, min_height, max_height, constraint.height);
     }
 
     /* An axis that is already settled bounds the box the other axis measures
@@ -391,32 +416,29 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
      * is offered taken inside the frame: a child's percentages read the box
      * its content fills, not the one the frame wraps.
      */
-    const float frame_width = inset.left + inset.right;
-    const float frame_height = inset.top + inset.bottom;
     cf_available content_offer;
 
     if (has_width) {
         content_offer.width = CF_PX(clamp_non_negative(width - frame_width));
     } else {
-        content_offer.width =
-            automatic_offer(constraint.width, style->min_width, style->max_width, frame_width);
+        content_offer.width = automatic_offer(constraint.width, min_width, max_width, frame_width);
     }
 
     if (has_height) {
         content_offer.height = CF_PX(clamp_non_negative(height - frame_height));
     } else {
         content_offer.height =
-            automatic_offer(constraint.height, style->min_height, style->max_height, frame_height);
+            automatic_offer(constraint.height, min_height, max_height, frame_height);
     }
 
     if (!has_width || !has_height) {
         const cf_size content = content_extent_of(ctx, slot, mode, content_offer);
 
         if (!has_width) {
-            width = content.width + inset.left + inset.right;
+            width = content.width + frame_width;
         }
         if (!has_height) {
-            height = content.height + inset.top + inset.bottom;
+            height = content.height + frame_height;
         }
 
         /* Shrink-to-fit, and only on the inline axis: content with no verdict
@@ -434,14 +456,12 @@ cf_size border_size_of(const layout_ctx *ctx, uint32_t slot, cf_intrinsic mode,
 
     /* min and max clamp the border box, and min keeps the last word when the
      * pair contradicts, so a misconfigured node still lands somewhere. */
-    const float clamped_width =
-        cf_size_clamp(width, style->min_width, style->max_width, constraint.width);
-    const float clamped_height =
-        cf_size_clamp(height, style->min_height, style->max_height, constraint.height);
+    const float clamped_width = cf_size_clamp(width, min_width, max_width, constraint.width);
+    const float clamped_height = cf_size_clamp(height, min_height, max_height, constraint.height);
 
     /* A border box is drawn no smaller than the padding and border it has to
      * hold: the frame has the last word, the way min does when min and max
      * contradict. A declared or clamped size below it is impossible to paint. */
-    return (cf_size){.width = larger(clamped_width, inset.left + inset.right),
-                     .height = larger(clamped_height, inset.top + inset.bottom)};
+    return (cf_size){.width = larger(clamped_width, frame_width),
+                     .height = larger(clamped_height, frame_height)};
 }

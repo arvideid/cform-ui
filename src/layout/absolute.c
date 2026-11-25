@@ -57,17 +57,41 @@ static absolute_axis vertical(const cf_style *child, const cf_available *block) 
  * definite insets leave, else what its content asks for - which is the
  * shrink-to-fit a box in the flow would get, because an out-of-flow child has
  * no line to stretch across. min and max bound whichever answer comes out.
+ *
+ * A `box-sizing: content-box` child writes its own width, height and bounds as
+ * what sits inside the frame; each is rewritten to the border box it stands
+ * for before the sizing below reads it, so the pass stays a border-box pass.
+ * The two-inset branch and the shrink-to-fit branch answer a border box on
+ * their own - CSS §10.3.8 leaves an auto width resolved from the insets alone
+ * and border_size_of already applies the child's box-sizing on the measure
+ * branch - so only a declared length and its bounds are touched here.
  */
 static float absolute_size(const layout_ctx *ctx, uint32_t slot, cf_available constraint,
                            const absolute_axis *axis) {
     float extent = 0.0f;
     definite_offer(axis->block, &extent);
 
+    cf_length declared = axis->declared;
+    cf_length minimum = axis->minimum;
+    cf_length maximum = axis->maximum;
+
+    if (ctx->tree->styles[slot].box_sizing == CF_BOX_CONTENT) {
+        float percent_base = 0.0f;
+        definite_offer(constraint.width, &percent_base);
+
+        const cf_edges inset = content_insets(ctx, slot, percent_base);
+        const float frame = axis->width_axis ? inset.left + inset.right : inset.top + inset.bottom;
+
+        declared = border_of_declaration(declared, axis->block, frame, false);
+        minimum = border_of_declaration(minimum, axis->block, frame, false);
+        maximum = border_of_declaration(maximum, axis->block, frame, false);
+    }
+
     float size;
     float start;
     float end;
 
-    if (!cf_length_of(axis->declared, axis->block, &size)) {
+    if (!cf_length_of(declared, axis->block, &size)) {
         if (cf_length_of(axis->start, axis->block, &start) &&
             cf_length_of(axis->end, axis->block, &end)) {
             size = extent - start - end - axis->margin_start - axis->margin_end;
@@ -87,7 +111,7 @@ static float absolute_size(const layout_ctx *ctx, uint32_t slot, cf_available co
         }
     }
 
-    return cf_size_clamp(size, axis->minimum, axis->maximum, axis->block);
+    return cf_size_clamp(size, minimum, maximum, axis->block);
 }
 
 /*

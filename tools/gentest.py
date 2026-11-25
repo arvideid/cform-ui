@@ -66,8 +66,9 @@ BOX_FIELDS = ("margin", "padding", "border", "inset")
 # numbers, then the keywords.
 FIELD_ORDER = SIZES + BOX_FIELDS + ("column_gap", "row_gap", "flex_grow",
                                     "flex_shrink", "position", "display",
-                                    "direction", "wrap", "justify_content",
-                                    "align_items", "align_self", "align_content")
+                                    "box_sizing", "direction", "wrap",
+                                    "justify_content", "align_items",
+                                    "align_self", "align_content")
 
 # What Yoga starts a node with that cf_style's zero does not give. A margin of
 # 0 is stated in box_declaration, where the other boxes are written. Yoga's
@@ -153,8 +154,10 @@ EDGE_SETTERS = {"Margin": "margin", "Padding": "padding", "Border": "border",
 # guessed at. `display: none` is not here because cf_display names it; the
 # Display setter handler rejects `display: contents` on its own, since that
 # feature promotes a box's children into its parent's flow and cf_style does
-# not model it.
-UNSUPPORTED_SUFFIXES = ("AspectRatio", "BoxSizing", "Overflow",
+# not model it. `box-sizing` is here for the same reason: `content-box` is a
+# cf_box_sizing value the BoxSizing setter handler reads, and `border-box` is
+# what cf_style's zero already gives.
+UNSUPPORTED_SUFFIXES = ("AspectRatio", "Overflow",
                         "MaxContent", "MinContent", "FitContent", "Stretch",
                         "TemplateRows", "TemplateColumns")
 
@@ -284,6 +287,16 @@ class Fixture:
             if variant == "YGDisplayNone":
                 style["display"] = "CF_DISPLAY_NONE"
             elif variant != "YGDisplayFlex":
+                self._reject("needs " + variant)
+            return
+
+        if setter == "BoxSizing":
+            # Yoga's template styles every div as border-box, which is what
+            # cf_style's zero already gives, so only content-box earns a word.
+            variant = arguments[1]
+            if variant == "YGBoxSizingContentBox":
+                style["box_sizing"] = "CF_BOX_CONTENT"
+            elif variant != "YGBoxSizingBorderBox":
                 self._reject("needs " + variant)
             return
 

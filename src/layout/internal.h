@@ -165,6 +165,31 @@ bool definite_offer(cf_length offer, float *out);
  * answers in negatives and a shortfall that overflows all read as zero. */
 float clamp_non_negative(float value);
 
+/*
+ * A `box-sizing: content-box` declaration as the border box it stands for: its
+ * length resolved against `reference` and grown by the `frame` the box paints
+ * outside its content. An `auto` or `fr` length resolves to nothing and keeps
+ * its declaration, so an automatic axis stays automatic; a percentage seen
+ * during a measuring pass that has not settled its base yet is left alone too,
+ * because resolving it now would be a percentage of the answer the pass is
+ * still looking for. Bounds pass `measuring` false: they belong to the box they
+ * clamp and are read against whatever reference that box has.
+ */
+static inline cf_length border_of_declaration(cf_length declaration, cf_length reference,
+                                              float frame, bool measuring) {
+    if (measuring && declaration.kind == CF_LENGTH_PERCENT) {
+        return declaration;
+    }
+
+    float value;
+
+    if (!cf_length_of(declaration, reference, &value)) {
+        return declaration;
+    }
+
+    return CF_PX(clamp_non_negative(value) + frame);
+}
+
 uint32_t child_count(const layout_ctx *ctx, uint32_t slot);
 
 /*
