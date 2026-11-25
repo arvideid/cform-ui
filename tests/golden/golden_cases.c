@@ -259,10 +259,11 @@ static void idle_frame(scene *s) {
 
 /*
  * The scroller's contract, end to end: a box that clips its content hands every
- * command below it the rect it must not paint outside. A fill and an image are
- * cut here, because cutting a rectangle is the whole of what they draw; a border
- * and a text line keep their true rect and name the clip, because cutting those
- * by rewriting the rect would move the corners and the baseline. A child past
+ * command below it the rect it must not paint outside. A square fill is cut here,
+ * because cutting a rectangle is the whole of what it draws; a rounded fill, an
+ * image, a border and a text line keep their true rect and name the clip, because
+ * cutting those by rewriting the rect would move the corners it rounds, rescale
+ * the texture, move the corners a stroke joins and lift a baseline. A child past
  * the clip is not emitted at all, and the box that clips is never clipped by
  * itself.
  */
@@ -288,12 +289,24 @@ static void clipped_content(scene *s) {
     (void)add_node(s, 0u, panel);
 
     /* Wider and taller than the panel: the fill arrives cut at both far edges,
-     * which is all a rectangle needs to be drawn inside a scissor. */
+     * which is all a square needs to be drawn inside a scissor. */
     cf_style cut = filled(stated(70u, 130u, 180u));
     place(&cut, 8.0f, 8.0f);
     cut.width = CF_PX(200.0f);
     cut.height = CF_PX(80.0f);
     (void)add_node(s, 1u, cut);
+
+    /* Rounded and running past the right edge: rewriting its rect would round the
+     * cut box, so the corners the style states stay where they are and the clip
+     * stops the drawing - the fill and the border of one box then share an arc. */
+    cf_style rounded = filled(stated(255u, 218u, 185u));
+    place(&rounded, 80.0f, 4.0f);
+    rounded.width = CF_PX(60.0f);
+    rounded.height = CF_PX(40.0f);
+    rounded.radius = 10.0f;
+    rounded.border = (cf_box){CF_PX(2.0f), CF_PX(2.0f), CF_PX(2.0f), CF_PX(2.0f)};
+    rounded.border_color = stated(16u, 16u, 16u);
+    (void)add_node(s, 1u, rounded);
 
     /* Stroked and straddling the bottom edge: the four sides the box declared
      * stay in the stream, and the device does the cutting. */
@@ -305,7 +318,8 @@ static void clipped_content(scene *s) {
     stroked.border_color = stated(255u, 165u, 0u);
     (void)add_node(s, 1u, stroked);
 
-    /* An image cut the way a fill is: the texture draws where the rect says. */
+    /* An image at the edge: the texture keeps its rect, so the part that shows
+     * is the part that is there rather than the whole of it squashed in. */
     cf_style picture = cf_style_default();
     place(&picture, 60.0f, 40.0f);
     picture.width = CF_PX(100.0f);

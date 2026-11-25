@@ -418,7 +418,9 @@ static void a_tree_or_list_that_is_not_there_paints_nothing(void) {
     CF_CHECK(list.count == 0u, "an input that is not there paints nothing");
 }
 
-static void a_box_that_clips_cuts_its_children_fills(void) {
+/* A square fill is cut rather than scissored: rewriting its rect costs the
+ * picture nothing, because the rect is the whole of what the command draws. */
+static void a_box_that_clips_cuts_its_children_square_fills(void) {
     fixture f;
     begin(&f);
     f.styles[0] = painted((cf_color){0u, 0u, 0u, 255u});
@@ -506,6 +508,32 @@ static void a_border_at_a_clip_names_the_clip_it_is_cut_by(void) {
     CF_NEAR(list.commands[0].clip.height, 100.0f);
 }
 
+/* A corner is arithmetic on the rect, so a rounded fill cut to the clip rounds
+ * the cut box and stops matching the border stroked at the true one. It keeps
+ * its rect and names the clip the way a border does. */
+static void a_rounded_fill_at_a_clip_keeps_the_box_it_rounds(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+
+    cf_style round = painted((cf_color){0u, 0u, 0u, 255u});
+    round.radius = 10.0f;
+    (void)append(&f, 0, round);
+    f.rects[0] = box_at(0.0f, 0.0f, 100.0f, 100.0f);
+    f.rects[1] = box_at(60.0f, 10.0f, 80.0f, 80.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "the rounded child paints its fill");
+    CF_NEAR(list.commands[0].radius, 10.0f);
+    CF_NEAR(list.commands[0].rect.width, 80.0f);
+    CF_NEAR(list.commands[0].clip.width, 100.0f);
+    CF_NEAR(list.commands[0].clip.height, 100.0f);
+}
+
 /* The clip a page outside every clipping box carries is no clip at all: the
  * screen bounds itself, and a stream that said otherwise would make every
  * backend pay a state change for the whole frame. */
@@ -576,7 +604,10 @@ static void an_image_paints_its_texture_into_its_box(void) {
     CF_NEAR(list.commands[0].rect.height, 16.0f);
 }
 
-static void an_image_inside_a_clip_cuts_to_the_clip(void) {
+/* A device maps the whole of a texture into the rect it is handed, so a cut
+ * rect squashes what is left into the window instead of showing the part that
+ * fits it. The image keeps its box and names the clip that stops it. */
+static void an_image_at_a_clip_names_the_clip_it_is_cut_by(void) {
     fixture f;
     begin(&f);
     f.styles[0] = cf_style_default();
@@ -594,7 +625,8 @@ static void an_image_inside_a_clip_cuts_to_the_clip(void) {
     CF_CHECK(list.count == 1u, "the clipped image is the only paint");
     CF_CHECK(list.commands[0].kind == CF_COMMAND_IMAGE, "and it is an image");
     CF_NEAR(list.commands[0].rect.x, 80.0f);
-    CF_NEAR(list.commands[0].rect.width, 20.0f);
+    CF_NEAR(list.commands[0].rect.width, 32.0f);
+    CF_NEAR(list.commands[0].clip.width, 100.0f);
 }
 
 /*
@@ -724,17 +756,18 @@ int main(void) {
     CF_RUN(a_text_node_without_a_color_paints_nothing);
     CF_RUN(a_capped_text_node_flags_the_line_the_ellipsis_closes);
     CF_RUN(text_lines_cull_like_their_box_does);
-    CF_RUN(a_box_that_clips_cuts_its_children_fills);
+    CF_RUN(a_box_that_clips_cuts_its_children_square_fills);
     CF_RUN(a_child_outside_a_clipping_box_paints_nothing);
     CF_RUN(a_clip_narrows_as_it_descends);
     CF_RUN(a_border_at_a_clip_names_the_clip_it_is_cut_by);
+    CF_RUN(a_rounded_fill_at_a_clip_keeps_the_box_it_rounds);
     CF_RUN(a_page_with_no_clipping_box_names_no_clip);
     CF_RUN(text_culls_per_line_inside_a_clip);
     CF_RUN(an_exhausted_scratch_paints_nothing_and_says_so);
     CF_RUN(a_truncated_list_keeps_the_commands_that_fit);
     CF_RUN(a_tree_or_list_that_is_not_there_paints_nothing);
     CF_RUN(an_image_paints_its_texture_into_its_box);
-    CF_RUN(an_image_inside_a_clip_cuts_to_the_clip);
+    CF_RUN(an_image_at_a_clip_names_the_clip_it_is_cut_by);
     CF_RUN(a_stated_caret_and_selection_paint_with_the_lines);
     CF_RUN(a_range_across_lines_bands_every_one_it_touches);
     CF_RUN(a_caret_past_the_edge_slides_the_line_and_is_cut_at_it);

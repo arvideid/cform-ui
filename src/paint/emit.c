@@ -49,9 +49,9 @@ typedef struct paint_walk {
     const cf_tree *tree;
     const cf_rect *rects;
     /* The active clip: the screen until a box that clips its content is
-     * entered, then that box's own rect. Inside it, fills cut to the clip and
-     * every command names it, so a stroke and a line can be cut without being
-     * moved. */
+     * entered, then that box's own rect. Inside it every command names the
+     * clip, so whatever has geometry of its own - a stroke, a baseline, a
+     * rounded corner, a texture - is cut without being moved. */
     cf_rect clip;
     bool clipping;
     cf_command_list *out;
@@ -91,6 +91,19 @@ static cf_command *next_command(paint_walk *walk) {
     }
 
     return &list->commands[list->count++];
+}
+
+/*
+ * The rect a fill arrives with inside a clip. A square is the whole of what the
+ * command draws, so the walk cuts it and the device draws fewer pixels for the
+ * same picture. A rounded one is not: the arc is arithmetic on the rect, so
+ * cutting first rounds the cut box and its corner stops matching the border
+ * stroked at the true one - which is the sliver of the parent that shows
+ * through where a clip runs across a rounded box. Radius 0 is the only radius
+ * a cut preserves.
+ */
+static cf_rect filled_rect(const paint_walk *walk, cf_rect box, float radius) {
+    return walk->clipping && radius == 0.0f ? clipped_to(box, walk->clip) : box;
 }
 
 /* A caret is a line, not a box: one point wide, the height of the line it
@@ -333,7 +346,10 @@ cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kin
 /*
  * An image paints its texture into its box: the measure that sized the box
  * answered the content's own extent, so the rect is where the texture goes.
- * Inside a clip it cuts like a fill - the texture draws where the rect says.
+ * The device maps the whole texture into whatever rect it is handed, so a cut
+ * rect would squash the part that is left into the window instead of showing
+ * the part that fits it. An image keeps its rect inside a clip, the way a
+ * border does.
  */
 static void emit_image(paint_walk *walk, uint32_t slot, cf_rect box) {
     if (walk->tree->measures == NULL || walk->tree->measures[slot] != cf_image_measure) {
@@ -353,7 +369,7 @@ static void emit_image(paint_walk *walk, uint32_t slot, cf_rect box) {
     }
 
     *command = (cf_command){.kind = CF_COMMAND_IMAGE,
-                            .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
+                            .rect = box,
                             .clip = carried_clip(walk),
                             .texture = content->texture};
 }
@@ -385,7 +401,7 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
         }
 
         *fill = (cf_command){.kind = CF_COMMAND_FILL,
-                             .rect = walk->clipping ? clipped_to(box, walk->clip) : box,
+                             .rect = filled_rect(walk, box, radius),
                              .clip = carried_clip(walk),
                              .color = style->background.value,
                              .radius = radius};
