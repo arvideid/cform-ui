@@ -69,8 +69,10 @@ static void a_recorder_grows_its_store_by_doubling(void) {
 
     cf_command stream[FIRST_CAPACITY + 1u];
 
+    /* Counted from one rather than zero: a slot the growth lost reads as all
+     * zeros, and a stream that starts at zero cannot tell that apart. */
     for (uint32_t i = 0u; i < FIRST_CAPACITY + 1u; ++i) {
-        stream[i] = fill_at(0.0f, 0.0f, 1.0f, 1.0f, (uint8_t)i);
+        stream[i] = fill_at(0.0f, 0.0f, 1.0f, 1.0f, (uint8_t)(i + 1u));
     }
 
     backend.submit(backend.user_data, stream, FIRST_CAPACITY + 1u);
@@ -78,8 +80,10 @@ static void a_recorder_grows_its_store_by_doubling(void) {
     CF_CHECK(recorder.count == FIRST_CAPACITY + 1u,
              "a stream past the first doubling is held whole");
     CF_CHECK(recorder.capacity >= FIRST_CAPACITY + 1u, "the store grew to fit");
-    CF_CHECK(recorder.commands[0].color.red == 0u, "the start of the stream rode the growth");
-    CF_CHECK(recorder.commands[FIRST_CAPACITY].color.red == (uint8_t)FIRST_CAPACITY,
+    CF_CHECK(recorder.commands[0].color.red == 1u, "the start of the stream rode the growth");
+    CF_CHECK(recorder.commands[FIRST_CAPACITY - 1u].color.red == (uint8_t)FIRST_CAPACITY,
+             "the last command before the growth rode it too");
+    CF_CHECK(recorder.commands[FIRST_CAPACITY].color.red == (uint8_t)(FIRST_CAPACITY + 1u),
              "the end of the stream rode the growth");
 }
 

@@ -12,8 +12,9 @@
 
 /*
  * The recorder holds the last submitted frame, so a submit starts it over -
- * an idle frame, a stream of nothing, leaves it empty. Growth swaps the store
- * without carrying the old frame across: the new submit replaces it.
+ * an idle frame, a stream of nothing, leaves it empty. Growth carries what has
+ * already been recorded into the bigger array, because the store is this
+ * submit's and a reader of it cannot afford to lose its head.
  */
 static void record_submit(void *user_data, const cf_command *commands, uint32_t count) {
     cf_recorder *recorder = user_data;
@@ -57,6 +58,10 @@ static void record_submit(void *user_data, const cf_command *commands, uint32_t 
                 cf_logf(CF_LOG_BACKEND, "backend: recorder refused the stream at %u commands",
                         recorder->count);
                 return;
+            }
+
+            if (recorder->commands != NULL) {
+                memcpy(store, recorder->commands, (size_t)recorder->count * sizeof *store);
             }
 
             recorder->commands = store;
