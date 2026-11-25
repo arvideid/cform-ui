@@ -14,6 +14,8 @@
 
 #include "cform_test.h"
 
+#include "bench_meta.h"
+
 #define ROWS 99u
 #define CELLS_PER_ROW 100u
 #define NODE_COUNT (1u + ROWS + ROWS * CELLS_PER_ROW)
@@ -121,7 +123,10 @@ static bool stream_holds_fills_and_borders(const cf_command_list *list) {
 }
 
 int main(void) {
-    printf("paint\n");
+    bench_meta("bench_paint", "10k-rows-of-100-cells-fill-and-border");
+    bench_result("nodes", (double)NODE_COUNT, "count");
+    bench_result("frames_per_point", (double)FRAMES, "count");
+    bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
 
     cf_ctx ctx;
 
@@ -142,7 +147,7 @@ int main(void) {
     CF_CHECK(full.count > 0u && full.commands[0].kind == CF_COMMAND_FILL,
              "the page's own fill leads the stream");
 
-    printf("  %u nodes, whole surface: %u commands\n", NODE_COUNT, full.count);
+    bench_result("command_count", (double)full.count, "count");
 
     /* The reach check drops a box the viewport cannot see at all: with nothing
      * in front of it the walk appends nothing, which is the paint half of an
@@ -180,9 +185,8 @@ int main(void) {
     CF_CHECK(last_count == EXPECTED_COMMANDS, "every rewind repaints the same stream");
     CF_CHECK(last_bytes > 0u, "the list costs the arena it grew in, not the system's");
 
-    printf("  repaint, %u nodes:  %8.3f ms per frame (fastest of %u)\n", NODE_COUNT, best, FRAMES);
-    printf("  stream scratch:  %llu KiB for %u commands\n",
-           (unsigned long long)(last_bytes / 1024u), last_count);
+    bench_result("repaint_ms", best, "ms");
+    bench_result("stream_scratch_kib", (double)last_bytes / 1024.0, "KiB");
 
     cf_ctx_free(&ctx);
 

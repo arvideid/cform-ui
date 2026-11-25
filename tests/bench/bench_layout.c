@@ -10,6 +10,8 @@
 #include "cf/layout.h"
 #include "cform_test.h"
 
+#include "bench_meta.h"
+
 #define MAX_NODES 10000u
 #define DEEP_FIRST_NODES (MAX_NODES / 8u)
 #define COLUMNS 100u
@@ -161,8 +163,12 @@ static void bench_deep_tree(cf_available offer) {
         const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 
         CF_NEAR(rects[0].width, 1280.0f);
-        printf("  deep flex tree, %5u nodes: %8.3f ms per layout, %7.1f ns per node\n", nodes, ms,
-               ms * NS_PER_MS / (double)nodes);
+
+        char key[40];
+        snprintf(key, sizeof key, "deep_flex_%u_ms", nodes);
+        bench_result(key, ms, "ms");
+        snprintf(key, sizeof key, "deep_flex_%u_ns_per_node", nodes);
+        bench_result(key, ms * NS_PER_MS / (double)nodes, "ns");
     }
 }
 
@@ -172,14 +178,22 @@ static void bench_flat_grid(cf_available offer, uint32_t wanted_columns, const c
     const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 
     CF_CHECK(rects[2u].x > 0.0f, "the second cell sits past the first column");
-    printf("  %s grid, %5u cells x %3u columns: %8.3f ms per layout, %7.1f ns per cell\n", label,
-           MAX_NODES, wanted_columns, ms, ms * NS_PER_MS / (double)MAX_NODES);
+
+    char key[64];
+    snprintf(key, sizeof key, "flat_grid_%s_ms", label);
+    bench_result(key, ms, "ms");
+    snprintf(key, sizeof key, "flat_grid_%s_ns_per_cell", label);
+    bench_result(key, ms * NS_PER_MS / (double)MAX_NODES, "ns");
 }
 
 int main(void) {
+    bench_meta("bench_layout", "10k-deep-flex+flat-grid-3-column-extremes");
+
     const cf_available offer = {.width = CF_PX(1280.0f), .height = CF_PX(720.0f)};
 
     CF_CHECK(cf_arena_init(&scratch, SCRATCH_CAPACITY), "the rigs need scratch");
+    bench_result("scratch_bytes", (double)SCRATCH_CAPACITY, "bytes");
+    bench_result("layouts_per_point", (double)LAYOUTS, "count");
 
     bench_deep_tree(offer);
     bench_flat_grid(offer, COLUMNS, "balanced");

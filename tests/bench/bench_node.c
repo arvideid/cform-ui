@@ -10,6 +10,8 @@
 #include "cf/node.h"
 #include "cform_test.h"
 
+#include "bench_meta.h"
+
 #define ROWS 99u
 #define ROW_CHILDREN 100u
 #define NODE_COUNT (1u + ROWS + ROWS * ROW_CHILDREN)
@@ -84,7 +86,10 @@ static double frame_fastest_ms(cf_ctx *ctx, const cf_node *tree, uint32_t frames
 }
 
 int main(void) {
-    printf("node diff\n");
+    bench_meta("bench_node", "10k-flat-row-tree-diff");
+    bench_result("nodes", (double)NODE_COUNT, "count");
+    bench_result("frames_per_point", (double)FRAMES, "count");
+    bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
 
     cf_ctx ctx;
 
@@ -106,13 +111,13 @@ int main(void) {
 
     CF_CHECK(root_slot != CF_NO_LINK, "the diff answers the 10k declaration");
     CF_CHECK(cf_frame_tree(&ctx) != NULL, "the diff builds a view of it");
-    printf("  cold build, %u nodes:  %8.3f ms\n", NODE_COUNT, elapsed_ms(&started, &finished));
+    bench_result("cold_build_ms", elapsed_ms(&started, &finished), "ms");
 
     /* The same declaration again and again: the idle path, where nothing
      * changes and nothing should be dirtied. */
     const size_t idle_state = cf_state_bytes(&ctx);
     const double diff_ms = frame_fastest_ms(&ctx, &root, FRAMES, false);
-    printf("  idle diff, %u nodes:   %8.3f ms per frame\n", NODE_COUNT, diff_ms);
+    bench_result("idle_diff_ms", diff_ms, "ms");
 
     /* The budget a frame that changes nothing has to hit: no state asked for
      * that the frame before it did not already hold, and no node left standing
@@ -130,7 +135,7 @@ int main(void) {
     CF_CHECK(dirtied == 0u, "an idle frame dirties no node");
 
     const double laid_ms = frame_fastest_ms(&ctx, &root, FRAMES, true);
-    printf("  diff + layout, %u nodes: %5.3f ms per frame\n", NODE_COUNT, laid_ms);
+    bench_result("diff_plus_layout_ms", laid_ms, "ms");
 
     cf_ctx_free(&ctx);
 

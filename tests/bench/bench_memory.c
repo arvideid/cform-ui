@@ -10,6 +10,8 @@
 #include "cf/node.h"
 #include "cform_test.h"
 
+#include "bench_meta.h"
+
 #define ROWS 99u
 #define ROW_CHILDREN 100u
 #define NODE_COUNT (1u + ROWS + ROWS * ROW_CHILDREN)
@@ -69,7 +71,13 @@ static size_t run_round(cf_ctx *ctx, uint32_t round) {
 }
 
 int main(void) {
-    printf("memory\n");
+    bench_meta("bench_memory", "10k-idle-frames+state-key-churn");
+    bench_result("nodes", (double)NODE_COUNT, "count");
+    bench_result("idle_frames", (double)IDLE_FRAMES, "count");
+    bench_result("session_rounds", (double)SESSION_ROUNDS, "count");
+    bench_result("round_keys", (double)ROUND_KEYS, "count");
+    bench_result("key_bytes", (double)KEY_BYTES, "bytes");
+    bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
 
     cf_ctx ctx;
 
@@ -106,10 +114,8 @@ int main(void) {
         }
     }
 
-    printf("  one %uk-node frame, built and painted: %7.0f KiB of arena\n", NODE_COUNT / 1000u,
-           (double)steady_peak / BYTES_PER_KIB);
-    printf("  %uk idle frames of it:                 %7.0f KiB\n", IDLE_FRAMES / 1000u,
-           (double)ctx.frame.peak / BYTES_PER_KIB);
+    bench_result("frame_arena_peak_kib", (double)steady_peak / BYTES_PER_KIB, "KiB");
+    bench_result("idle_frames_arena_peak_kib", (double)ctx.frame.peak / BYTES_PER_KIB, "KiB");
     CF_CHECK(flat, "idle frames cost what the second frame costs, not more");
 
     /* The number a long session used to move: state asked for under names that
@@ -145,14 +151,12 @@ int main(void) {
     const size_t interned_last = cf_interner_bytes(&ctx.names);
     const size_t store_last = cf_store_bytes(&ctx.nodes) + cf_store_bytes(&ctx.states);
 
-    printf("  %u rounds of %u fresh keys:           %7.0f KiB held at the peak\n", SESSION_ROUNDS,
-           ROUND_KEYS, (double)held_peak / BYTES_PER_KIB);
-    printf("  the page stops asking:                %7.0f KiB\n",
-           (double)held_last / BYTES_PER_KIB);
-    printf("  interned names retained:              %7.0f KiB (peak %7.0f KiB)\n",
-           (double)interned_last / BYTES_PER_KIB, (double)interned_peak / BYTES_PER_KIB);
-    printf("  node and state store capacity:        %7.0f KiB (peak %7.0f KiB)\n",
-           (double)store_last / BYTES_PER_KIB, (double)store_peak / BYTES_PER_KIB);
+    bench_result("state_peak_kib", (double)held_peak / BYTES_PER_KIB, "KiB");
+    bench_result("state_last_kib", (double)held_last / BYTES_PER_KIB, "KiB");
+    bench_result("interned_last_kib", (double)interned_last / BYTES_PER_KIB, "KiB");
+    bench_result("interned_peak_kib", (double)interned_peak / BYTES_PER_KIB, "KiB");
+    bench_result("store_last_kib", (double)store_last / BYTES_PER_KIB, "KiB");
+    bench_result("store_peak_kib", (double)store_peak / BYTES_PER_KIB, "KiB");
     CF_CHECK(held_peak <= 2u * ROUND_KEYS * KEY_BYTES,
              "state accrues for the rounds still live, not the rounds that ran");
     CF_CHECK(held_last == 0u, "a page that stops asking holds no state");

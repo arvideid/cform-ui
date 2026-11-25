@@ -16,6 +16,22 @@ engine does on it. They check their arithmetic — positions, shape counts, byte
 held — but they never fail over timing, because a slow run is not a wrong run.
 See [why not](#why-no-number-is-a-failing-test) at the bottom.
 
+Each rig opens its stdout with `meta` lines naming the workload, compiler,
+ISO C dialect and pointer width, and prints every measurement as a
+`result <key>=<value> <unit>` line. The tables below are the same numbers
+rendered for reading; `grep '^[meta] result\|^meta ' build/dev/.../bench.log`
+recovers them if a reviewer wants to reproduce a table without typing it.
+
+```text
+meta format=1
+meta rig=bench_layout workload=10k-deep-flex+flat-grid-3-column-extremes
+meta c_std=201710
+meta bits=64
+meta compiler=14.2.0
+result deep_flex_10000_ms=4.8790 ms
+result flat_grid_balanced_ms=7.7900 ms
+```
+
 ## Laying out a screen
 
 `bench_layout` builds a tree and calls `cf_layout`. Best of nine runs on a Windows
