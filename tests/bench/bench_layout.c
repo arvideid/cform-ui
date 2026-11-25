@@ -13,6 +13,7 @@
 #define MAX_NODES 10000u
 #define DEEP_FIRST_NODES (MAX_NODES / 8u)
 #define COLUMNS 100u
+#define MAX_COLUMNS 500u
 #define LAYOUTS 50u
 #define CELL_HEIGHT 20.0f
 #define NS_PER_S 1000000000.0
@@ -22,7 +23,7 @@
 static cf_style styles[MAX_NODES];
 static uint32_t child_start[MAX_NODES + 1u];
 static uint32_t child_slots[MAX_NODES];
-static cf_track columns[COLUMNS];
+static cf_track columns[MAX_COLUMNS];
 static cf_rect rects[MAX_NODES];
 static cf_arena scratch;
 
@@ -84,15 +85,15 @@ static void build_deep_tree(uint32_t node_count, cf_available offer) {
  * once. Fractional columns and content rows mean every cell is sized from the
  * tracks and every track is sized from the cells.
  */
-static void build_flat_grid(void) {
-    for (uint32_t column = 0u; column < COLUMNS; ++column) {
+static void build_flat_grid(uint32_t wanted_columns) {
+    for (uint32_t column = 0u; column < wanted_columns; ++column) {
         columns[column] = (cf_track){.min = CF_AUTO, .max = CF_FR(1.0f)};
     }
 
     cf_style grid = cf_style_default();
     grid.display = CF_DISPLAY_GRID;
     grid.column_tracks = columns;
-    grid.column_count = COLUMNS;
+    grid.column_count = wanted_columns;
     grid.column_gap = CF_PX(4.0f);
     grid.row_gap = CF_PX(4.0f);
     styles[0] = grid;
@@ -165,14 +166,14 @@ static void bench_deep_tree(cf_available offer) {
     }
 }
 
-static void bench_flat_grid(cf_available offer) {
-    build_flat_grid();
+static void bench_flat_grid(cf_available offer, uint32_t wanted_columns, const char *label) {
+    build_flat_grid(wanted_columns);
     const cf_tree tree = tree_of(MAX_NODES);
     const double ms = layout_fastest_ms(&tree, offer, LAYOUTS);
 
     CF_CHECK(rects[2u].x > 0.0f, "the second cell sits past the first column");
-    printf("  flat grid, %5u cells: %8.3f ms per layout, %7.1f ns per cell\n", MAX_NODES, ms,
-           ms * NS_PER_MS / (double)MAX_NODES);
+    printf("  %s grid, %5u cells x %3u columns: %8.3f ms per layout, %7.1f ns per cell\n", label,
+           MAX_NODES, wanted_columns, ms, ms * NS_PER_MS / (double)MAX_NODES);
 }
 
 int main(void) {
@@ -181,7 +182,12 @@ int main(void) {
     CF_CHECK(cf_arena_init(&scratch, SCRATCH_CAPACITY), "the rigs need scratch");
 
     bench_deep_tree(offer);
-    bench_flat_grid(offer);
+    bench_flat_grid(offer, COLUMNS, "balanced");
+    /* Two extremes: a wide axis exercises the prefix build against a huge
+     * column count, and a tall one exercises it against a huge row count. A
+     * regression in the prefix or the span difference shows up on both. */
+    bench_flat_grid(offer, MAX_COLUMNS, "wide");
+    bench_flat_grid(offer, 20u, "tall");
 
     cf_arena_free(&scratch);
 

@@ -369,6 +369,13 @@ typedef struct grid_ctx {
     uint32_t row_count;
     float *column_sizes;
     float *row_sizes;
+    /* Cumulative offsets: `column_prefix[t]` is how far track `t` sits inside
+     * the grid, and one more than any track index is a valid row so a span
+     * difference reads as `prefix[end] - prefix[start] - gap`. Built once per
+     * axis after the solver settles the tracks, so placement does not re-sum
+     * the earlier columns for every child. */
+    float *column_prefix;
+    float *row_prefix;
 } grid_ctx;
 
 /*
@@ -386,10 +393,10 @@ uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count,
 const cf_track *widen_tracks(const layout_ctx *ctx, const cf_track *declared,
                              uint32_t declared_count, uint32_t count);
 
-/* Sizes read back out of a track array: a span, the offset of a cell, and the
- * whole axis, gaps included. */
+/* Sizes read back out of a track array: a span and the whole axis, gaps
+ * included. Placement reads `column_prefix` and `row_prefix` instead of
+ * re-summing them per item. */
 float span_size(const float *sizes, uint32_t start, uint32_t span, float gap);
-float track_offset(const float *sizes, uint32_t start, float gap);
 float axis_extent(const float *sizes, uint32_t count, float gap);
 
 /*

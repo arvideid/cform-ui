@@ -39,18 +39,22 @@ float span_size(const float *sizes, uint32_t start, uint32_t span, float gap) {
     return total;
 }
 
-/* How far a cell sits inside the grid: every track before it, plus a gap for
- * each one. */
-float track_offset(const float *sizes, uint32_t start, float gap) {
-    if (start == 0u) {
-        return 0.0f;
-    }
-
-    return span_size(sizes, 0u, start, gap) + gap;
-}
-
 float axis_extent(const float *sizes, uint32_t count, float gap) {
     return span_size(sizes, 0u, count, gap);
+}
+
+/*
+ * One pass over the axis turns `sizes[0..count)` into `prefix[0..count]`,
+ * so a cell's start reads as `prefix[start]` and a span as the difference
+ * of two rows minus the trailing gap. Placement runs per child; without
+ * the prefix the same earlier tracks are summed again for every item.
+ */
+static void build_axis_prefix(const float *sizes, uint32_t count, float gap, float *prefix) {
+    prefix[0] = 0.0f;
+
+    for (uint32_t t = 0u; t < count; ++t) {
+        prefix[t + 1u] = prefix[t] + sizes[t] + gap;
+    }
 }
 
 /*
@@ -58,12 +62,21 @@ float axis_extent(const float *sizes, uint32_t count, float gap) {
  * between them, measured from the container's content origin.
  */
 static cf_size cell_of(const grid_ctx *g, const grid_item *item, cf_point *out_offset) {
-    out_offset->x = track_offset(g->column_sizes, item->column_start, g->column_gap);
-    out_offset->y = track_offset(g->row_sizes, item->row_start, g->row_gap);
+    out_offset->x = g->column_prefix[item->column_start];
+    out_offset->y = g->row_prefix[item->row_start];
+
+    /* prefix[end] - prefix[start] counts one gap per covered track; a span
+     * only has gaps between tracks, so the trailing one comes back out. A
+     * span of zero has no gap to subtract and reads as the empty extent it
+     * is. */
+    const float column_extra = item->column_span > 0u ? g->column_gap : 0.0f;
+    const float row_extra = item->row_span > 0u ? g->row_gap : 0.0f;
 
     return (cf_size){
-        .width = span_size(g->column_sizes, item->column_start, item->column_span, g->column_gap),
-        .height = span_size(g->row_sizes, item->row_start, item->row_span, g->row_gap),
+        .width = g->column_prefix[item->column_start + item->column_span] -
+                 g->column_prefix[item->column_start] - column_extra,
+        .height = g->row_prefix[item->row_start + item->row_span] - g->row_prefix[item->row_start] -
+                  row_extra,
     };
 }
 
@@ -170,6 +183,26 @@ static cf_size grid_resolve(grid_ctx *g, bool arranging) {
 
         return (cf_size){0};
     }
+
+    /* One prefix array per axis, built once now that both size tables are
+     * settled. Placement reads a child's cell as a difference of two rows
+     * instead of re-summing the earlier tracks for every item. */
+    float *column_prefix =
+        cf_alloc(ctx->scratch, (size_t)(column_count + 1u) * sizeof *column_prefix);
+    float *row_prefix = cf_alloc(ctx->scratch, (size_t)(row_count + 1u) * sizeof *row_prefix);
+
+    if (column_prefix == NULL || row_prefix == NULL) {
+        cf_logf(CF_LOG_LAYOUT, "layout: scratch refused the axis prefixes of a %u by %u grid",
+                column_count, row_count);
+        cf_arena_rewind(ctx->scratch, mark);
+
+        return (cf_size){0};
+    }
+
+    build_axis_prefix(column_sizes, column_count, g->column_gap, column_prefix);
+    build_axis_prefix(row_sizes, row_count, g->row_gap, row_prefix);
+    g->column_prefix = column_prefix;
+    g->row_prefix = row_prefix;
 
     const cf_size extents = {
         .width = axis_extent(column_sizes, column_count, g->column_gap),
