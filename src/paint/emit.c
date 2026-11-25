@@ -366,6 +366,14 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
     }
 
     const cf_style *style = &walk->tree->styles[slot];
+
+    /* A box the layout hid draws nothing and reveals nothing below it: the
+     * same declaration that took it out of the flow takes its whole subtree out
+     * of the stream, so a zeroed rect never reaches a renderer as a mark. */
+    if (style->display == CF_DISPLAY_NONE) {
+        return;
+    }
+
     const cf_rect box = walk->rects[slot];
     const bool reaches = rect_intersects(box, walk->clip);
 

@@ -99,6 +99,12 @@ static void walk(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot, uint32_t
         return;
     }
 
+    /* A hidden box is not in the tree a bridge would walk, so it earns no
+     * line here either, and nothing beneath it does. */
+    if (tree->styles[slot].display == CF_DISPLAY_NONE) {
+        return;
+    }
+
     const node_record *record = record_of(ctx, slot);
     char line[160];
     char text[SEMANTIC_TEXT_BYTES + 4u];

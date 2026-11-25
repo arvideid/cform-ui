@@ -181,6 +181,16 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
                     cf_available verdict, cf_point origin, cf_rect containing);
 
 /*
+ * A `display: none` box and everything under it take no part in the layout. A
+ * container that arranges its children collapses each none child to a zero box
+ * at its own content corner and zeroes the whole subtree below it, so a slot no
+ * pass places never keeps a rect from an earlier frame to paint or hit. Nothing
+ * is cached and nothing is allocated: it is a walk, and it runs only on the
+ * arranging pass, which is the only one that writes rects.
+ */
+void collapse_subtree(const layout_ctx *ctx, uint32_t slot, cf_point origin);
+
+/*
  * The content box of a node: its measure callback's answer when it has one and
  * its children's flex extent when it does not. Margins are not included. The
  * answer is a pure function of the slot, the intrinsic kind and the content

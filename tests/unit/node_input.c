@@ -760,6 +760,52 @@ static void a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A `display: none` box is out of the layout and out of input: it is not
+ * placed, so its visible sibling moves into its flow slot, and a point there
+ * reaches the sibling rather than the box that hid itself.
+ */
+static void a_hidden_box_takes_no_input_and_yields_its_place(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder hidden_log = {0};
+    recorder visible_log = {0};
+
+    cf_node hidden = box(50.0f, 50.0f, on_pointer, &hidden_log);
+    hidden.style.display = CF_DISPLAY_NONE;
+    cf_node visible = box(50.0f, 50.0f, on_pointer, &visible_log);
+    cf_node children[] = {hidden, visible};
+
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t hidden_slot = child_slot(&ctx, 0u);
+    const uint32_t visible_slot = child_slot(&ctx, 1u);
+    /* Over the first flow cell. With the hidden box removed the visible one is
+     * the first box, whichever axis the container packs along. */
+    const cf_point at = {.x = 25.0f, .y = 25.0f};
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at});
+
+    CF_CHECK(cf_hit_test(&ctx, at) == visible_slot,
+             "the hidden box yields its slot to the visible one");
+    CF_CHECK(cf_pressed(&ctx, visible_slot), "the press lands on the visible box");
+    CF_CHECK(!cf_pressed(&ctx, hidden_slot), "the hidden box books nothing");
+    CF_CHECK(visible_log.downs == 1 && hidden_log.downs == 0,
+             "only the visible box's handler runs");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -779,6 +825,7 @@ int main(void) {
     CF_RUN(a_recycled_slot_reads_as_nothing);
     CF_RUN(dispatch_before_a_layout_hits_nothing);
     CF_RUN(a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out);
+    CF_RUN(a_hidden_box_takes_no_input_and_yields_its_place);
 
     return CF_REPORT();
 }

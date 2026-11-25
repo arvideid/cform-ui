@@ -161,7 +161,7 @@ uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count,
     for (uint32_t i = 0u; i < count; ++i) {
         const cf_style *child = &ctx->tree->styles[ctx->tree->child_slots[first + i]];
 
-        if (child->position == CF_POSITION_ABSOLUTE) {
+        if (child->position == CF_POSITION_ABSOLUTE || child->display == CF_DISPLAY_NONE) {
             continue;
         }
 
@@ -199,7 +199,7 @@ uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count,
         const uint32_t child_slot = ctx->tree->child_slots[first + i];
         const cf_style *child = &ctx->tree->styles[child_slot];
 
-        if (child->position == CF_POSITION_ABSOLUTE) {
+        if (child->position == CF_POSITION_ABSOLUTE || child->display == CF_DISPLAY_NONE) {
             continue;
         }
 

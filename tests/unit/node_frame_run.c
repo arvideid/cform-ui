@@ -294,6 +294,65 @@ static void a_negative_or_nan_interval_clamps_to_zero(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A `display: none` box and its whole subtree leave the paint stream: only the
+ * container and the one child that stayed visible come back as fills.
+ */
+static cf_node hidden_page(cf_ctx *ctx) {
+    (void)ctx;
+
+    static cf_node deep_child;
+    static cf_node hidden_child;
+    static cf_node visible_child;
+    static cf_node kids[2];
+
+    cf_style fill = cf_style_default();
+    fill.width = CF_PX(50.0f);
+    fill.height = CF_PX(50.0f);
+    fill.background = (cf_opt_color){.present = true, .value = CF_COLOR(3, 3, 3)};
+
+    deep_child = (cf_node){.style = fill};
+
+    hidden_child = (cf_node){.style = fill};
+    hidden_child.style.display = CF_DISPLAY_NONE;
+    hidden_child.children = &deep_child;
+    hidden_child.child_count = 1u;
+
+    visible_child = (cf_node){.style = fill};
+
+    kids[0] = hidden_child;
+    kids[1] = visible_child;
+
+    cf_node root = {0};
+    root.style = cf_style_default();
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(200.0f);
+    root.style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
+    root.children = kids;
+    root.child_count = 2u;
+
+    return root;
+}
+
+static void a_hidden_subtree_paints_nothing(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_command_list list = {0};
+    cf_frame_run(&ctx, hidden_page, (cf_size){200.0f, 200.0f}, 0.0f, &list);
+
+    CF_CHECK(list.count == 2u, "the hidden box and its filled child paint no fills");
+
+    for (uint32_t i = 0u; i < list.count; ++i) {
+        CF_CHECK(list.commands[i].kind == CF_COMMAND_FILL, "the stream is only fills");
+    }
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node frame run\n");
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
@@ -303,6 +362,7 @@ int main(void) {
     CF_RUN(a_reused_list_is_replaced_not_appended);
     CF_RUN(a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind);
     CF_RUN(a_negative_or_nan_interval_clamps_to_zero);
+    CF_RUN(a_hidden_subtree_paints_nothing);
 
     return CF_REPORT();
 }

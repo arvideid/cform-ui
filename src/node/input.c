@@ -59,6 +59,13 @@ static uint32_t interactive_of(const cf_ctx *ctx, uint32_t slot) {
  */
 static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position, cf_rect clip,
                          bool clipping) {
+    /* A hidden box answers for no point and hides nothing above it from a
+     * pointer that lands where its subtree used to reach - the same rule paint
+     * applies when it drops the box from the stream. */
+    if (ctx->layout.styles[slot].display == CF_DISPLAY_NONE) {
+        return CF_NO_LINK;
+    }
+
     const cf_rect box = ctx->rects[slot];
 
     if (clipping && !rect_intersects(box, clip)) {

@@ -193,7 +193,10 @@ uint32_t build_items(const flex_context *f, flex_item *items, uint32_t capacity)
     for (uint32_t i = 0; i < capacity; ++i) {
         const uint32_t slot = f->ctx->tree->child_slots[first + i];
         const cf_style *child = &f->ctx->tree->styles[slot];
-        if (child->position == CF_POSITION_ABSOLUTE) {
+        /* A box that leaves the flow takes no slot on the line: absolute ones
+         * are placed against their containing block, and a `display: none` one
+         * takes part in nothing, so it claims neither space nor a gap. */
+        if (child->position == CF_POSITION_ABSOLUTE || child->display == CF_DISPLAY_NONE) {
             continue;
         }
 

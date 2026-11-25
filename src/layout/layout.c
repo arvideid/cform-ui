@@ -92,6 +92,20 @@ static cf_rect padding_box(cf_rect border_box, cf_edges frame) {
 }
 
 /*
+ * A `display: none` box takes no part in the layout: it is written as a zero
+ * box at its container's content corner, and the same answer is carried to every
+ * descendant, because a collapsed box hands its children the content corner it
+ * never grew. A stale rect from an earlier frame cannot be painted or hit.
+ */
+void collapse_subtree(const layout_ctx *ctx, uint32_t slot, cf_point origin) {
+    ctx->rects[slot] = (cf_rect){.x = origin.x, .y = origin.y, .width = 0.0f, .height = 0.0f};
+
+    for (uint32_t i = ctx->tree->child_start[slot]; i < ctx->tree->child_start[slot + 1u]; ++i) {
+        collapse_subtree(ctx, ctx->tree->child_slots[i], origin);
+    }
+}
+
+/*
  * Padding wider than the box leaves a content extent of zero rather than a
  * negative one: every offset a child computes from the extent would otherwise
  * invert.
@@ -125,6 +139,16 @@ void layout_subtree(const layout_ctx *ctx, uint32_t slot, cf_available constrain
     const cf_available content_box = {.width = CF_PX(content.width),
                                       .height = CF_PX(content.height)};
     const cf_point content_origin = {.x = box.x + inset.left, .y = box.y + inset.top};
+
+    /* Children that hide themselves take no slot in the line and no cell in the
+     * grid, so neither arrangement below reaches them; collapsing them here is
+     * what leaves their rects written rather than left at an earlier frame's. */
+    for (uint32_t i = 0u; i < child_count(ctx, slot); ++i) {
+        const uint32_t child = ctx->tree->child_slots[ctx->tree->child_start[slot] + i];
+        if (ctx->tree->styles[child].display == CF_DISPLAY_NONE) {
+            collapse_subtree(ctx, child, content_origin);
+        }
+    }
     const cf_rect block = frames_block(ctx, slot, style)
                               ? padding_box(box, cf_box_resolve(style->border, percent_base))
                               : containing;
@@ -180,6 +204,16 @@ void cf_layout(cf_arena *scratch, const cf_tree *tree, uint32_t root, cf_availab
     const size_t mark = cf_arena_mark(scratch);
 
     layout_ctx ctx = {.scratch = scratch, .tree = tree, .rects = rects, .root = root};
+
+    /* A root that hides itself leaves nothing to cache or measure: the whole
+     * tree collapses at the origin the caller named. */
+    if (tree->styles[root].display == CF_DISPLAY_NONE) {
+        collapse_subtree(&ctx, root, origin);
+        cf_arena_rewind(scratch, mark);
+
+        return;
+    }
+
     measure_cache_init(&ctx);
     const cf_available undecided = {.width = CF_AUTO, .height = CF_AUTO};
     /* Nothing is inherited above the root: it frames its own box, so this

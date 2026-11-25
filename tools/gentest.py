@@ -65,9 +65,9 @@ BOX_FIELDS = ("margin", "padding", "border", "inset")
 # Fields in the order a reader checks them: the box, its edges, the flex
 # numbers, then the keywords.
 FIELD_ORDER = SIZES + BOX_FIELDS + ("column_gap", "row_gap", "flex_grow",
-                                    "flex_shrink", "position", "direction",
-                                    "wrap", "justify_content", "align_items",
-                                    "align_self", "align_content")
+                                    "flex_shrink", "position", "display",
+                                    "direction", "wrap", "justify_content",
+                                    "align_items", "align_self", "align_content")
 
 # What Yoga starts a node with that cf_style's zero does not give. A margin of
 # 0 is stated in box_declaration, where the other boxes are written. Yoga's
@@ -150,8 +150,11 @@ EDGE_SETTERS = {"Margin": "margin", "Padding": "padding", "Border": "border",
                 "Position": "inset"}
 
 # What cf_style has no word for. A fixture that needs one is counted, not
-# guessed at.
-UNSUPPORTED_SUFFIXES = ("AspectRatio", "BoxSizing", "Display", "Overflow",
+# guessed at. `display: none` is not here because cf_display names it; the
+# Display setter handler rejects `display: contents` on its own, since that
+# feature promotes a box's children into its parent's flow and cf_style does
+# not model it.
+UNSUPPORTED_SUFFIXES = ("AspectRatio", "BoxSizing", "Overflow",
                         "MaxContent", "MinContent", "FitContent", "Stretch",
                         "TemplateRows", "TemplateColumns")
 
@@ -272,6 +275,17 @@ class Fixture:
             return
 
         style = self.styles[slot]
+
+        if setter == "Display":
+            # Yoga's initial display is flex, which reads as cf_style's zero,
+            # so only a hidden box earns a word. `display: contents` is a
+            # different feature and is counted, not guessed at.
+            variant = arguments[1]
+            if variant == "YGDisplayNone":
+                style["display"] = "CF_DISPLAY_NONE"
+            elif variant != "YGDisplayFlex":
+                self._reject("needs " + variant)
+            return
 
         if setter in NUMBER_SETTERS:
             value = number(arguments[1])
@@ -429,7 +443,8 @@ def render_style(style):
 
 
 def render_rect(expected):
-    values = [expected.get(kind) for kind in ("Left", "Top", "Width", "Height")]
+    values = [expected.get(kind)
+              for kind in ("Left", "Top", "Width", "Height")]
     if any(value is None for value in values):
         return None
     return "RECT({})".format(", ".join(values))

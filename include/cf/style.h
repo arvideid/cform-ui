@@ -72,8 +72,13 @@ typedef enum cf_position {
  * The formatting context a container gives its children: lines that pack along
  * a main axis, or tracks that place into a grid. The zero state is a flex
  * container, so a style written before grids existed keeps its meaning.
+ * CF_DISPLAY_NONE is appended and means something else entirely: the box and
+ * its whole subtree leave the layout, the paint walk and hit-testing, as if
+ * they were never declared. Their rects come back zeroed at the container's
+ * content corner, so a stale box from an earlier frame cannot be painted or
+ * hit. A stored style from before it existed reads as flex, never as hidden.
  */
-typedef enum cf_display { CF_DISPLAY_FLEX, CF_DISPLAY_GRID } cf_display;
+typedef enum cf_display { CF_DISPLAY_FLEX, CF_DISPLAY_GRID, CF_DISPLAY_NONE } cf_display;
 
 /*
  * Margin, padding and border as tagged lengths, in the same physical order as

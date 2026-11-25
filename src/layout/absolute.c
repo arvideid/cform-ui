@@ -237,7 +237,7 @@ void place_absolute(const layout_ctx *ctx, uint32_t slot, cf_rect containing,
         const uint32_t child_slot = ctx->tree->child_slots[first + i];
         const cf_style *child = &ctx->tree->styles[child_slot];
 
-        if (child->position != CF_POSITION_ABSOLUTE) {
+        if (child->position != CF_POSITION_ABSOLUTE || child->display == CF_DISPLAY_NONE) {
             continue;
         }
 
