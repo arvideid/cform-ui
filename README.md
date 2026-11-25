@@ -91,8 +91,11 @@ The things this repository is trying to do, in the order it tries them:
    [CSS specification](https://www.w3.org/TR/css-flexbox-1/) and is scored
    against [Yoga](https://github.com/facebook/yoga)'s own test corpus — someone
    else's answers, not ours. [The score](docs/conformance.md) is public.
-2. **A frame that costs nothing at rest.** An idle screen lays out nothing, emits
-   nothing, allocates nothing. Numbers, not a claim: [bench.md](docs/bench.md).
+2. **A screen that costs nothing at rest.** The shell notices when nothing moved
+   and skips the frame whole: nothing laid out, emitted or allocated. That saving
+   is `cf_app_run`'s idle test, not the pipeline's - call `cf_frame_run` on an
+   unchanged screen and it runs the full build-diff-layout-paint. Numbers, not a
+   claim: [bench.md](docs/bench.md).
 3. **Readable end to end.** C17, no templates, no code generation, no reflection.
    Every layer is a CMake target you can open and finish reading.
 4. **Runs where C runs**, including a browser tab through WebAssembly.
@@ -278,7 +281,9 @@ Four steps, and each one can be used on its own:
 3. **Emit.** `cf_paint` walks the laid-out tree and appends the shapes to draw:
    fills, borders, lines of text, images. In order, back to front, each one
    carrying the rectangle it may not be seen outside — that is how a scrolled
-   list stays inside its window. A frame that changed nothing emits zero of them.
+   list stays inside its window. The paint pass is not incremental: an unchanged
+   screen emits the same shapes as the one before. It costs nothing only because
+   the shell stops calling the pipeline once it sees nothing moved.
 4. **Draw.** A backend turns that list onto a real surface, reports clicks and
    keystrokes back, answers how big the surface is and reads an image file. One
    over SDL3 ships here, a headless recorder exists for tests, and writing your
