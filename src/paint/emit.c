@@ -469,6 +469,11 @@ void cf_paint(cf_arena *scratch, const cf_tree *tree, const cf_rect *rects, uint
     emit_box(&walk, root);
 
     if (walk.truncated) {
-        cf_logf(CF_LOG_PAINT, "paint: scratch refused the command list at %u commands", out->count);
+        /* The flag names one thing that has no room left - the doubling
+         * command array or the lines one text box counted - but the observable
+         * outcome is the same: the commands written so far stay, nothing after
+         * the refusal is emitted. The count is what a caller sees; the site is
+         * not worth threading through the walk to say which array refused. */
+        cf_logf(CF_LOG_PAINT, "paint: scratch refused at %u commands", out->count);
     }
 }
