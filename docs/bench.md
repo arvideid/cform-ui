@@ -73,7 +73,16 @@ cells carry a glyph and every fourth a stroke.
 | diff and layout | one whole frame of it | 7.02 ms |
 | warm-change | half the cell widths moved, then diff+layout | — |
 | churn | a structurally different tree replaces it | — |
+| state-key lookup, 50 keys | a page with 50 widgets that keep a block each | 0.007 ms |
+| state-key lookup, 250 keys | 0.14 ms |
+| state-key lookup, 1000 keys | 2.0 ms |
 | paint | 15,841 commands (fills + borders + text) from 10,000 boxes | 0.28 ms |
+
+The state-lookup numbers show what `entry_of_key` currently costs: the sweep is
+linear in the number of live entries, so the per-key time grows with the
+square of the page's stateful widgets (roughly 130 ns at 50 keys and 2 025 ns
+at 1 000 in the same run). Roadmap Section 6 item 4 wants this number in front
+of a reviewer before anyone adds a hashed index.
 
 Redrawing that page needs 3,426 KiB of scratch, which is the number a shell sizes
 its memory pool against. Part of it tracks the deepest path and part tracks the

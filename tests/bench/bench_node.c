@@ -138,8 +138,60 @@ static void build_churn_tree(cf_interner *names) {
     churn_root.child_count = CHURN_ROWS;
 }
 
+/*
+ * State-key lookup mode: a page that keeps a small block per row, so the walk
+ * visits `state_rows` interned names per frame. The roadmap Section 6 item 4
+ * says the choice of a hashed entry table depends on what this actually costs
+ * at the size of a real page, so the rig prints the fastest pass across a
+ * range of row counts and lets a review decide whether the O(S) sweep in
+ * `entry_of_key` is worth an index. Each name is unique because a real page
+ * keys state per widget rather than reusing one key across the tree.
+ */
+#define STATE_ROWS_MAX 1000u
+#define STATE_FRAMES 20u
+
+static cf_name state_keys[STATE_ROWS_MAX];
+
+static void seed_state_keys(cf_interner *names) {
+    char buf[32];
+
+    for (uint32_t i = 0u; i < STATE_ROWS_MAX; ++i) {
+        snprintf(buf, sizeof buf, "state/%u", i);
+        state_keys[i] = cf_intern_text(names, buf);
+    }
+}
+
+/* One pass that touches `wanted` state keys and re-reads them every frame.
+ * The first cf_state per key allocates; later calls hit `entry_of_key`. */
+static double state_fastest_ms(cf_ctx *ctx, uint32_t wanted, uint32_t frames) {
+    double best = -1.0;
+
+    for (uint32_t f = 0u; f < frames; ++f) {
+        struct timespec started;
+        struct timespec finished;
+        timespec_get(&started, TIME_UTC);
+
+        for (uint32_t i = 0u; i < wanted; ++i) {
+            uint32_t *held = cf_state(ctx, state_keys[i], sizeof(uint32_t));
+
+            if (held != NULL) {
+                *held += 1u;
+            }
+        }
+
+        timespec_get(&finished, TIME_UTC);
+        const double ms = elapsed_ms(&started, &finished);
+
+        if (best < 0.0 || ms < best) {
+            best = ms;
+        }
+    }
+
+    return best;
+}
+
 int main(void) {
-    bench_meta("bench_node", "10k-flat-row-tree-diff-cold-warm-change-churn");
+    bench_meta("bench_node", "10k-flat-row-tree-diff-cold-warm-change-churn-state-lookup");
     bench_result("nodes", (double)NODE_COUNT, "count");
     bench_result("frames_per_point", (double)FRAMES, "count");
     bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
@@ -209,6 +261,27 @@ int main(void) {
     CF_CHECK(churn_slot != CF_NO_LINK, "the churn diff answers the new tree");
     bench_result("churn_build_ms", elapsed_ms(&started, &finished), "ms");
     bench_result("churn_nodes", (double)CHURN_COUNT, "count");
+
+    /* State-key lookup at three sizes a page actually hits: a small panel,
+     * a table of widgets, and a heavy page. The pass prints the fastest
+     * per-frame time across STATE_FRAMES runs so a reviewer can compare
+     * what the O(S) sweep in entry_of_key costs before and after any
+     * hashed-index change. */
+    seed_state_keys(&ctx.names);
+
+    static const uint32_t wanted[] = {50u, 250u, STATE_ROWS_MAX};
+
+    for (uint32_t i = 0u; i < sizeof wanted / sizeof wanted[0]; ++i) {
+        char key[40];
+        /* Warm the entries before the measured pass so the first-touch
+         * allocates are not what the number describes. */
+        (void)state_fastest_ms(&ctx, wanted[i], 1u);
+        const double ms = state_fastest_ms(&ctx, wanted[i], STATE_FRAMES);
+        snprintf(key, sizeof key, "state_lookup_%ums", wanted[i]);
+        bench_result(key, ms, "ms");
+        snprintf(key, sizeof key, "state_lookup_%uns_per_key", wanted[i]);
+        bench_result(key, ms * NS_PER_MS / (double)wanted[i], "ns");
+    }
 
     cf_ctx_free(&ctx);
 
