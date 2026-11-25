@@ -181,12 +181,26 @@ build/dev/bin/gallery                             # open the demo window
 
 `gallery` is a scrolling page that demonstrates every widget and reacts to the
 mouse: type in the field, drag the scrollbars, watch the box the frame clock
-animates. Press **F12** in it to see the frame's numbers on screen.
+animates. Press **F12** in it to see the frame's numbers on screen. Drag its
+edge: the window is resizable, and every line of text re-breaks against the
+width the shell hands the page.
 
 The first configure downloads [SDL3](https://github.com/libsdl-org/SDL) (the
 library that opens a window) and takes a few minutes. Without
 `-DCFORM_WITH_SDL_BACKEND=ON` nothing is downloaded at all, because the engine
 never needs a window.
+
+The same page runs in a browser tab, through
+[Emscripten](https://emscripten.org/):
+
+```sh
+cmake --preset web                                # needs EMSDK in the environment
+cmake --build --preset web
+python -m http.server 8033 --directory build/wasm/bin
+```
+
+and then open <http://localhost:8033/gallery.html>. It has to be served rather
+than opened, because a browser will not fetch a `.wasm` over `file://`.
 
 ## What using it looks like
 
@@ -314,8 +328,15 @@ same graph optimised, which is where the timing numbers come from.
 
 ### In a browser
 
-With [Emscripten](https://emscripten.org/) installed, configure through its
-wrapper the way CI does:
+The tab runs the same `examples/gallery.c` through the same SDL backend — SDL's
+WebGL path takes the draw calls and its event queue takes the clicks back, so no
+line of the example is browser-specific. What differs is the packaging: the
+`web` preset compiles through Emscripten's toolchain, preloads the font into a
+virtual filesystem (a tab has no path to open) and links `ASYNCIFY`, which lets
+the run loop yield at each present instead of freezing the tab.
+
+CI reaches the same graph without the preset, because it installs the SDK into a
+temporary directory rather than the environment the preset reads `EMSDK` from:
 
 ```sh
 emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
@@ -323,7 +344,10 @@ cmake --build build-wasm
 python -m http.server 8080 --directory build-wasm/bin   # then open http://localhost:8080/gallery.html
 ```
 
-Serving it is required — a tab won't load a `.wasm` from a `file://` path.
+Serving it is required — a tab won't load a `.wasm` from a `file://` path. The
+page draws into the canvas `examples/web/shell.html` states (960×600): resizing
+the browser window scales that picture rather than re-flowing it, so the
+drag-the-edge story belongs to the desktop gallery.
 
 ### The three scripts
 
