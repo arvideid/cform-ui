@@ -997,6 +997,34 @@ static void an_aspect_ratio_is_bounded_by_its_axis_minimum(void) {
 }
 
 /*
+ * content-box and aspect-ratio compose in the order border_size_of writes:
+ * the declaration widens to a border box first, so a 100-point content with
+ * 20 points of padding on each side reads 140, and only then does the ratio
+ * derive the other axis. 140 at 2:1 lands at 70, not 50 - a rule that puts
+ * the ratio on the content extent would answer 50 for the same declaration.
+ */
+static void a_content_box_aspect_ratio_derives_from_the_border_box(void) {
+    fixture f;
+    cf_style stacking = cf_style_default();
+    stacking.width = CF_PX(400.0f);
+    stacking.height = CF_PX(400.0f);
+    stacking.align_items = CF_ALIGN_START;
+    const uint32_t root = begin(&f, stacking);
+
+    cf_style leaf_style = cf_style_default();
+    leaf_style.box_sizing = CF_BOX_CONTENT;
+    leaf_style.width = CF_PX(100.0f);
+    leaf_style.aspect_ratio = 2.0f;
+    leaf_style.padding = (cf_box){CF_PX(20.0f), CF_PX(20.0f), CF_PX(20.0f), CF_PX(20.0f)};
+    const uint32_t leaf = append(&f, root, leaf_style);
+
+    arrange_in(&f, 400.0f, 400.0f);
+
+    CF_NEAR(f.rects[leaf].width, 140.0f);
+    CF_NEAR(f.rects[leaf].height, 70.0f);
+}
+
+/*
  * An axis that states max-content names its own intrinsic size and refuses
  * the shrink-to-fit cap the auto path applies under a definite offer. Three
  * children of 50/100/25 on a wrapping row sum to 175; the 120 the container
@@ -1122,6 +1150,7 @@ int main(void) {
     CF_RUN(an_aspect_ratio_fills_in_the_axis_the_box_left_auto);
     CF_RUN(an_aspect_ratio_yields_to_both_axes_being_declared);
     CF_RUN(an_aspect_ratio_is_bounded_by_its_axis_minimum);
+    CF_RUN(a_content_box_aspect_ratio_derives_from_the_border_box);
     CF_RUN(an_axis_that_states_max_content_ignores_the_shrink_to_fit_cap);
     CF_RUN(a_stretched_axis_fills_the_offer_it_is_given);
     CF_RUN(a_stretched_axis_under_an_indefinite_offer_reads_as_auto);
