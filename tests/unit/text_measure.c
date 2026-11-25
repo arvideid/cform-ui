@@ -378,6 +378,43 @@ static void a_box_slides_along_its_value_only_to_hold_the_caret(void) {
     CF_NEAR(down.y, 20.0f); /* the second line is one row below a window that holds one */
 }
 
+/*
+ * A conforming decoder refuses an overlong form, a surrogate and a value past
+ * U+10FFFF, consuming only the lead byte. The mono walk then charges each byte
+ * the refusal leaves behind as its own codepoint, so a malformed sequence costs
+ * the walk more than the single glyph it stands for - and a well-formed one
+ * still costs exactly one.
+ */
+static void malformed_sequences_walk_byte_by_byte(void) {
+    const cf_size overlong =
+        intrinsic(content_of(cf_string_of("\xC0\xAF")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(overlong.width, 20.0f); /* C0 AF is the overlong spelling of '/': two bytes walked */
+
+    const cf_size surrogate =
+        intrinsic(content_of(cf_string_of("\xED\xA0\x80")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(surrogate.width, 30.0f); /* ED A0 80 is the non-scalar U+D800: three bytes walked */
+
+    const cf_size past_max =
+        intrinsic(content_of(cf_string_of("\xF5\x80\x80\x80")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(past_max.width, 40.0f); /* F5 80 80 80 is the first value past U+10FFFF */
+}
+
+/* The shortest well-formed spelling of a value is one codepoint, so hardening
+ * the decoder must not split the multibyte range it already accepted. */
+static void well_formed_multibyte_stays_whole(void) {
+    const cf_size two_byte =
+        intrinsic(content_of(cf_string_of("\xC3\xA9")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(two_byte.width, 10.0f); /* C3 A9 is U+00E9 */
+
+    const cf_size three_byte =
+        intrinsic(content_of(cf_string_of("\xE0\xA0\x80")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(three_byte.width, 10.0f); /* E0 A0 80 is U+0800, the shortest three-byte form */
+
+    const cf_size four_byte =
+        intrinsic(content_of(cf_string_of("\xF0\x9F\x98\x80")), CF_INTRINSIC_MAX_CONTENT);
+    CF_NEAR(four_byte.width, 10.0f); /* F0 9F 98 80 is U+1F600 */
+}
+
 int main(void) {
     printf("text measure\n");
 
@@ -404,6 +441,8 @@ int main(void) {
     CF_RUN(an_offset_answers_the_distance_and_the_distance_the_offset);
     CF_RUN(an_offset_names_the_line_that_holds_it);
     CF_RUN(a_box_slides_along_its_value_only_to_hold_the_caret);
+    CF_RUN(malformed_sequences_walk_byte_by_byte);
+    CF_RUN(well_formed_multibyte_stays_whole);
 
     return CF_REPORT();
 }

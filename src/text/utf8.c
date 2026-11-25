@@ -50,6 +50,19 @@ uint32_t utf8_decode_at(cf_string text, uint32_t offset, uint32_t *next) {
         codepoint = codepoint << 6u | (continuation & 0x3Fu);
     }
 
+    /* Unicode well-formed (Unicode 15 §3.9, Table 3-7): a sequence must be
+     * the shortest encoding of its value, and the value must be a scalar.
+     * So reject an overlong form for the length, the surrogate range, and
+     * anything past U+10FFFF. On a refusal the walk consumes only the lead
+     * and steps one byte, leaving the trailing bytes to be read as their own
+     * malformed sequences rather than skipped whole. */
+    static const uint32_t shortest[] = {0u, 0x80u, 0x800u, 0x10000u};
+    if (codepoint < shortest[end - offset - 1u] || codepoint > 0x10FFFFu ||
+        (codepoint >= 0xD800u && codepoint <= 0xDFFFu)) {
+        *next = offset + 1u;
+        return REPLACEMENT;
+    }
+
     *next = end;
     return codepoint;
 }
