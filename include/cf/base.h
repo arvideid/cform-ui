@@ -82,6 +82,10 @@ void cf_store_remove(cf_store *store, cf_id id);
 void *cf_store_at(const cf_store *store, size_t slot);
 cf_id cf_store_id(const cf_store *store, size_t slot);
 
+/* Bytes owned by the store's four parallel arrays: retired slots still cost
+ * them, so the number a caller watches for a plateau across a long session. */
+size_t cf_store_bytes(const cf_store *store);
+
 uint32_t cf_hash_bytes(const void *bytes, size_t length);
 
 /*
@@ -124,6 +128,11 @@ void cf_interner_free(cf_interner *interner);
 cf_name cf_intern(cf_interner *interner, cf_string text);
 cf_name cf_intern_text(cf_interner *interner, const char *chars);
 cf_string cf_interned(const cf_interner *interner, cf_name name);
+
+/* Bytes the interner owns until destruction: every issued name's characters
+ * plus the arrays that index them. State GC does not reclaim these, so a
+ * caller measuring a plateau pays for them alongside cf_state_bytes. */
+size_t cf_interner_bytes(const cf_interner *interner);
 
 cf_string cf_string_of(const char *chars);
 

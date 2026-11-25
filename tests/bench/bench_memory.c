@@ -114,28 +114,50 @@ int main(void) {
 
     /* The number a long session used to move: state asked for under names that
      * never come back. The peak is what the run held at its heaviest, the last
-     * what it held once the page stopped asking. */
+     * what it held once the page stopped asking. Interned names and retired
+     * store slots do not shrink back, so the plateau claim has to say what
+     * the interner and the two stores keep after the state GC finishes. */
     size_t held_peak = 0u;
+    size_t interned_peak = 0u;
+    size_t store_peak = 0u;
 
     for (uint32_t round = 0u; round < SESSION_ROUNDS; ++round) {
         const size_t held = run_round(&ctx, round);
+        const size_t interned = cf_interner_bytes(&ctx.names);
+        const size_t nodes = cf_store_bytes(&ctx.nodes) + cf_store_bytes(&ctx.states);
 
         if (held > held_peak) {
             held_peak = held;
+        }
+
+        if (interned > interned_peak) {
+            interned_peak = interned;
+        }
+
+        if (nodes > store_peak) {
+            store_peak = nodes;
         }
     }
 
     cf_frame_begin(&ctx);
     cf_frame_begin(&ctx);
     const size_t held_last = cf_state_bytes(&ctx);
+    const size_t interned_last = cf_interner_bytes(&ctx.names);
+    const size_t store_last = cf_store_bytes(&ctx.nodes) + cf_store_bytes(&ctx.states);
 
     printf("  %u rounds of %u fresh keys:           %7.0f KiB held at the peak\n", SESSION_ROUNDS,
            ROUND_KEYS, (double)held_peak / BYTES_PER_KIB);
     printf("  the page stops asking:                %7.0f KiB\n",
            (double)held_last / BYTES_PER_KIB);
+    printf("  interned names retained:              %7.0f KiB (peak %7.0f KiB)\n",
+           (double)interned_last / BYTES_PER_KIB, (double)interned_peak / BYTES_PER_KIB);
+    printf("  node and state store capacity:        %7.0f KiB (peak %7.0f KiB)\n",
+           (double)store_last / BYTES_PER_KIB, (double)store_peak / BYTES_PER_KIB);
     CF_CHECK(held_peak <= 2u * ROUND_KEYS * KEY_BYTES,
              "state accrues for the rounds still live, not the rounds that ran");
     CF_CHECK(held_last == 0u, "a page that stops asking holds no state");
+    CF_CHECK(interned_last >= interned_peak, "interned bytes never grow once the run stops");
+    CF_CHECK(store_last <= store_peak, "store capacity plateaus with the working set");
 
     cf_ctx_free(&ctx);
     return CF_REPORT();

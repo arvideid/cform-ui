@@ -146,3 +146,15 @@ cf_id cf_store_id(const cf_store *store, size_t slot) {
         .generation = store->generations[slot],
     };
 }
+
+size_t cf_store_bytes(const cf_store *store) {
+    if (store == NULL) {
+        return 0u;
+    }
+
+    /* Growth goes through four parallel arrays sized by `capacity`: the
+     * payload, the generation stamps, the free-list links and the liveness
+     * bit. Retired slots still cost bytes; that is what a caller checking
+     * whether a store plateaus wants to see. */
+    return store->capacity * (store->element_size + 2u * sizeof(uint32_t) + sizeof(bool));
+}

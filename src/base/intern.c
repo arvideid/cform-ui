@@ -175,3 +175,24 @@ cf_string cf_interned(const cf_interner *interner, cf_name name) {
 
     return interner->texts[name - 1u];
 }
+
+size_t cf_interner_bytes(const cf_interner *interner) {
+    if (interner == NULL) {
+        return 0u;
+    }
+
+    /* Every issued name owns a copy of its bytes until the interner is
+     * destroyed, and the three parallel arrays grow with it. A long session
+     * that churns fresh names pays for all of them, so a caller watching for
+     * a plateau has to include this alongside cf_state_bytes. */
+    size_t owned_text = 0u;
+
+    for (size_t i = 0u; i < interner->count; ++i) {
+        owned_text += interner->texts[i].length + 1u;
+    }
+
+    const size_t arrays = interner->capacity * (sizeof(cf_string) + sizeof(uint32_t)) +
+                          interner->bucket_count * sizeof(uint32_t);
+
+    return owned_text + arrays;
+}
