@@ -104,7 +104,7 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
             while (name_len < name_room && name[name_len] != '\0') {
                 ++name_len;
             }
-            (void)snprintf(text, sizeof text, "%.*s/%u", name_len, (void *)name, index);
+            (void)snprintf(text, sizeof text, "%.*s/%u", name_len, name, index);
             rows[i].key = cf_intern_text(&ctx->names, text);
         }
     }
