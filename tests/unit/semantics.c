@@ -94,10 +94,49 @@ static void an_export_without_a_view_or_room_answers_false(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A chain deep enough that its indent overruns the 160-byte line the walk
+ * builds: the old writer trusted snprintf's would-have-written length as the
+ * offset, so the cursor ran off the buffer end and handed back a wrapped size.
+ * The bounded writer truncates the wide lines instead, so the export survives
+ * and every node still gets a line. */
+static void a_page_deeper_than_a_line_still_exports(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    enum { DEPTH = 60u };
+    cf_node nodes[DEPTH];
+
+    for (uint32_t i = 0u; i < DEPTH; ++i) {
+        nodes[i] = (cf_node){.key = CF_NO_NAME};
+        nodes[i].style = cf_style_default();
+
+        if (i + 1u < DEPTH) {
+            nodes[i].children = &nodes[i + 1u];
+            nodes[i].child_count = 1u;
+        }
+    }
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &nodes[0]) != CF_NO_LINK, "the deep page is claimed");
+    cf_frame_layout(&ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
+                    (cf_point){0.0f, 0.0f});
+
+    char bytes[16u * 1024u];
+    CF_CHECK(cf_semantic_export(&ctx, bytes, sizeof bytes), "a deep page exports without harm");
+    CF_CHECK(bytes[0] == 'b' && bytes[1] == 'o' && bytes[2] == 'x',
+             "the root still opens as a box");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("semantics\n");
     CF_RUN(a_view_walks_as_the_roles_it_kept);
     CF_RUN(an_export_without_a_view_or_room_answers_false);
+    CF_RUN(a_page_deeper_than_a_line_still_exports);
 
     return CF_REPORT();
 }

@@ -2,6 +2,7 @@
 
 #include "node/internal.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -51,6 +52,42 @@ static int excerpt(const cf_string text, char *out) {
     return (int)used;
 }
 
+/* A role the theme never styled still names a box; reading the table at an
+ * index past its end is not an answer anyone can trust. */
+static const char *role_name(cf_role role) {
+    return (unsigned)role < (unsigned)CF_ROLE_COUNT ? role_names[role] : role_names[CF_ROLE_NONE];
+}
+
+/* The indent can run wide and the excerpt a whole line, so the pieces are
+ * joined through a writer that never steps past the line's buffer. snprintf
+ * reports the bytes it would have written, and trusting that as the offset
+ * let a deep node run the cursor off the end and hand a wrapped size back. */
+typedef struct line_writer {
+    char *buf;
+    size_t size;
+    size_t used;
+} line_writer;
+
+static void line_printf(line_writer *w, const char *fmt, ...) {
+    if (w->used + 1u > w->size) {
+        return;
+    }
+
+    const int room = (int)(w->size - w->used);
+    va_list args;
+    va_start(args, fmt);
+    const int would = vsnprintf(w->buf + w->used, (size_t)room, fmt, args);
+    va_end(args);
+
+    if (would < 0) {
+        return;
+    }
+
+    /* Advance by the bytes actually present, not the ones the call wanted to
+     * write: a truncated line stops growing and stays inside its buffer. */
+    w->used += (size_t)would < (size_t)room ? (size_t)would : (size_t)room - 1u;
+}
+
 static void walk(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot, uint32_t depth,
                  semantic_writer *writer) {
     if (!writer->fits) {
@@ -60,24 +97,25 @@ static void walk(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot, uint32_t
     const node_record *record = record_of(ctx, slot);
     char line[160];
     char text[SEMANTIC_TEXT_BYTES + 4u];
-    int used =
-        snprintf(line, sizeof line, "%*s%s", (int)(depth * 2u), "", role_names[record->role]);
+    line_writer out = {.buf = line, .size = sizeof line, .used = 0u};
+
+    line_printf(&out, "%*s%s", (int)(depth * 2u), "", role_name(record->role));
 
     if (tree->measures != NULL && tree->measure_data != NULL &&
         tree->measures[slot] == cf_text_measure && tree->measure_data[slot] != NULL) {
         const cf_text_content *content = tree->measure_data[slot];
         const int length = excerpt(content->text, text);
-        used += snprintf(line + used, sizeof line - (size_t)used, " '%.*s'", length, text);
+        line_printf(&out, " '%.*s'", length, text);
     }
 
     const cf_rect rect = ctx->rects != NULL ? ctx->rects[slot] : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
-    used += snprintf(line + used, sizeof line - (size_t)used, " %gx%g", (double)rect.width,
-                     (double)rect.height);
+    line_printf(&out, " %gx%g", (double)rect.width, (double)rect.height);
 
     if (record->disabled) {
-        snprintf(line + used, sizeof line - (size_t)used, " disabled");
+        line_printf(&out, " disabled");
     }
 
+    line[out.used] = '\0';
     put_line(writer, line);
 
     for (uint32_t i = tree->child_start[slot]; i < tree->child_start[slot + 1u]; ++i) {
