@@ -300,6 +300,13 @@ typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
  * offer's points, and paints the commands into `out`. A build that answers a
  * page that paints nothing, or an offer of nothing, empties the list instead
  * of painting it.
+ *
+ * Failure: when the frame arena cannot hold the declared tree, `cf_diff`
+ * refuses, the layout reads no view, and paint writes no commands — `out`
+ * comes back empty. The diagnostic names the refusal on
+ * `cf_error_message`; the next frame, with a smaller declaration or a larger
+ * arena, starts clean. No output is presented as complete when the arena
+ * said no.
  */
 void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
                   cf_command_list *out);
