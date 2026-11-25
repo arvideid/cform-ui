@@ -23,7 +23,7 @@ and this file is the record.
 | item | detail |
 |---|---|
 | A full field ignores the keystroke | the buffer's capacity is the caller's and a run that will not fit whole is refused, so typing into a full field looks dead. Either truncate at a scalar boundary or show the refusal; today neither is stated |
-| A state block can move | growing a block hands back a new pointer and the old one dangles. Documented, and no caller in the tree relies on it, but a build that caches a `cf_state` pointer across a growth is a bug waiting for a larger request |
+| A state block can move | growing a block hands back a new pointer and the old one dangles. The framework no longer reads through the freed pointer itself (the use-after-free in `cf_state_grow` is repaired), but a host that caches a `cf_state` pointer across a growth is still the hazard the API warns about |
 | Textures are never reclaimed | `create_texture` hands back an id and nothing frees it. A screen that loads images as it goes grows until the device stops it |
 | The cursor is dead API | `cf_frame_cursor` answers an I-beam over a field and no backend can act on it, because the surface contract has no slot for the ask |
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
