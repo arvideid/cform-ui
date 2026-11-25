@@ -72,6 +72,17 @@ cf_backend cf_backend_recorder(cf_recorder *recorder);
  * whatever the last submit drew, cleared to black where nothing was painted.
  * Rects arrive in logical points; the window's pixel density is the
  * backend's to apply.
+ *
+ * The three SDL-shaped names below (cf_backend_sdl, cf_sdl_install_log_sink
+ * and cf_font_sdl) belong to the source tree. cmake --install packages the
+ * headless backend only, because the SDL target's interface names SDL3::SDL3,
+ * a FetchContent artifact that lives inside a build tree and nowhere else.
+ * A consumer taking the installed package either builds cform with
+ * CFORM_WITH_SDL_BACKEND=ON and links cf_backend_sdl from the same tree, or
+ * writes its own backend against the cf_backend struct above. The
+ * declarations stay here so the examples do not need a second header; an
+ * installed consumer who tries to call them finds the symbol missing at the
+ * linker, not at the compiler.
  */
 typedef struct cf_sdl_config {
     const char *title;
