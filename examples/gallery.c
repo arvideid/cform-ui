@@ -12,12 +12,24 @@
 #define WINDOW_WIDTH 900u
 #define WINDOW_HEIGHT 620u
 
+/* Where the drag stops. Every chapter reads at this width and the sweep of them
+ * overflows nothing; below it a stated number - a chapter number beside its
+ * title, a box with padding on both sides - has less line than the smallest
+ * piece it is made of, and the page can only be cut or pushed out. */
+#define WINDOW_MIN_WIDTH 360u
+#define WINDOW_MIN_HEIGHT 240u
+
 /* The document's own measure: one column of chapters, each a card, each with
  * the room a heading, a paragraph and something to try need. */
 #define PAGE_PADDING 24.0f
 #define CHAPTER_GAP 20.0f
 #define CARD_PADDING 16.0f
 #define CARD_GAP 12.0f
+
+/* The widest the document grows. A window broader than this gets the page
+ * centred in it rather than a paragraph a mile long: filling every pixel is what
+ * a responsive layout does at the sizes a reader sits at, not past them. */
+#define PAGE_MAX_WIDTH 900.0f
 
 /* The panel's geometry is stated rather than measured: the thumb has to be
  * placed by the numbers the scroller will read, and no layout has run when the
@@ -299,6 +311,20 @@ static cf_node demo_column(cf_ctx *ctx, float gap, const cf_node *children, uint
     return cf_col(ctx, column, children, count);
 }
 
+/* A row of things a narrow window cannot hold side by side: what does not fit
+ * the line comes round onto the next one instead of overhanging the card. The gap
+ * is stated on both axes because a row that wraps needs the cross one as much as
+ * the main. */
+static cf_style wrap_row(float gap) {
+    cf_style row = cf_style_default();
+    row.wrap = CF_WRAP;
+    row.column_gap = CF_PX(gap);
+    row.row_gap = CF_PX(gap);
+    row.align_items = CF_ALIGN_START;
+
+    return row;
+}
+
 /* One line of text that takes the width its container gives it and breaks as
  * often as that width asks - the measure, not a guess, sizes the box. */
 static cf_node make_prose(cf_ctx *ctx, const char *chars, cf_color ink) {
@@ -371,7 +397,11 @@ static cf_node make_chapter(cf_ctx *ctx, const char *number, const char *name, c
 
     cf_style line = cf_style_default();
     line.column_gap = CF_PX(10.0f);
-    /* Two sizes on one line: the baseline is where their glyphs agree. */
+    line.row_gap = CF_PX(2.0f);
+    /* Two sizes on one line: the baseline is where their glyphs agree. The line
+     * may break, so a title whose longest word no longer fits the card drops
+     * under its number instead of running past the card's edge. */
+    line.wrap = CF_WRAP;
     line.align_items = CF_ALIGN_BASELINE;
 
     const cf_node children[] = {
@@ -400,9 +430,10 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
     const int length = snprintf(status_bytes, sizeof status_bytes, "clicked %u times",
                                 clicks != NULL ? *clicks : 0u);
 
-    cf_style row = cf_style_default();
-    row.column_gap = CF_PX(8.0f);
-    row.align_items = CF_ALIGN_START;
+    /* Three buttons and a gap: what does not fit the line comes round onto the
+     * next one, so the toolbar narrows with the window rather than leaving the
+     * last button outside the card. */
+    const cf_style row = wrap_row(8.0f);
 
     return demo_column(
         ctx, 8.0f,
@@ -520,7 +551,10 @@ static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
 
     for (uint32_t i = 0u; i < STRIP_BOXES; ++i) {
         cf_style item = inset_style(theme->body, 8.0f, 0.0f);
-        item.width = CF_PX(240.0f);
+        /* Shared out rather than stated: a box fixed wider than the line leaves
+         * the strip with nothing to distribute, and on the column rule it would
+         * run past the well at any width the window is not. */
+        item.flex_grow = 1.0f;
         item.height = CF_PX(STRIP_ITEM);
         item.justify_content = CF_JUSTIFY_CENTER;
 
@@ -555,11 +589,7 @@ static cf_node make_rules_demo(cf_ctx *ctx) {
         chips[i] = make_chip(ctx, rule_names[i], i == rule, pick_rule, i);
     }
 
-    cf_style row = cf_style_default();
-    row.wrap = CF_WRAP;
-    row.column_gap = CF_PX(8.0f);
-    row.row_gap = CF_PX(8.0f);
-    row.align_items = CF_ALIGN_START;
+    const cf_style row = wrap_row(8.0f);
 
     return demo_column(ctx, 12.0f,
                        (cf_node[]){cf_row(ctx, row, chips, RULE_COUNT), make_rule_strip(ctx, rule)},
@@ -712,8 +742,9 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
         make_button(ctx, in_flow ? "let it leave the flow" : "put it back in the flow", flip,
                     badge_in_flow(ctx));
 
-    cf_style row = cf_style_default();
-    row.column_gap = CF_PX(24.0f);
+    cf_style row = wrap_row(24.0f);
+    /* The button sits level with the middle of what it acts on, not with the
+     * first line of it. */
     row.align_items = CF_ALIGN_CENTER;
 
     return CF_ROW(ctx, row, cf_col(ctx, over, (cf_node[]){image, badge_box}, 2u), flip_button);
@@ -746,15 +777,28 @@ static cf_node make_grid_cell(cf_ctx *ctx, const char *mark, uint32_t column_spa
     return cf_col(ctx, cell, &label, 1u);
 }
 
+/* Room for the widest declaration a plan makes, and for the two rows every
+ * plan but the last declares. */
+#define GRID_COLUMNS 4u
+#define GRID_ROWS 2u
+
 static cf_node make_grid_demo(cf_ctx *ctx) {
     const uint32_t *held = picked_plan(ctx);
     const uint32_t plan = held != NULL ? *held : PLAN_COLUMNS;
 
     /* The engine reads a flat array and a count, so a pattern handed to the
      * helper and a list written out by longhand are one declaration by the time
-     * the pass runs. Both ride this frame's stack, which is the borrowing the
-     * style states: outliving the pass, not the page. */
-    cf_track columns[4];
+     * the pass runs. That pass is not this function's: an array riding this
+     * stack leaves the grid sizing whatever the pointer reached once the frame
+     * unwound, so both arrays come out of the arena the pass still reads. */
+    cf_track *tracks = cf_alloc(&ctx->frame, (GRID_COLUMNS + GRID_ROWS) * sizeof *tracks);
+
+    if (tracks == NULL) {
+        return (cf_node){.style = cf_style_default()};
+    }
+
+    cf_track *columns = tracks;
+    cf_track *rows = tracks + GRID_COLUMNS;
     uint32_t column_count = 0u;
 
     if (plan == PLAN_COLUMNS) {
@@ -763,22 +807,34 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
         columns[2] = (cf_track){CF_AUTO, CF_FR(2.0f)};
         column_count = 3u;
     } else if (plan == PLAN_REPEAT) {
+        /* The pattern is the one array here the helper only reads: it copies
+         * what it is given into `columns` and never holds the pointer. */
         const cf_track pattern[] = {{CF_AUTO, CF_FR(1.0f)}, {CF_PX(72.0f), CF_PX(72.0f)}};
 
-        column_count = cf_tracks_repeat(columns, 4u, pattern, 2u, 2u);
+        column_count = cf_tracks_repeat(columns, GRID_COLUMNS, pattern, 2u, 2u);
+    }
+
+    for (uint32_t row = 0u; row < GRID_ROWS; ++row) {
+        rows[row] = (cf_track){CF_AUTO, CF_AUTO};
     }
 
     /* Two rows are written and six cells want more, so the rest land in rows the
      * grid adds for them as content-sized tracks of their own. */
-    const cf_track rows[] = {{CF_AUTO, CF_AUTO}, {CF_AUTO, CF_AUTO}};
-
     cf_style grid = inset_style(theme->bar, 12.0f, 12.0f);
     grid.display = CF_DISPLAY_GRID;
     grid.width = CF_PERCENT(100.0f);
+    /* Auto tracks are sized by what they hold and CSS lets a grid whose plans do
+     * not fit overflow - a declared 120 point column stays 120 points wide. Cutting
+     * here is what keeps the last column from being painted over the chapter that
+     * follows instead of ending at the card's edge. */
+    grid.clips_content = true;
+    /* The helper states the rhythm between rows only, and a grid whose cells
+     * touch side to side reads as one box with lines drawn in it. */
+    grid.column_gap = CF_PX(12.0f);
     grid.column_tracks = column_count != 0u ? columns : NULL;
     grid.column_count = column_count;
     grid.row_tracks = plan == PLAN_FREE ? NULL : rows;
-    grid.row_count = plan == PLAN_FREE ? 0u : 2u;
+    grid.row_count = plan == PLAN_FREE ? 0u : GRID_ROWS;
 
     const cf_node cells[] = {
         make_grid_cell(ctx, "two columns", 2u, 0u), make_grid_cell(ctx, "auto", 0u, 0u),
@@ -792,11 +848,7 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
         chips[i] = make_chip(ctx, plan_names[i], i == plan, pick_plan, i);
     }
 
-    cf_style row = cf_style_default();
-    row.wrap = CF_WRAP;
-    row.column_gap = CF_PX(8.0f);
-    row.row_gap = CF_PX(8.0f);
-    row.align_items = CF_ALIGN_START;
+    const cf_style row = wrap_row(8.0f);
 
     return demo_column(
         ctx, 12.0f, (cf_node[]){cf_row(ctx, row, chips, PLAN_COUNT), cf_row(ctx, grid, cells, 6u)},
@@ -830,31 +882,42 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
         }
     }
 
-    /* The lane is both the containing block the puck leaves the flow to be
-     * placed against and the box that cuts it: a puck past the edge is clipped
-     * rather than painted over the chapter below. */
+    /* The lane both carries the puck and cuts it: a puck past the edge is
+     * clipped rather than painted over the chapter below. Its width is the card's
+     * up to the length the tween runs, so a thin window shortens the track instead
+     * of pushing it off the screen, and the right padding is the room the puck
+     * needs at the far end - the full run lands flush with the border rather than
+     * half past it. */
     cf_style lane = inset_style(theme->bar, 0.0f, 0.0f);
-    lane.position = CF_POSITION_RELATIVE;
-    lane.width = CF_PX(SLIDE_TRAVEL + SLIDE_PUCK);
+    lane.width = CF_PERCENT(100.0f);
+    lane.max_width = CF_PX(SLIDE_TRAVEL + SLIDE_PUCK);
+    lane.padding.right = CF_PX(SLIDE_PUCK);
     lane.height = CF_PX(SLIDE_PUCK);
     lane.clips_content = true;
 
     cf_style puck = theme->variants[CF_ROLE_BUTTON].base;
-    puck.position = CF_POSITION_ABSOLUTE;
     puck.width = CF_PX(SLIDE_PUCK);
     puck.height = CF_PX(SLIDE_PUCK);
     puck.radius = 8.0f;
-    puck.inset = (cf_box){CF_PX(at), CF_PX(0.0f), CF_AUTO, CF_AUTO};
+    puck.flex_shrink = 0.0f;
+    /* The one number, as a share of the track the card was able to give it. A
+     * percentage margin is measured against that track, so the puck keeps its
+     * size and moves the whole way whatever the width turns out to be. */
+    puck.margin.left = CF_PERCENT(at / SLIDE_TRAVEL * 100.0f);
 
-    /* The same number read a second way, as a share of whatever width the card
-     * happens to be: the bar stretches with the window and the lane does not. The
-     * meter is a row, so the fill states no height of its own - the cross axis
-     * stretches what did not state one. */
+    /* The same number read the other way, as a share of the width the card
+     * happens to have. Both boxes now follow the window: what differs is the
+     * lever - a margin that moves a fixed box along the lane against a width that
+     * grows from the lane's own start. */
     cf_style meter = inset_style(theme->bar, 0.0f, 0.0f);
     meter.width = CF_PERCENT(100.0f);
     meter.height = CF_PX(12.0f);
 
-    cf_style fill = theme->variants[CF_ROLE_BUTTON].base;
+    /* The ink of a button and none of its padding: a box states its border box,
+     * so a 12-point track wearing 8 points of padding top and bottom cannot be
+     * 12 points tall, and a share of a track that has to leave 24 points for
+     * nothing is a fill that shows progress when the tween has none. */
+    cf_style fill = inset_style(theme->variants[CF_ROLE_BUTTON].base, 0.0f, 0.0f);
     fill.width = CF_PERCENT(at / SLIDE_TRAVEL * 100.0f);
 
     const uint32_t *held = picked_ease(ctx);
@@ -866,17 +929,14 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
         chips[i] = make_chip(ctx, ease_names[i], i == ease, pick_ease, i);
     }
 
-    cf_style row = cf_style_default();
-    row.wrap = CF_WRAP;
-    row.column_gap = CF_PX(8.0f);
-    row.row_gap = CF_PX(8.0f);
+    const cf_style row = wrap_row(8.0f);
 
     const int length =
         snprintf(motion_bytes, sizeof motion_bytes, "%.0f of %.0f points, %s", at, SLIDE_TRAVEL,
                  travelling ? "and the page asked for another frame" : "and the page is at rest");
 
     const cf_node parts[] = {
-        cf_col(ctx, lane, (cf_node[]){(cf_node){.style = puck}}, 1u),
+        cf_row(ctx, lane, (cf_node[]){(cf_node){.style = puck}}, 1u),
         cf_row(ctx, meter, (cf_node[]){(cf_node){.style = fill}}, 1u),
         cf_row(ctx, row, chips, EASE_COUNT),
         make_button(ctx, aimed_far(tween) ? "bring it back" : "send it", send_it, NULL),
@@ -910,6 +970,7 @@ static cf_node make_header(cf_ctx *ctx) {
 static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
     cf_style sheet = inset_style(theme->page, PAGE_PADDING, CHAPTER_GAP);
     sheet.width = CF_PERCENT(100.0f);
+    sheet.max_width = CF_PX(PAGE_MAX_WIDTH);
     sheet.direction = CF_DIRECTION_COLUMN;
 
     const cf_node document = cf_col(ctx, sheet, chapters, count);
@@ -923,6 +984,10 @@ static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
     page.style.height = CF_PERCENT(100.0f);
     page.style.direction = CF_DIRECTION_COLUMN;
     page.style.clips_content = true;
+    /* The wrapper caps itself above; this is where the capped column sits in a
+     * window wider than it. The wheel's range is the wrapper's height, which no
+     * cross-axis placement moves. */
+    page.style.align_items = CF_ALIGN_CENTER;
 
     return page;
 }
@@ -1038,8 +1103,11 @@ int main(int argc, char **argv) {
         pixel[3] = 255u;
     }
 
-    const cf_backend backend = cf_backend_sdl(
-        &(cf_sdl_config){.title = "cform gallery", .width = WINDOW_WIDTH, .height = WINDOW_HEIGHT});
+    const cf_backend backend = cf_backend_sdl(&(cf_sdl_config){.title = "cform gallery",
+                                                               .width = WINDOW_WIDTH,
+                                                               .height = WINDOW_HEIGHT,
+                                                               .min_width = WINDOW_MIN_WIDTH,
+                                                               .min_height = WINDOW_MIN_HEIGHT});
     if (backend.submit == NULL) {
         printf("gallery: no window\n");
         return 1;
