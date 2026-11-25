@@ -273,6 +273,27 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
     cf_ctx_free(&fresh);
 }
 
+/* The seconds clamp: a host handing a negative interval or a NaN from an
+ * uninitialized clock must not propagate garbage into cf_frame_seconds. */
+static void a_negative_or_nan_interval_clamps_to_zero(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_command_list list = {0};
+    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, -1.0f, &list);
+    CF_NEAR(seconds_seen, 0.0f);
+
+    /* IEEE-754 NaN: !(NaN >= 0.0f) is true, so the clamp catches it. */
+    const float nan = 0.0f / 0.0f;
+    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, nan, &list);
+    CF_NEAR(seconds_seen, 0.0f);
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node frame run\n");
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
@@ -281,6 +302,7 @@ int main(void) {
     CF_RUN(a_frame_carries_its_seconds_and_may_ask_for_another);
     CF_RUN(a_reused_list_is_replaced_not_appended);
     CF_RUN(a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind);
+    CF_RUN(a_negative_or_nan_interval_clamps_to_zero);
 
     return CF_REPORT();
 }
