@@ -13,8 +13,10 @@ typedef struct list_data {
     float content_height;
 } list_data;
 
-/* Enough for a build's name, a slash and the index - a longer name
- * truncates, and a truncated key is still stable for the index it names. */
+/* Enough for a build's name and the row's index. The name is capped so the
+ * index suffix always survives: writing the whole name first could push the
+ * `/%u` off the end, and two rows then intern the same key and reconcile
+ * onto each other's slots. Truncating the name keeps every index distinct. */
 #define ROW_KEY_MAX 64u
 
 static void list_pointer(cf_event *event, void *user_data) {
@@ -95,7 +97,14 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
 
         if (rows[i].key == CF_NO_NAME) {
             char text[ROW_KEY_MAX];
-            (void)snprintf(text, sizeof text, "%s/%u", name, index);
+            /* Leave the widest index a uint32 can print its own bytes plus the
+             * slash; the name fills the rest and truncates before the index. */
+            const int name_room = (int)(sizeof text - 12u);
+            int name_len = 0;
+            while (name_len < name_room && name[name_len] != '\0') {
+                ++name_len;
+            }
+            (void)snprintf(text, sizeof text, "%.*s/%u", name_len, (void *)name, index);
             rows[i].key = cf_intern_text(&ctx->names, text);
         }
     }
