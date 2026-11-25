@@ -1,5 +1,7 @@
 #include "cf/node.h"
 
+#include <string.h>
+
 #include "node/internal.h"
 
 bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes) {
@@ -97,8 +99,12 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
         return;
     }
 
-    /* One rect per store slot; the walk from the root only ever reads the
-     * slots it reaches, so the rest staying untouched is harmless. */
+    /* One rect per store slot. The array is zeroed before cf_layout writes into
+     * it because a scratch refusal inside a container leaves the subtrees under
+     * it unwritten, and a paint or an input walk reading a stale rect would
+     * otherwise reach whatever the last frame had there. A zeroed cf_rect is a
+     * valid empty box - it paints nothing and hits nothing - so an incomplete
+     * pass still answers with a walk the caller can use. */
     cf_rect *rects = cf_alloc(&ctx->frame, ctx->layout.node_count * sizeof *rects);
 
     if (rects == NULL) {
@@ -106,6 +112,7 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
         return;
     }
 
+    memset(rects, 0, ctx->layout.node_count * sizeof *rects);
     cf_layout(&ctx->frame, &ctx->layout, ctx->root_slot, available, origin, rects);
     ctx->rects = rects;
 }

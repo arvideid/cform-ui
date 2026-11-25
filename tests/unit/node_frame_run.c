@@ -353,6 +353,69 @@ static void a_hidden_subtree_paints_nothing(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A scratch too small to complete a wide layout: cf_frame_layout zeroes the
+ * rect array so a subtree the flex pass could not place reads a valid empty
+ * box rather than whatever an earlier frame left in the arena. The layout
+ * still runs, the paint still walks, and no command carries an extent the
+ * offer never named.
+ */
+#define REFUSAL_LEAVES 64u
+
+static cf_node wide_page(cf_ctx *ctx) {
+    (void)ctx;
+
+    static cf_node leaves[REFUSAL_LEAVES];
+    static cf_node kids[REFUSAL_LEAVES];
+
+    cf_style leaf = cf_style_default();
+    leaf.width = CF_PX(20.0f);
+    leaf.height = CF_PX(20.0f);
+    leaf.background = (cf_opt_color){.present = true, .value = CF_COLOR(4, 4, 4)};
+
+    for (uint32_t i = 0u; i < REFUSAL_LEAVES; ++i) {
+        leaves[i] = (cf_node){.style = leaf};
+        kids[i] = leaves[i];
+    }
+
+    cf_node root = {0};
+    root.style = cf_style_default();
+    root.style.width = CF_PX(2000.0f);
+    root.style.height = CF_PX(2000.0f);
+    root.style.background = (cf_opt_color){.present = true, .value = CF_COLOR(9, 9, 9)};
+    root.children = kids;
+    root.child_count = REFUSAL_LEAVES;
+
+    return root;
+}
+
+static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
+    cf_ctx ctx;
+
+    /* Small enough that cf_layout's item and line tables for a 64-child row
+     * cannot fit after the rects and the diff's view arrays. cf_frame_layout
+     * either rejects the whole frame (alloc fails) or leaves the descendants
+     * the flex pass could not place at a zero rect; either way no command
+     * reaches past the 100x100 viewport it was offered. */
+    if (!cf_ctx_init(&ctx, 4096u)) {
+        CF_CHECK(false, "the frame starts");
+        return;
+    }
+
+    cf_command_list list = {0};
+    cf_frame_run(&ctx, wide_page, (cf_size){100.0f, 100.0f}, 0.0f, &list);
+
+    for (uint32_t i = 0u; i < list.count; ++i) {
+        const cf_rect box = list.commands[i].rect;
+        CF_CHECK(box.width == box.width, "no command carries a NaN extent");
+        CF_CHECK(box.height == box.height, "no command carries a NaN extent");
+        CF_CHECK(box.width >= 0.0f && box.height >= 0.0f,
+                 "a refused subtree reads a non-negative box");
+    }
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node frame run\n");
     CF_RUN(a_frame_runs_the_whole_pipeline_in_one_call);
@@ -363,6 +426,7 @@ int main(void) {
     CF_RUN(a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind);
     CF_RUN(a_negative_or_nan_interval_clamps_to_zero);
     CF_RUN(a_hidden_subtree_paints_nothing);
+    CF_RUN(a_scratch_that_refuses_a_wide_layout_paints_no_stale_box);
 
     return CF_REPORT();
 }
