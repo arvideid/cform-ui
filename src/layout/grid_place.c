@@ -153,18 +153,29 @@ uint32_t grid_place(const layout_ctx *ctx, uint32_t slot, uint32_t column_count,
      * grid by declaration, so a runaway span cannot ask for tracks nobody
      * placed into; only the rows an auto item still needs are added on top. */
     uint32_t rows = self->row_count;
+    /* The rows an item that names none can still ask for: each one that is left
+     * to be looked for is pushed past the last by as many tracks as it fills,
+     * so a two-row item costs two rows of map and not one. */
+    uint32_t wanted = 0u;
 
     for (uint32_t i = 0u; i < count; ++i) {
         const cf_style *child = &ctx->tree->styles[ctx->tree->child_slots[first + i]];
 
-        if (child->position != CF_POSITION_ABSOLUTE && child->row_start > rows) {
+        if (child->position == CF_POSITION_ABSOLUTE) {
+            continue;
+        }
+
+        if (child->row_start > rows) {
             rows = child->row_start;
+        }
+        if (child->row_start == 0u) {
+            wanted += child->row_span != 0u ? child->row_span : 1u;
         }
     }
 
-    /* Every child could be placed, and each one still to be looked for can be
-     * pushed a row past the last, so this bound is never too small. */
-    const uint32_t bound = rows + count;
+    /* Every child could be placed inside the declared rows plus what the auto
+     * items ask for, so this bound is never too small. */
+    const uint32_t bound = rows + wanted;
     const size_t mark = cf_arena_mark(ctx->scratch);
     /* Whole words, so the placement scan may read eight bytes at a time without
      * running past the map; the padding bits stay clear and read as no cell. */

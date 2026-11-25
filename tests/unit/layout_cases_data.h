@@ -670,6 +670,18 @@
                {STYLE(), 0u, RECT(100.0f, 0.0f, 100.0f, 50.0f)},
                {STYLE(), 0u, RECT(100.0f, 50.0f, 100.0f, 50.0f)}}},
 
+    /* Implicit rows are added a track at a time, so a span that runs past what
+     * was declared has to be counted as the tracks it fills. Read as one row,
+     * the map ends early and the item that follows lands on top of the one
+     * already placed there. */
+    {.name = "a row span into implicit rows still moves the items after it",
+     .available = AVAILABLE(CF_AUTO, CF_AUTO),
+     .node_count = 4u,
+     .nodes = {{GRID(.width = CF_PX(200.0f)), ROOT, RECT(0.0f, 0.0f, 200.0f, 120.0f)},
+               {STYLE(.row_span = 2u, .height = CF_PX(40.0f)), 0u, RECT(0.0f, 0.0f, 200.0f, 40.0f)},
+               {SIZE(200.0f, 40.0f), 0u, RECT(0.0f, 40.0f, 200.0f, 40.0f)},
+               {SIZE(200.0f, 40.0f), 0u, RECT(0.0f, 80.0f, 200.0f, 40.0f)}}},
+
     /* The wide item leaves a hole in the first row. A placement cursor that only
      * ever moved forward would put the next item in the third row instead. */
     {.name = "dense placement fills the hole a wide item left behind",
