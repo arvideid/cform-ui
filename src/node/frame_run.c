@@ -17,6 +17,14 @@ void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
         return;
     }
 
+    /* A host that measures its own interval may hand a negative or NaN
+     * reading from a broken clock or a first frame with no predecessor.
+     * Clamping to zero means tweens hold still rather than jumping or
+     * poisoning every later arithmetic that reads frame_seconds. */
+    if (!(seconds >= 0.0f)) {
+        seconds = 0.0f;
+    }
+
     cf_frame_begin(ctx);
     /* The frame replaces the stream rather than adding to it: a list carried
      * over from an earlier run would append onto pointers into the arena that
