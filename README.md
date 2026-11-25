@@ -304,6 +304,12 @@ Four steps, and each one can be used on its own:
 | **golden test** | Saving a whole frame's shape list as a text file, then failing if a change writes a different one. You review the diff. [Characterization test.](https://en.wikipedia.org/wiki/Characterization_test) |
 | **bench** | Timing how long a big screen takes, so a slowdown cannot arrive unnoticed. [Details.](docs/bench.md) |
 
+Names follow the code: functions and types read lowercase with a `cf_` prefix
+(`cf_frame_run`, `cf_style`), macros and enum values read uppercase with the
+same prefix (`CF_PT`, `CF_ROLE_BUTTON`). Nothing carries a `_t` suffix — the
+type is `cf_style`, not `cf_style_t` — because the prefix already says where
+the name lives and a second marker only lengthens every call site.
+
 ## Using it as a library
 
 ```sh
