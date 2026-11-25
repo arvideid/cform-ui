@@ -224,6 +224,45 @@ static void a_mark_made_before_the_diff_survives_an_unchanged_declaration(void) 
     cf_ctx_free(&ctx);
 }
 
+/* A grid's tracks are borrowed from a caller-owned array, so the declaration
+ * carries a pointer to them. Editing the tracks in place leaves the pointer
+ * (and the style bytes) unchanged while the numbers that size the layout move;
+ * hashing the pointer alone missed the change, so the signature folds the
+ * track content too. */
+static void a_track_array_edited_in_place_dirties_the_node(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_track columns[] = {
+        {CF_PX(120.0f), CF_PX(120.0f)},
+        {CF_PX(80.0f), CF_PX(80.0f)},
+    };
+
+    cf_node grid = box(200.0f, 200.0f);
+    grid.style.display = CF_DISPLAY_GRID;
+    grid.style.column_tracks = columns;
+    grid.style.column_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &grid);
+
+    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the first frame arrived dirty");
+
+    /* Same pointer, same style struct: only a track's value moved. */
+    columns[1] = (cf_track){CF_PX(60.0f), CF_PX(60.0f)};
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &grid);
+
+    CF_CHECK(cf_dirty(&ctx, ctx.root_slot),
+             "a track edited in place at the same pointer dirties the node");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node dirty\n");
 
@@ -234,6 +273,7 @@ int main(void) {
     CF_RUN(a_subtree_mark_reaches_every_descendant);
     CF_RUN(the_bit_lives_one_frame);
     CF_RUN(a_mark_made_before_the_diff_survives_an_unchanged_declaration);
+    CF_RUN(a_track_array_edited_in_place_dirties_the_node);
 
     return CF_REPORT();
 }

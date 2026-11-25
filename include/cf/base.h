@@ -85,6 +85,13 @@ cf_id cf_store_id(const cf_store *store, size_t slot);
 uint32_t cf_hash_bytes(const void *bytes, size_t length);
 
 /*
+ * FNV-1a continued from a seed, so several buffers fold into one identity
+ * without staging a concatenation. Folding nothing (NULL, or zero length)
+ * returns the seed unchanged; cf_hash_bytes is the seed-from-basis case.
+ */
+uint32_t cf_hash_fold(uint32_t seed, const void *bytes, size_t length);
+
+/*
  * Text identity by value. Keys are stable indices into the interned table, so
  * a cache keyed on cf_name survives the caller rebuilding its string — the
  * pointer-identity key it replaces silently missed on every rebuild.

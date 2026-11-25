@@ -67,7 +67,19 @@ static uint32_t signature_of(const cf_node *decl) {
     declared.role = decl->role;
     declared.disabled = decl->disabled;
 
-    return cf_hash_bytes(&declared, sizeof declared);
+    /* The grid tracks are a borrowed array, so the struct hash above carries
+     * their pointer but not their values - an edit made in place at a stable
+     * address would ride the same signature and stay clean. Fold the track
+     * bytes in too, at the counts the layout reads, so a changed track reads
+     * changed here as well. */
+    uint32_t signature = cf_hash_bytes(&declared, sizeof declared);
+
+    signature = cf_hash_fold(signature, decl->style.column_tracks,
+                             (size_t)decl->style.column_count * sizeof *decl->style.column_tracks);
+    signature = cf_hash_fold(signature, decl->style.row_tracks,
+                             (size_t)decl->style.row_count * sizeof *decl->style.row_tracks);
+
+    return signature;
 }
 
 /* A slot the store hands out that nothing declared yet. CF_NO_LINK when the

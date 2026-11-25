@@ -27,9 +27,11 @@
  * stated them is already gone.
  *
  * `signature` hashes what the last claim declared - style, measure, handler
- * pointers, role, disabled and the child count - so a diff sees a change
- * without keeping the declaration. `dirty` says this frame changed the node,
- * by that comparison or by hand, and lives until the next frame begins.
+ * pointers, role, disabled, the child count, and the grid track arrays by value
+ * (a borrowed array whose in-place edits the style bytes alone would miss) - so
+ * a diff sees a change without keeping the declaration. `dirty` says this frame
+ * changed the node, by that comparison or by hand, and lives until the next
+ * frame begins.
  */
 typedef struct node_record {
     cf_name key;

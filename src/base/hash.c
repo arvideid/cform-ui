@@ -3,13 +3,13 @@
 #define FNV_OFFSET_BASIS 2166136261u
 #define FNV_PRIME 16777619u
 
-uint32_t cf_hash_bytes(const void *bytes, size_t length) {
+uint32_t cf_hash_fold(uint32_t seed, const void *bytes, size_t length) {
     if (bytes == NULL) {
-        return FNV_OFFSET_BASIS;
+        return seed;
     }
 
     const uint8_t *data = bytes;
-    uint32_t hash = FNV_OFFSET_BASIS;
+    uint32_t hash = seed;
 
     for (size_t i = 0; i < length; ++i) {
         hash ^= (uint32_t)data[i];
@@ -17,4 +17,8 @@ uint32_t cf_hash_bytes(const void *bytes, size_t length) {
     }
 
     return hash;
+}
+
+uint32_t cf_hash_bytes(const void *bytes, size_t length) {
+    return cf_hash_fold(FNV_OFFSET_BASIS, bytes, length);
 }
