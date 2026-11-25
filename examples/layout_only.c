@@ -27,41 +27,41 @@ int main(void) {
     /* Two columns of 60 points, each followed by a track that takes what is
      * left over: the pattern is written once and repeated twice. */
     const cf_track pattern[] = {
-        {CF_PX(60.0f), CF_PX(60.0f)},
+        {CF_PT(60.0f), CF_PT(60.0f)},
         {CF_AUTO, CF_FR(1.0f)},
     };
     cf_track columns[4];
     const uint32_t column_count = cf_tracks_repeat(columns, 4u, pattern, 2u, 2u);
 
     cf_style root = cf_style_default();
-    root.width = CF_PX(240.0f);
+    root.width = CF_PT(240.0f);
     root.direction = CF_DIRECTION_COLUMN;
-    root.row_gap = CF_PX(8.0f);
+    root.row_gap = CF_PT(8.0f);
 
     cf_style grid = cf_style_default();
     grid.display = CF_DISPLAY_GRID;
     grid.column_tracks = columns;
     grid.column_count = column_count;
-    grid.column_gap = CF_PX(8.0f);
-    grid.row_gap = CF_PX(8.0f);
+    grid.column_gap = CF_PT(8.0f);
+    grid.row_gap = CF_PT(8.0f);
 
     cf_style first = cf_style_default();
     first.row_start = 1u;
     first.column_start = 1u;
-    first.height = CF_PX(30.0f);
+    first.height = CF_PT(30.0f);
 
     cf_style second = cf_style_default();
     second.row_start = 1u;
     second.column_start = 3u;
-    second.width = CF_PX(40.0f);
-    second.height = CF_PX(30.0f);
+    second.width = CF_PT(40.0f);
+    second.height = CF_PT(30.0f);
 
     cf_style third = cf_style_default();
     third.column_span = 2u;
-    third.height = CF_PX(30.0f);
+    third.height = CF_PT(30.0f);
 
     cf_style caption = cf_style_default();
-    caption.height = CF_PX(LABEL_HEIGHT);
+    caption.height = CF_PT(LABEL_HEIGHT);
 
     const cf_style styles[] = {root, grid, first, second, third, caption};
     const uint32_t node_count = (uint32_t)(sizeof styles / sizeof styles[0]);
@@ -87,7 +87,7 @@ int main(void) {
                   .child_slots = child_slots,
                   .node_count = node_count,
               },
-              0u, (cf_available){.width = CF_PX(240.0f), .height = CF_AUTO}, (cf_point){0.0f, 0.0f},
+              0u, (cf_available){.width = CF_PT(240.0f), .height = CF_AUTO}, (cf_point){0.0f, 0.0f},
               rects);
 
     static const char *const names[] = {"root", "grid", "first", "second", "third", "caption"};

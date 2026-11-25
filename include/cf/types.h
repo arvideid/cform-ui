@@ -78,7 +78,19 @@ typedef struct cf_length {
 } cf_length;
 
 #define CF_AUTO ((cf_length){.kind = CF_LENGTH_AUTO, .value = 0.0f})
-#define CF_PX(pixels) ((cf_length){.kind = CF_LENGTH_PX, .value = (pixels)})
+/*
+ * A length in logical points. The framework does not know device pixels: the
+ * backend multiplies these by the surface density at the last step before
+ * anything meets a display, and no rule above reads the difference. The
+ * tagged kind still says CF_LENGTH_PX because the enum is the ABI and
+ * renaming a stored number would break every compiled caller; CF_PT is the
+ * spelling the value actually carries.
+ */
+#define CF_PT(points) ((cf_length){.kind = CF_LENGTH_PX, .value = (points)})
+/* The legacy spelling of CF_PT. It builds the same tagged length and remains
+ * so the source that names pixels keeps compiling; new declarations reach
+ * for CF_PT. */
+#define CF_PX(pixels) CF_PT(pixels)
 #define CF_PERCENT(portion) ((cf_length){.kind = CF_LENGTH_PERCENT, .value = (portion)})
 #define CF_FR(shares) ((cf_length){.kind = CF_LENGTH_FR, .value = (shares)})
 
