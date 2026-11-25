@@ -40,8 +40,13 @@ static int excerpt(const cf_string text, char *out) {
     size_t used = 0u;
 
     for (uint32_t i = 0u; i < text.length && used < SEMANTIC_TEXT_BYTES; ++i) {
-        const char c = text.chars[i];
-        out[used++] = c >= 0x20 && c != '\'' ? c : ' ';
+        /* Read the byte unsigned: a UTF-8 lead or continuation is above 0x7F
+         * and a signed char would call it negative, so the old predicate
+         * wiped every non-ASCII scalar to a space on its way out. Control
+         * bytes below 0x20 still become a space and a quote is dropped
+         * rather than escaping the surrounding single quotes. */
+        const unsigned char byte = (unsigned char)text.chars[i];
+        out[used++] = byte >= 0x20u && byte != (unsigned char)'\'' ? (char)byte : ' ';
     }
 
     if (used == SEMANTIC_TEXT_BYTES && text.length > SEMANTIC_TEXT_BYTES) {
