@@ -105,6 +105,33 @@ static void the_default_theme_reads_the_neutral_scale(void) {
              "a disabled button drops to the well");
 }
 
+/*
+ * A resting box that refuses to give ground is a box that runs past its
+ * container: a themed row whose widths do not fit slides its last card out of
+ * the clip instead of reflowing it, so a narrower window loses content rather
+ * than repacking it. CSS's initial is that every item shrinks, so every base
+ * the theme hands out states the factor instead of leaving the zero.
+ */
+static void a_themed_box_gives_ground_when_the_row_runs_out(void) {
+    const cf_theme *theme = cf_theme_default();
+
+    if (theme == NULL) {
+        CF_CHECK(false, "the theme exists");
+        return;
+    }
+
+    CF_CHECK(theme->page.flex_shrink > 0.0f, "the page shrinks with its container");
+    CF_CHECK(theme->bar.flex_shrink > 0.0f, "the well shrinks with its container");
+    CF_CHECK(theme->body.flex_shrink > 0.0f, "the card shrinks with its container");
+
+    const cf_role families[] = {CF_ROLE_BUTTON, CF_ROLE_FIELD, CF_ROLE_SCROLL, CF_ROLE_IMAGE};
+
+    for (uint32_t i = 0u; i < sizeof families / sizeof families[0]; ++i) {
+        CF_CHECK(theme->variants[families[i]].base.flex_shrink > 0.0f,
+                 "a widget base shrinks with the container that holds it");
+    }
+}
+
 static void a_focused_node_resolves_its_focused_variant(void) {
     cf_ctx ctx;
 
@@ -357,6 +384,7 @@ int main(void) {
     CF_RUN(later_states_overwrite_earlier_ones);
     CF_RUN(unset_variants_leave_the_base_alone);
     CF_RUN(the_default_theme_reads_the_neutral_scale);
+    CF_RUN(a_themed_box_gives_ground_when_the_row_runs_out);
     CF_RUN(a_focused_node_resolves_its_focused_variant);
     CF_RUN(a_hovered_node_resolves_after_the_pointer_moves);
     CF_RUN(a_disabled_node_resolves_its_disabled_variant);

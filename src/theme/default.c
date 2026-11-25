@@ -24,21 +24,30 @@
  * instead of letting its container place it. Every box this theme hands out is
  * a resting box, the three surfaces above them included - a card that hugs its
  * label instead of filling its column is the same mistake wearing a border.
+ *
+ * It states its shrink for the same reason: zero here means "refuse to give
+ * ground", so a row of themed boxes whose widths do not fit runs past its
+ * container instead of reflowing, and a window that gets narrower loses content
+ * rather than repacking it. CSS's initial is that every item shrinks.
  */
 #define MARGINS {PX(0.0f), PX(0.0f), PX(0.0f), PX(0.0f)}
+#define SHRINK 1.0f
 
 static const cf_theme
     theme =
         {
             .page = {.background = {.present = true, .value = RGBA(245, 245, 245)},
-                     .margin = MARGINS},
+                     .margin = MARGINS,
+                     .flex_shrink = SHRINK},
             .bar = {.background = {.present = true, .value = RGBA(229, 229, 229)},
                     .margin = MARGINS,
+                    .flex_shrink = SHRINK,
                     .radius = 8.0f},
             .body = {.background = {.present = true, .value = RGBA(250, 250, 250)},
                      .border_color = {.present = true, .value = RGBA(212, 212, 212)},
                      .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
                      .margin = MARGINS,
+                     .flex_shrink = SHRINK,
                      .radius = 8.0f},
             .ink = RGBA(10, 10, 10),
             .muted = RGBA(82, 82, 82),
@@ -53,6 +62,7 @@ static const cf_theme
                                       {PX(12.0f), PX(8.0f), PX(12.0f), PX(8.0f)},
                                   .margin =
                                       MARGINS,
+                                  .flex_shrink = SHRINK,
                                   .radius =
                                       6.0f},
                          .hovered =
@@ -72,6 +82,7 @@ static const cf_theme
                                      .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
                                      .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
                                      .margin = MARGINS,
+                                     .flex_shrink = SHRINK,
                                      .radius = 6.0f,
                                      /* A value longer than the box slides under its edge
                                       * rather than past its border. */
@@ -93,12 +104,14 @@ static const cf_theme
                     [CF_ROLE_SCROLL] =
                         {.base = {.background = {.present = true, .value = RGBA(212, 212, 212)},
                                   .margin = MARGINS,
+                                  .flex_shrink = SHRINK,
                                   .radius = 3.0f},
                          .hovered = {.background = {.present = true, .value = RGBA(163, 163, 163)}},
                          .pressed = {.background = {.present = true, .value = RGBA(82, 82, 82)}}},
                     [CF_ROLE_IMAGE] = {.base = {.background = {.present = true,
                                                                .value = RGBA(229, 229, 229)},
-                                                .margin = MARGINS}},
+                                                .margin = MARGINS,
+                                                .flex_shrink = SHRINK}},
                 },
 };
 
