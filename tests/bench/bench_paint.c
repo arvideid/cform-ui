@@ -1,10 +1,11 @@
 /*
- * Paint throughput at the size the budget names, and what a frame's draw list
- * costs the arena it grows in. The list doubles from one allocation to the next
- * inside the scratch it is handed, so the byte figure is what a host sizes its
- * frame arena against. The command count is asserted; the fastest of several
- * repaints is printed, because a shared runner spends its wall time on
- * somebody else's process.
+ * Paint throughput at the three sizes the roadmap's Section 6 acceptance
+ * targets name: a 500-node game HUD, a 1k-node desktop page, and a 10k-node
+ * stress case. The stream a frame writes doubles from one allocation to the
+ * next inside the arena the paint walk was handed, so the byte figure is what
+ * a host sizes its frame arena against at that scale. The command count is
+ * asserted; the fastest of repeated repaints is printed, because a shared
+ * runner spends its wall time on somebody else's process.
  */
 #include <stdio.h>
 #include <time.h>
@@ -47,13 +48,17 @@ static const cf_text_content cell_text = {
     .text = {.chars = cell_label, .length = sizeof cell_label - 1u},
 };
 
-/* One third of the cells carry text, making the stream a realistic mix of
- * fills, borders and text lines rather than only geometry. */
+/* One third of the cells carry text and every fourth strokes a border, so
+ * every tier paints a realistic mix of fills, borders and lines rather than
+ * only geometry. */
 #define TEXT_EVERY 3u
+#define BORDERED_EVERY 4u
 
-#define ROWS 99u
-#define CELLS_PER_ROW 100u
-#define NODE_COUNT (1u + ROWS + ROWS * CELLS_PER_ROW)
+/* The largest tier the static arrays hold. Smaller tiers reuse a prefix of
+ * the same rows and cells rather than reallocating, so the tier's own tree is
+ * a whole declaration a diff can compare. */
+#define MAX_ROWS 99u
+#define MAX_CELLS 100u
 #define FRAMES 50u
 #define NS_PER_MS 1000000.0
 #define FRAME_BYTES (8u * 1024u * 1024u)
@@ -61,42 +66,46 @@ static const cf_text_content cell_text = {
 #define SURFACE_WIDTH 1280.0f
 #define SURFACE_HEIGHT 720.0f
 
-/*
- * Every box paints a fill, every fourth cell strokes a border, and every
- * third cell lays one text line. The rows and cells together stay inside
- * the surface, which lets the command count be deterministic: one fill per
- * node (10000), a border on every fourth cell (2475), and one text line on
- * every third cell whose glyph fits the 12-point box (3300).
- */
-#define BORDERED_EVERY 4u
-#define EXPECTED_FILLS (1u + ROWS + ROWS * CELLS_PER_ROW)
-#define EXPECTED_BORDERS (ROWS * (((CELLS_PER_ROW - 1u) / BORDERED_EVERY) + 1u))
-#define EXPECTED_TEXTS (ROWS * (((CELLS_PER_ROW - 1u) / TEXT_EVERY) + 1u))
-#define EXPECTED_COMMANDS (EXPECTED_FILLS + EXPECTED_BORDERS + EXPECTED_TEXTS)
+typedef struct {
+    const char *label;
+    uint32_t rows;
+    uint32_t cells;
+} paint_tier;
 
-static cf_node cells[ROWS][CELLS_PER_ROW];
-static cf_node rows[ROWS];
+/* The three sizes the roadmap names: a HUD that must paint in 1 ms at 120 Hz,
+ * a desktop page at 60 Hz, and the stress tree the existing budget quotes. A
+ * row of MAX_CELLS cells at 12 points fits inside 1280, so no tier overflows
+ * its parent horizontally, and a row's height of 7 points keeps every tree
+ * inside the 720-point surface. */
+static const paint_tier kTiers[] = {
+    {"hud", 5u, MAX_CELLS},
+    {"desktop", 10u, MAX_CELLS},
+    {"large", MAX_ROWS, MAX_CELLS},
+};
+
+static cf_node cells[MAX_ROWS][MAX_CELLS];
+static cf_node rows[MAX_ROWS];
 static cf_node root;
 
 static cf_opt_color shade(uint8_t tone) {
     return (cf_opt_color){.present = true, .value = CF_COLOR(tone, tone, tone)};
 }
 
-static void build_tree(void) {
+static void build_tree(uint32_t row_count, uint32_t cell_count) {
     root = (cf_node){.style = cf_style_default()};
     root.style.width = CF_PX(SURFACE_WIDTH);
     root.style.height = CF_PX(SURFACE_HEIGHT);
     root.style.direction = CF_DIRECTION_COLUMN;
     root.style.background = shade(24u);
 
-    for (uint32_t r = 0u; r < ROWS; ++r) {
+    for (uint32_t r = 0u; r < row_count; ++r) {
         rows[r] = (cf_node){.style = cf_style_default()};
         rows[r].style.height = CF_PX(7.0f);
         rows[r].style.background = shade(40u);
         rows[r].children = cells[r];
-        rows[r].child_count = CELLS_PER_ROW;
+        rows[r].child_count = cell_count;
 
-        for (uint32_t c = 0u; c < CELLS_PER_ROW; ++c) {
+        for (uint32_t c = 0u; c < cell_count; ++c) {
             cells[r][c] = (cf_node){.style = cf_style_default()};
             cells[r][c].style.width = CF_PX(12.0f);
             cells[r][c].style.background = shade(120u);
@@ -117,7 +126,28 @@ static void build_tree(void) {
     }
 
     root.children = rows;
-    root.child_count = ROWS;
+    root.child_count = row_count;
+}
+
+/* The stream the tree above paints: one fill per box, a border on every
+ * fourth cell whose box reaches the viewport, and one line on every third
+ * cell. A tier's counts follow from its rows and cells, so the assertion
+ * stays arithmetic rather than a magic number. */
+static uint32_t expected_fills(uint32_t row_count, uint32_t cell_count) {
+    return 1u + row_count + row_count * cell_count;
+}
+
+static uint32_t expected_borders(uint32_t row_count, uint32_t cell_count) {
+    return row_count * (((cell_count - 1u) / BORDERED_EVERY) + 1u);
+}
+
+static uint32_t expected_texts(uint32_t row_count, uint32_t cell_count) {
+    return row_count * (((cell_count - 1u) / TEXT_EVERY) + 1u);
+}
+
+static uint32_t expected_commands(uint32_t row_count, uint32_t cell_count) {
+    return expected_fills(row_count, cell_count) + expected_borders(row_count, cell_count) +
+           expected_texts(row_count, cell_count);
 }
 
 static cf_rect surface_viewport(void) {
@@ -152,9 +182,12 @@ static cf_command_list paint(cf_ctx *ctx, cf_rect viewport) {
     return list;
 }
 
-/* Whether every command in the stream is one of the two shapes this tree
- * declares: a fill, or a border stroked over one. */
-static bool stream_holds_expected_kinds(const cf_command_list *list) {
+/* Whether every command in the stream is one of the three shapes this tree
+ * declares, and the count of each matches what the tier said. The stream is
+ * deterministic, so a change in the paint walk shows up here rather than in
+ * a millisecond. */
+static bool stream_matches_tier(const cf_command_list *list, uint32_t row_count,
+                                uint32_t cell_count) {
     uint32_t fills = 0u, borders = 0u, texts = 0u;
 
     for (uint32_t i = 0u; i < list->count; ++i) {
@@ -173,42 +206,35 @@ static bool stream_holds_expected_kinds(const cf_command_list *list) {
         }
     }
 
-    return fills == EXPECTED_FILLS && borders == EXPECTED_BORDERS && texts == EXPECTED_TEXTS;
+    return fills == expected_fills(row_count, cell_count) &&
+           borders == expected_borders(row_count, cell_count) &&
+           texts == expected_texts(row_count, cell_count);
 }
 
-int main(void) {
-    bench_meta("bench_paint", "10k-rows-of-100-cells-fill-border-text");
-    bench_result("nodes", (double)NODE_COUNT, "count");
-    bench_result("frames_per_point", (double)FRAMES, "count");
-    bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
+static void bench_tier(cf_ctx *ctx, const paint_tier *tier) {
+    build_tree(tier->rows, tier->cells);
+    const size_t laid_out = lay_out(ctx);
 
-    cf_ctx ctx;
+    const cf_command_list full = paint(ctx, surface_viewport());
+    const uint32_t wanted = expected_commands(tier->rows, tier->cells);
 
-    if (!cf_ctx_init(&ctx, FRAME_BYTES)) {
-        CF_CHECK(false, "the context starts");
-        return CF_REPORT();
-    }
+    char key[64];
+    snprintf(key, sizeof key, "%s_nodes", tier->label);
+    bench_result(key, (double)(1u + tier->rows + tier->rows * tier->cells), "count");
+    snprintf(key, sizeof key, "%s_commands", tier->label);
+    bench_result(key, (double)full.count, "count");
 
-    build_tree();
-    const size_t laid_out = lay_out(&ctx);
-
-    CF_CHECK(cf_frame_tree(&ctx) != NULL, "the 10k tree lays out");
-
-    const cf_command_list full = paint(&ctx, surface_viewport());
-
-    CF_CHECK(full.count == EXPECTED_COMMANDS, "one fill per box, a border on every fourth cell");
-    CF_CHECK(stream_holds_expected_kinds(&full), "the stream carries fills, borders and text");
+    CF_CHECK(full.count == wanted, "the tier's stream is what its tree declares");
+    CF_CHECK(stream_matches_tier(&full, tier->rows, tier->cells),
+             "the counts split into fills, borders and text the way the tier states");
     CF_CHECK(full.count > 0u && full.commands[0].kind == CF_COMMAND_FILL,
              "the page's own fill leads the stream");
-
-    bench_result("command_count", (double)full.count, "count");
 
     /* The reach check drops a box the viewport cannot see at all: with nothing
      * in front of it the walk appends nothing, which is the paint half of an
      * idle frame's zero. */
-    cf_arena_rewind(&ctx.frame, laid_out);
-    const cf_command_list empty = paint(&ctx, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f});
-
+    cf_arena_rewind(&ctx->frame, laid_out);
+    const cf_command_list empty = paint(ctx, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f});
     CF_CHECK(empty.count == 0u, "a viewport that reaches nothing paints nothing");
 
     /* Repaint the same laid-out tree into the same arena, rewinding first each
@@ -221,9 +247,9 @@ int main(void) {
         struct timespec started;
         struct timespec finished;
 
-        cf_arena_rewind(&ctx.frame, laid_out);
+        cf_arena_rewind(&ctx->frame, laid_out);
         timespec_get(&started, TIME_UTC);
-        const cf_command_list list = paint(&ctx, surface_viewport());
+        const cf_command_list list = paint(ctx, surface_viewport());
         timespec_get(&finished, TIME_UTC);
 
         const double ms = elapsed_ms(&started, &finished);
@@ -233,14 +259,37 @@ int main(void) {
         }
 
         last_count = list.count;
-        last_bytes = cf_arena_mark(&ctx.frame) - laid_out;
+        last_bytes = cf_arena_mark(&ctx->frame) - laid_out;
     }
 
-    CF_CHECK(last_count == EXPECTED_COMMANDS, "every rewind repaints the same stream");
+    CF_CHECK(last_count == wanted, "every rewind repaints the same stream");
     CF_CHECK(last_bytes > 0u, "the list costs the arena it grew in, not the system's");
 
-    bench_result("repaint_ms", best, "ms");
-    bench_result("stream_scratch_kib", (double)last_bytes / 1024.0, "KiB");
+    snprintf(key, sizeof key, "%s_repaint_ms", tier->label);
+    bench_result(key, best, "ms");
+    snprintf(key, sizeof key, "%s_scratch_kib", tier->label);
+    bench_result(key, (double)last_bytes / 1024.0, "KiB");
+    snprintf(key, sizeof key, "%s_ns_per_command", tier->label);
+    bench_result(key, best * NS_PER_MS / (double)wanted, "ns");
+}
+
+int main(void) {
+    bench_meta("bench_paint", "hud-500+desktop-1k+large-10k rows-of-100-cells fill-border-text");
+    bench_result("frames_per_point", (double)FRAMES, "count");
+    bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
+
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, FRAME_BYTES)) {
+        CF_CHECK(false, "the context starts");
+        return CF_REPORT();
+    }
+
+    const size_t tier_count = sizeof kTiers / sizeof kTiers[0];
+
+    for (size_t i = 0u; i < tier_count; ++i) {
+        bench_tier(&ctx, &kTiers[i]);
+    }
 
     cf_ctx_free(&ctx);
 

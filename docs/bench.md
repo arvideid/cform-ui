@@ -76,9 +76,10 @@ why item 7 puts a text-preparation cache on the grid path first.
 
 `bench_node` reconciles a 10,000-box description through one context in five
 modes: cold build, idle, diff+layout, warm-change (half the widths shift) and
-churn (a different tree shape retires and rebuilds). `bench_paint` turns a
-laid-out 10,000-box page into fills, borders and text lines — one third of
-cells carry a glyph and every fourth a stroke.
+churn (a different tree shape retires and rebuilds). `bench_paint` repaints a
+laid-out page at the three sizes Roadmap Section 6 names — a HUD, a desktop
+window, the 10,000-box stress tree — with one third of cells carrying a glyph
+and every fourth a stroke.
 
 | step | what happens | time |
 |---|---|---|
@@ -90,7 +91,6 @@ cells carry a glyph and every fourth a stroke.
 | state-key lookup, 50 keys | a page with 50 widgets that keep a block each | 0.007 ms |
 | state-key lookup, 250 keys | 0.14 ms |
 | state-key lookup, 1000 keys | 2.0 ms |
-| paint | 15,841 commands (fills + borders + text) from 10,000 boxes | 0.28 ms |
 
 The state-lookup numbers show what `entry_of_key` currently costs: the sweep is
 linear in the number of live entries, so the per-key time grows with the
@@ -98,11 +98,27 @@ square of the page's stateful widgets (roughly 130 ns at 50 keys and 2 025 ns
 at 1 000 in the same run). Roadmap Section 6 item 4 wants this number in front
 of a reviewer before anyone adds a hashed index.
 
-Redrawing that page needs 3,426 KiB of scratch, which is the number a shell sizes
-its memory pool against. Part of it tracks the deepest path and part tracks the
-node count: the content-measurement cache carries a row per node in the
-declaration, so the pool does not shrink just because the tree is shallow. See
-`cf_layout` in `cf/layout.h` for what `scratch` holds.
+`bench_paint` prints one row per tier so a change to the paint walk shows up at
+HUD scale and stress scale at the same time (MSYS2 UCRT64 GCC 16.2.0):
+
+| tier | boxes | commands | per repaint | scratch | ns / command |
+|---|---|---|---|---|---|
+| hud | 506 | 801 | 0.016 ms | 207 KiB | 19.7 ns |
+| desktop | 1,011 | 1,601 | 0.032 ms | 420 KiB | 20.1 ns |
+| large | 10,000 | 15,841 | 0.373 ms | 3,427 KiB | 23.6 ns |
+
+The per-command cost barely moves across a twenty-fold size range, which is
+what "linear in the boxes it visits" looks like in a table. A lost cull, an
+allocation added to a hot path, a semantic call the walk did not make before —
+each of those would show up as a step between rows before the aggregate wall
+time says anything. Roadmap Section 6 item 1 asked for small, medium and large
+realistic scenes rather than one aggregate number, and this is that table.
+
+Redrawing the largest tier needs 3,427 KiB of scratch, which is the number a
+shell sizes its memory pool against. Part of it tracks the deepest path and
+part tracks the node count: the content-measurement cache carries a row per
+node in the declaration, so the pool does not shrink just because the tree is
+shallow. See `cf_layout` in `cf/layout.h` for what `scratch` holds.
 
 ## What a page costs, and whether it grows
 
