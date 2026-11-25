@@ -34,6 +34,9 @@ void cf_arena_clear(cf_arena *arena) {
         return;
     }
     arena->used = 0;
+    /* The refusal belongs to the arena state that produced it; a caller
+     * starting a new pass does not want the last frame's verdict. */
+    arena->exhausted = false;
 }
 
 void cf_arena_free(cf_arena *arena) {
@@ -54,6 +57,7 @@ void *cf_alloc(cf_arena *arena, size_t size) {
     const size_t end = offset + size;
 
     if (end < offset || end > arena->capacity) {
+        arena->exhausted = true;
         return NULL;
     }
 

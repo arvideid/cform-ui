@@ -41,9 +41,17 @@ static void arena_returns_null_when_the_request_does_not_fit(void) {
     cf_arena arena;
     CF_CHECK(cf_arena_init(&arena, 64), "arena initializes");
 
+    CF_CHECK(!arena.exhausted, "a fresh arena has served every request");
     CF_CHECK(cf_alloc(&arena, 65) == NULL, "a block larger than the arena is refused");
     CF_CHECK(arena.used == 0, "a refused block leaves the cursor alone");
+    CF_CHECK(arena.exhausted, "a refused request is remembered on the arena");
+
+    /* Empty and NULL-argument branches return NULL without poisoning the
+     * arena: a caller asking for nothing is not out of memory. */
+    cf_arena_clear(&arena);
+    CF_CHECK(!arena.exhausted, "clearing hands the refusal back");
     CF_CHECK(cf_alloc(&arena, 0) == NULL, "an empty request is refused too");
+    CF_CHECK(!arena.exhausted, "an empty request is not a refusal");
 
     cf_arena_free(&arena);
 }
@@ -69,6 +77,7 @@ static void a_cleared_arena_is_a_valid_empty_arena(void) {
     cf_arena arena = {0};
 
     CF_CHECK(cf_alloc(&arena, 16) == NULL, "an uninitialized arena allocates nothing");
+    CF_CHECK(!arena.exhausted, "an uninitialized arena has not refused a real request");
     cf_arena_clear(&arena);
     cf_arena_free(&arena);
     CF_CHECK(cf_alloc(&arena, 16) == NULL, "freeing an arena that never allocated is a no-op");

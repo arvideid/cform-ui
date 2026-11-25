@@ -11,12 +11,20 @@
  * Bump allocator. Everything the engine builds per frame comes from an arena
  * that is cleared, not freed, so a frame's memory cost is its high-water mark
  * and the reset itself is the only deallocation step.
+ *
+ * `exhausted` flips the first time a request cannot be served. A caller that
+ * can complete partial work from a refused allocation still leaves the flag
+ * standing, so the frame above it can decide whether the result is safe to
+ * present - cf_frame_layout refuses the whole pass when a walk bailed out
+ * midway, because a half-laid-out view would otherwise hand paint and hit
+ * geometry only some of it wrote.
  */
 typedef struct cf_arena {
     uint8_t *memory;
     size_t capacity;
     size_t used;
     size_t peak;
+    bool exhausted;
 } cf_arena;
 
 bool cf_arena_init(cf_arena *arena, size_t capacity);

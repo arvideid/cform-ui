@@ -354,13 +354,14 @@ static void a_hidden_subtree_paints_nothing(void) {
 }
 
 /*
- * A scratch too small to complete a wide layout: cf_frame_layout zeroes the
- * rect array so a subtree the flex pass could not place reads a valid empty
- * box rather than whatever an earlier frame left in the arena. The layout
- * still runs, the paint still walks, and no command carries an extent the
- * offer never named.
+ * A scratch too small to complete a wide layout: cf_frame_layout refuses the
+ * whole pass once cf_layout reports an exhausted arena. The frame is turned
+ * away with a message, no commands are emitted (cf_paint sees a NULL rect
+ * array), and hit-testing refuses every point. The next frame begins with a
+ * fresh arena cursor and a cleared refusal, so a page small enough for the
+ * scratch works again.
  */
-#define REFUSAL_LEAVES 64u
+#define REFUSAL_LEAVES 32u
 
 static cf_node wide_page(cf_ctx *ctx) {
     (void)ctx;
@@ -392,12 +393,12 @@ static cf_node wide_page(cf_ctx *ctx) {
 static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
     cf_ctx ctx;
 
-    /* Small enough that cf_layout's item and line tables for a 64-child row
-     * cannot fit after the rects and the diff's view arrays. cf_frame_layout
-     * either rejects the whole frame (alloc fails) or leaves the descendants
-     * the flex pass could not place at a zero rect; either way no command
-     * reaches past the 100x100 viewport it was offered. */
-    if (!cf_ctx_init(&ctx, 4096u)) {
+    /* Enough room for the walk, the retained view arrays and the layout
+     * rects of a 33-node tree, but not enough for cf_layout's measure cache
+     * and flex item tables on top of them. cf_layout bails below the
+     * container, the exhausted flag trips, and cf_frame_layout refuses the
+     * whole pass. */
+    if (!cf_ctx_init(&ctx, 16u * 1024u)) {
         CF_CHECK(false, "the frame starts");
         return;
     }
@@ -405,14 +406,30 @@ static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
     cf_command_list list = {0};
     cf_frame_run(&ctx, wide_page, (cf_size){100.0f, 100.0f}, 0.0f, &list);
 
-    for (uint32_t i = 0u; i < list.count; ++i) {
-        const cf_rect box = list.commands[i].rect;
-        CF_CHECK(box.width == box.width, "no command carries a NaN extent");
-        CF_CHECK(box.height == box.height, "no command carries a NaN extent");
-        CF_CHECK(box.width >= 0.0f && box.height >= 0.0f,
-                 "a refused subtree reads a non-negative box");
+    CF_CHECK(cf_error_message(&ctx) != NULL, "the refusal names itself");
+    CF_CHECK(list.count == 0u, "a refused frame emits no commands");
+    CF_CHECK(ctx.rects == NULL, "no partial rect array reaches the walk");
+    CF_CHECK(cf_hit_test(&ctx, (cf_point){10.0f, 10.0f}) == CF_NO_LINK,
+             "a refused view answers no point");
+
+    /* The context outlives the refusal: a fresh one that has enough scratch
+     * paints every leaf, showing the arena's peak cost tracks the request
+     * rather than the earlier verdict. */
+    cf_ctx plenty;
+
+    if (!context_of(&plenty)) {
+        cf_ctx_free(&ctx);
+        return;
     }
 
+    cf_command_list plenty_list = {0};
+    cf_frame_run(&plenty, wide_page, (cf_size){2000.0f, 2000.0f}, 0.0f, &plenty_list);
+
+    CF_CHECK(cf_error_message(&plenty) == NULL, "a scratch that fits completes the pass");
+    CF_CHECK(plenty_list.count == REFUSAL_LEAVES + 1u,
+             "the container and every leaf reach the stream");
+
+    cf_ctx_free(&plenty);
     cf_ctx_free(&ctx);
 }
 

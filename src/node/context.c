@@ -99,12 +99,12 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
         return;
     }
 
-    /* One rect per store slot. The array is zeroed before cf_layout writes into
-     * it because a scratch refusal inside a container leaves the subtrees under
-     * it unwritten, and a paint or an input walk reading a stale rect would
-     * otherwise reach whatever the last frame had there. A zeroed cf_rect is a
-     * valid empty box - it paints nothing and hits nothing - so an incomplete
-     * pass still answers with a walk the caller can use. */
+    /* One rect per store slot. The array is zeroed before cf_layout writes
+     * into it because a scratch refusal inside a container leaves the subtrees
+     * under it unwritten, and a paint or an input walk reading a stale rect
+     * would otherwise reach whatever the last frame had there. A zeroed
+     * cf_rect is a valid empty box - it paints nothing and hits nothing - so
+     * an incomplete pass still answers with a walk the caller can use. */
     cf_rect *rects = cf_alloc(&ctx->frame, ctx->layout.node_count * sizeof *rects);
 
     if (rects == NULL) {
@@ -114,6 +114,17 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
 
     memset(rects, 0, ctx->layout.node_count * sizeof *rects);
     cf_layout(&ctx->frame, &ctx->layout, ctx->root_slot, available, origin, rects);
+
+    /* A walk that bailed out below a container wrote its own rect and left
+     * the descendants at zero: safe to render but not a full answer. Refuse
+     * the frame so cf_paint sees a NULL rect array (its documented no-op),
+     * cf_hit_test refuses every point, and the shell's error message names
+     * what happened. */
+    if (ctx->frame.exhausted) {
+        reject_frame(ctx, "scratch refused the layout pass");
+        return;
+    }
+
     ctx->rects = rects;
 }
 
