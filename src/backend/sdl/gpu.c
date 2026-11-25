@@ -247,7 +247,9 @@ uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, co
 
     if (state->texture_count == state->texture_capacity) {
         const uint32_t capacity = state->texture_capacity == 0u ? 8u : state->texture_capacity * 2u;
-        SDL_Texture **textures = SDL_realloc(state->textures, (size_t)capacity * sizeof *textures);
+        const size_t held = (size_t)state->texture_capacity * sizeof *state->textures;
+        const size_t wanted = (size_t)capacity * sizeof(SDL_Texture *);
+        SDL_Texture **textures = cf_resize_block(state->textures, held, wanted);
 
         if (textures == NULL) {
             return 0u;
@@ -569,9 +571,14 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
      * never receives them has no way to say what the keyboard typed. */
     SDL_StartTextInput(window);
 
-    /* The state lives as long as the window does, outside every frame arena,
-     * so it goes through SDL's allocator rather than cf_alloc. */
-    sdl_state *state = SDL_malloc(sizeof *state);
+    /* The state and its texture table live as long as the window does,
+     * outside every frame arena, so they go through the base allocator -
+     * the only seam that asks the heap for bytes a caller hands back.
+     * Everything SDL keeps for itself (the window, the renderer, the
+     * per-texture GPU resource) is third-party internal allocation and
+     * stays SDL's to free. cf_backend_sdl has no destroy path yet; F1
+     * reserves one in the backend ABI. */
+    sdl_state *state = cf_alloc_block(sizeof *state);
 
     if (state == NULL) {
         SDL_DestroyRenderer(renderer);
@@ -580,7 +587,8 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
         return (cf_backend){0};
     }
 
-    *state = (sdl_state){.window = window, .renderer = renderer};
+    state->window = window;
+    state->renderer = renderer;
 
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .user_data = state,
