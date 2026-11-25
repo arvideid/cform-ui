@@ -286,9 +286,10 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);
 /*
  * The declaration a frame runs, answering the page it declares. The answer is
  * a value the run holds, so what a build must keep alive is the memory behind
- * `children` and `measure_data` - the frame arena's blocks do, and `cf_box`
- * builds a container's children there. A page with no children and a style
- * that paints nothing is what a build says when it has nothing to declare.
+ * `children` and `measure_data` - the frame arena's blocks do, and
+ * `cf_children` builds a container's children there. A page with no children
+ * and a style that paints nothing is what a build says when it has nothing to
+ * declare.
  */
 typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
 

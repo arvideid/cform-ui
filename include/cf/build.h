@@ -11,9 +11,11 @@
  */
 
 /*
- * The count a children list has, as the uint32_t cf_box asks for. The operand
- * of `sizeof` is never evaluated, so the compound literal here only states the
- * type and the element count.
+ * The count a children list has, widened to the uint32_t that
+ * `cf_node::child_count` carries. The operand of `sizeof` is never evaluated,
+ * so the compound literal here only states the type and the element count.
+ * The type named is `cf_node` and not the shorter word: `cf_box` in the style
+ * vocabulary is four tagged lengths of edge inset, not a container.
  */
 #define CF_CHILD_COUNT(...) (uint32_t)(sizeof((cf_node[]){__VA_ARGS__}) / sizeof(cf_node))
 
@@ -24,8 +26,8 @@
 /*
  * A column or a row of the children named between the commas. At least one is
  * required - the list is what counts them, and an empty list is not a thing C
- * can state. A box without children is a `cf_node` literal, or `cf_col` and
- * `cf_row` with nothing to copy.
+ * can state. A container without children is a `cf_node` literal, or `cf_col`
+ * and `cf_row` with nothing to copy.
  */
 #define CF_COL(ctx, style, ...) cf_col((ctx), (style), CF_CHILDREN(__VA_ARGS__))
 #define CF_ROW(ctx, style, ...) cf_row((ctx), (style), CF_CHILDREN(__VA_ARGS__))
@@ -48,7 +50,7 @@ const cf_node *cf_children(cf_ctx *ctx, const cf_node *children, uint32_t child_
  * by which one is called rather than read from the style, because a build that
  * names a row means a row whatever the style says; everything else about the
  * node is the style's and the children's, and a refusal to copy the children
- * leaves the box standing on its own.
+ * leaves the container with none.
  */
 cf_node cf_col(cf_ctx *ctx, cf_style style, const cf_node *children, uint32_t child_count);
 cf_node cf_row(cf_ctx *ctx, cf_style style, const cf_node *children, uint32_t child_count);

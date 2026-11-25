@@ -31,12 +31,12 @@ static cf_node container(cf_ctx *ctx, cf_direction direction, cf_style style,
         return (cf_node){0};
     }
 
-    cf_node box = {.style = style};
-    box.style.direction = direction;
-    box.children = cf_children(ctx, children, child_count);
-    box.child_count = box.children != NULL ? child_count : 0u;
+    cf_node out = {.style = style};
+    out.style.direction = direction;
+    out.children = cf_children(ctx, children, child_count);
+    out.child_count = out.children != NULL ? child_count : 0u;
 
-    return box;
+    return out;
 }
 
 cf_node cf_col(cf_ctx *ctx, cf_style style, const cf_node *children, uint32_t child_count) {
