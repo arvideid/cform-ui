@@ -514,6 +514,69 @@ static void a_capped_axis_measures_its_content_at_the_cap(void) {
     CF_NEAR(f.rects[text].height, 30.0f);
     CF_NEAR(f.rects[box].height, 30.0f);
 }
+
+/*
+ * The automatic minimum size that stops a shrink is there so content is never
+ * crushed past what it can be broken at. An item that cuts what does not fit
+ * needs no such floor, and refusing it is what makes a narrow window push its
+ * scrollers out of the line instead of letting them give ground.
+ */
+static void a_clipping_item_shrinks_below_its_min_content(void) {
+    const foreign_content words = {.min_content = {100.0f, 20.0f}, .max_content = {200.0f, 20.0f}};
+
+    for (uint32_t pass = 0u; pass < 2u; ++pass) {
+        fixture f;
+        const uint32_t root = begin_box(&f, 60.0f, 50.0f);
+
+        cf_style item = cf_style_default();
+        item.clips_content = pass == 1u;
+
+        const uint32_t box = append(&f, root, item);
+        f.measures[box] = measure_foreign;
+        f.measure_data[box] = (void *)&words;
+
+        arrange_in(&f, 60.0f, 50.0f);
+
+        /* The line is 60 wide and the content wants 200: an item whose content
+         * escapes stops at the 100 it cannot break, a clipping one takes the
+         * whole shortage and scrolls the rest. */
+        CF_NEAR(f.rects[box].width, pass == 1u ? 60.0f : 100.0f);
+    }
+}
+
+/*
+ * A shrink to the width a run of text cannot break has to be measured again at
+ * that width, not left at the height the run had when it asked for more. Book
+ * the height off the offer the item never got and a button whose caption no
+ * longer fits keeps its first line and loses the rest - a box one line tall with
+ * words that were never counted in it.
+ */
+static void a_shrunk_item_is_measured_again_at_the_width_it_got(void) {
+    fixture f;
+    cf_style box = cf_style_default();
+    /* Kept off the cross axis: stretched, the item would be as tall as the line
+     * and say nothing about what its own content measured. */
+    box.align_items = CF_ALIGN_START;
+    box.width = CF_PX(300.0f);
+    box.height = CF_PX(400.0f);
+    const uint32_t root = begin(&f, box);
+
+    cf_style firm = cf_style_default();
+    firm.width = CF_PX(200.0f);
+    firm.flex_shrink = 0.0f;
+    append(&f, root, firm);
+
+    const uint32_t run = append(&f, root, cf_style_default());
+    f.measures[run] = measure_wrapping_run;
+
+    arrange_in(&f, 300.0f, 400.0f);
+
+    /* 900 of run shrinks to the 100 a single word costs, and nine lines of ten
+     * are what fits in it at that width. */
+    CF_NEAR(f.rects[run].width, WRAP_WORD);
+    CF_NEAR(f.rects[run].height, 9.0f * WRAP_LINE);
+}
+
 static void padding_and_border_inset_the_content_box(void) {
     fixture f;
     const uint32_t root = begin_box(&f, 200.0f, 100.0f);
@@ -874,6 +937,8 @@ int main(void) {
     CF_RUN(padding_and_border_inset_the_content_box);
     CF_RUN(a_wrapping_measure_is_asked_at_the_width_its_box_will_get);
     CF_RUN(a_capped_axis_measures_its_content_at_the_cap);
+    CF_RUN(a_clipping_item_shrinks_below_its_min_content);
+    CF_RUN(a_shrunk_item_is_measured_again_at_the_width_it_got);
     CF_RUN(a_declared_main_size_still_measures_its_cross_from_the_content);
     CF_RUN(child_percentages_read_the_content_box_inside_the_frame);
     CF_RUN(an_auto_box_keeps_the_width_its_content_cannot_break);

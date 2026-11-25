@@ -79,7 +79,12 @@ static void measure_item(const flex_context *f, flex_item *item) {
     item->max_main = resolve_bound(main_max, f->main_offer, FLT_MAX);
     item->min_cross = resolve_bound(cross_min, f->cross_offer, 0.0f);
     item->max_cross = resolve_bound(cross_max, f->cross_offer, FLT_MAX);
-    item->min_is_auto = cf_length_is_auto(main_min);
+    /* §4.5: an automatic main-axis minimum is the item's min-content size, so a
+     * shrinking item is never packed below what its content cannot break. An
+     * item that cuts its own overflow is the exception - it has somewhere to put
+     * the part that does not fit - and without that exemption a scroller would
+     * refuse to shrink and push out of its line instead of scrolling. */
+    item->min_is_auto = cf_length_is_auto(main_min) && !child->clips_content;
     item->grow = child->flex_grow;
     item->shrink = child->flex_shrink;
 
