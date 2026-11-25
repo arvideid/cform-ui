@@ -85,8 +85,61 @@ static double frame_fastest_ms(cf_ctx *ctx, const cf_node *tree, uint32_t frames
     return best;
 }
 
+/*
+ * Warm-change mode: half the cells get a different width after the idle pass.
+ * The diff must see the signature change, dirty those nodes, and relayout.
+ * A realistic case: a column resize or a flex-grow animation that changes a
+ * subset of the tree every frame.
+ */
+static void perturb_cells(void) {
+    for (uint32_t r = 0; r < ROWS; ++r) {
+        for (uint32_t c = 0; c < ROW_CHILDREN; ++c) {
+            if ((r + c) % 2u == 0u) {
+                cells[r][c].style.width = CF_PX(40.0f + (float)((c + 1u) % 5u) * 10.0f);
+            }
+        }
+    }
+}
+
+/*
+ * Churn mode: a different tree shape entirely — half the row count but twice
+ * the cells per row, so the store retires the surplus and cold-builds the rest
+ * through a reused context. This is the case where a panel closes and another
+ * opens with different dimensions.
+ */
+#define CHURN_ROWS (ROWS / 2u)
+#define CHURN_CELLS (ROW_CHILDREN * 2u)
+#define CHURN_COUNT (1u + CHURN_ROWS + CHURN_ROWS * CHURN_CELLS)
+
+static cf_node churn_cells[CHURN_ROWS][CHURN_CELLS];
+static cf_node churn_rows[CHURN_ROWS];
+static cf_node churn_root;
+
+static void build_churn_tree(cf_interner *names) {
+    churn_root = (cf_node){.style = cf_style_default()};
+    churn_root.style.width = CF_PX(1280.0f);
+    churn_root.style.height = CF_PX(720.0f);
+
+    for (uint32_t r = 0; r < CHURN_ROWS; ++r) {
+        churn_rows[r] = (cf_node){.style = cf_style_default()};
+        churn_rows[r].key = cf_intern_text(names, "row");
+        churn_rows[r].style.height = CF_PX(20.0f);
+        churn_rows[r].children = churn_cells[r];
+        churn_rows[r].child_count = CHURN_CELLS;
+
+        for (uint32_t c = 0; c < CHURN_CELLS; ++c) {
+            churn_cells[r][c] = (cf_node){.style = cf_style_default()};
+            churn_cells[r][c].style.width = CF_PX(20.0f);
+            churn_cells[r][c].style.height = CF_PX(20.0f);
+        }
+    }
+
+    churn_root.children = churn_rows;
+    churn_root.child_count = CHURN_ROWS;
+}
+
 int main(void) {
-    bench_meta("bench_node", "10k-flat-row-tree-diff");
+    bench_meta("bench_node", "10k-flat-row-tree-diff-cold-warm-change-churn");
     bench_result("nodes", (double)NODE_COUNT, "count");
     bench_result("frames_per_point", (double)FRAMES, "count");
     bench_result("frame_bytes", (double)FRAME_BYTES, "bytes");
@@ -136,6 +189,26 @@ int main(void) {
 
     const double laid_ms = frame_fastest_ms(&ctx, &root, FRAMES, true);
     bench_result("diff_plus_layout_ms", laid_ms, "ms");
+
+    /* Warm-change: mutate half the cell widths, then diff+layout. The store
+     * is already populated so this measures the cost of detecting and
+     * processing partial invalidation. */
+    perturb_cells();
+    const double change_ms = frame_fastest_ms(&ctx, &root, FRAMES, true);
+    bench_result("warm_change_ms", change_ms, "ms");
+
+    /* Churn: replace the tree with a structurally different shape, forcing
+     * retirement of surplus nodes and cold-building of new ones within an
+     * already-allocated context. */
+    build_churn_tree(&ctx.names);
+    cf_frame_begin(&ctx);
+    timespec_get(&started, TIME_UTC);
+    const uint32_t churn_slot = cf_diff(&ctx, &churn_root);
+    timespec_get(&finished, TIME_UTC);
+
+    CF_CHECK(churn_slot != CF_NO_LINK, "the churn diff answers the new tree");
+    bench_result("churn_build_ms", elapsed_ms(&started, &finished), "ms");
+    bench_result("churn_nodes", (double)CHURN_COUNT, "count");
 
     cf_ctx_free(&ctx);
 
