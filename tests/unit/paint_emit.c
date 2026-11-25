@@ -458,6 +458,48 @@ static void a_child_outside_a_clipping_box_paints_nothing(void) {
     CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "and that fill is the scroller's own");
 }
 
+/* A box that clips nothing lets its descendants overflow past its own box.
+ * An offscreen non-clipping parent with a visible child must still paint the
+ * child - the hit walk already descends into it; only a clipping box culls its
+ * subtree when its own box cannot reach the clip. */
+static void a_child_overflowing_a_non_clipping_parent_paints(void) {
+    fixture f;
+    begin(&f);
+    /* Root does not clip: its 50-wide box sits entirely off the viewport. */
+    f.styles[0] = cf_style_default();
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(-100.0f, 0.0f, 50.0f, 50.0f);
+    /* Child is fully inside the viewport [0,0,300,300]. */
+    f.rects[1] = box_at(50.0f, 50.0f, 50.0f, 50.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 1u, "a child overflowing an offscreen parent paints");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "and the command is the child's fill");
+}
+
+/* The complement: when a parent does clip its content and its box lies wholly
+ * outside the clip, the empty region culls the whole subtree. */
+static void a_clipping_box_wholly_offscreen_culls_its_subtree(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].clips_content = true;
+    f.node_count = 1u;
+    (void)append(&f, 0, painted((cf_color){0u, 0u, 0u, 255u}));
+    f.rects[0] = box_at(400.0f, 0.0f, 100.0f, 100.0f);
+    /* Child at [100,50] is inside the viewport, but the clipping parent at
+     * [400,...] does not reach it, so nothing of the subtree draws. */
+    f.rects[1] = box_at(100.0f, 50.0f, 50.0f, 50.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 300.0f, 300.0f), &list);
+
+    CF_CHECK(list.count == 0u, "a clipping box outside the clip culls all descendants");
+}
+
 static void a_clip_narrows_as_it_descends(void) {
     fixture f;
     begin(&f);
@@ -758,6 +800,8 @@ int main(void) {
     CF_RUN(text_lines_cull_like_their_box_does);
     CF_RUN(a_box_that_clips_cuts_its_children_square_fills);
     CF_RUN(a_child_outside_a_clipping_box_paints_nothing);
+    CF_RUN(a_child_overflowing_a_non_clipping_parent_paints);
+    CF_RUN(a_clipping_box_wholly_offscreen_culls_its_subtree);
     CF_RUN(a_clip_narrows_as_it_descends);
     CF_RUN(a_border_at_a_clip_names_the_clip_it_is_cut_by);
     CF_RUN(a_rounded_fill_at_a_clip_keeps_the_box_it_rounds);

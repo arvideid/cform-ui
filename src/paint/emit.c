@@ -367,61 +367,72 @@ static void emit_box(paint_walk *walk, uint32_t slot) {
 
     const cf_style *style = &walk->tree->styles[slot];
     const cf_rect box = walk->rects[slot];
+    const bool reaches = rect_intersects(box, walk->clip);
 
-    if (!rect_intersects(box, walk->clip)) {
-        return;
-    }
+    /* The box draws its own marks only where its box reaches the active clip.
+     * Whether its descendants draw is decided below, separately: a child is not
+     * bound to its parent's box unless the parent clips. */
+    if (reaches) {
+        const float radius = clamped_radius(style->radius, box.width, box.height);
 
-    const float radius = clamped_radius(style->radius, box.width, box.height);
+        if (style->background.present) {
+            cf_command *fill = next_command(walk);
 
-    if (style->background.present) {
-        cf_command *fill = next_command(walk);
+            if (fill == NULL) {
+                return;
+            }
 
-        if (fill == NULL) {
-            return;
+            *fill = (cf_command){.kind = CF_COMMAND_FILL,
+                                 .rect = filled_rect(walk, box, radius),
+                                 .clip = carried_clip(walk),
+                                 .color = style->background.value,
+                                 .radius = radius};
         }
 
-        *fill = (cf_command){.kind = CF_COMMAND_FILL,
-                             .rect = filled_rect(walk, box, radius),
-                             .clip = carried_clip(walk),
-                             .color = style->background.value,
-                             .radius = radius};
-    }
+        /* A width written as a percentage resolves against the box's own width:
+         * the containing block it means is not part of the paint input. */
+        const cf_edges widths = cf_box_resolve(style->border, box.width);
+        const bool stroked =
+            style->border_color.present && (widths.left > 0.0f || widths.top > 0.0f ||
+                                            widths.right > 0.0f || widths.bottom > 0.0f);
 
-    /* A width written as a percentage resolves against the box's own width:
-     * the containing block it means is not part of the paint input. */
-    const cf_edges widths = cf_box_resolve(style->border, box.width);
-    const bool stroked =
-        style->border_color.present &&
-        (widths.left > 0.0f || widths.top > 0.0f || widths.right > 0.0f || widths.bottom > 0.0f);
+        if (stroked) {
+            cf_command *border = next_command(walk);
 
-    if (stroked) {
-        cf_command *border = next_command(walk);
+            if (border == NULL) {
+                return;
+            }
 
-        if (border == NULL) {
-            return;
+            *border = (cf_command){.kind = CF_COMMAND_BORDER,
+                                   .rect = box,
+                                   .clip = carried_clip(walk),
+                                   .color = style->border_color.value,
+                                   .widths = widths,
+                                   .radius = radius};
         }
 
-        *border = (cf_command){.kind = CF_COMMAND_BORDER,
-                               .rect = box,
-                               .clip = carried_clip(walk),
-                               .color = style->border_color.value,
-                               .widths = widths,
-                               .radius = radius};
+        emit_text(walk, slot, style, box);
+        emit_image(walk, slot, box);
     }
-
-    emit_text(walk, slot, style, box);
-    emit_image(walk, slot, box);
 
     /* A box that clips its content bounds the descent: the children see the
-     * box's rect as their clip, narrowed by whatever clipped their parent.
-     * A border strokes its true edges and names this clip to be cut by -
-     * cutting the rect instead would draw lines the box never declared at the
-     * cut. */
+     * box's rect as their clip, narrowed by whatever clipped their parent. A
+     * border strokes its true edges and names this clip to be cut by - cutting
+     * the rect instead would draw lines the box never declared at the cut.
+     *
+     * Once a clipping box lies wholly outside the clip its region is empty, so
+     * the whole subtree is culled. A box that clips nothing hands its children
+     * the clip unchanged, so the walk descends even when the box itself did not
+     * reach - which is what lets a child overflow an off-screen parent into
+     * view, the same freedom the hit walk already grants it. */
     const cf_rect outer_clip = walk->clip;
     const bool outer_clipping = walk->clipping;
 
     if (style->clips_content) {
+        if (!reaches) {
+            return;
+        }
+
         walk->clip = rect_intersect(box, walk->clip);
         walk->clipping = true;
     }
