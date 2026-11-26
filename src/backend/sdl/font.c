@@ -55,3 +55,17 @@ cf_font cf_font_sdl(const char *file_path, float point_size) {
 
     return (cf_font){.handle = font, .ops = &font_ops};
 }
+
+/* The reverse of the constructor's two asks. The font closes first: TTF_Quit
+ * leaves an open font open, so quitting before the close would strand it. A font
+ * that was never opened, or one already closed, holds neither ask, so the call is
+ * nothing. */
+void cf_font_sdl_close(cf_font *font) {
+    if (font == NULL || font->handle == NULL) {
+        return;
+    }
+
+    TTF_CloseFont(font->handle);
+    TTF_Quit();
+    *font = (cf_font){0};
+}

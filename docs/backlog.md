@@ -60,11 +60,10 @@ it. Each needs a design conversation before a line of code:
 ## Before a 1.0 freezes the ABI
 
 `CF_BACKEND_ABI_VERSION` is 8 and every number after it has been broken on
-purpose. A texture release and a backend teardown are what 8 added. Two slots are
-still wanted by rows above — clipboard, cursor — and so is a close beside
-`cf_font_sdl`, since a font opened per screen outlives every one of them. Each one
-is a reason to say *now* rather than after a release. Enum values are append-only,
-so the same pressure does not apply to `cf_role`, `cf_key` or `cf_intrinsic`.
+purpose. A texture release, a backend teardown and a font close are what 8 added.
+Two slots are still wanted by rows above — clipboard and cursor — and each one is a
+reason to say *now* rather than after a release. Enum values are append-only, so
+the same pressure does not apply to `cf_role`, `cf_key` or `cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 

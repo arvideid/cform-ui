@@ -165,6 +165,13 @@ the same object. `cf_command.font.handle` is whatever your own font constructor
 made, so a port pairs the two (`cf_font_sdl` goes with `cf_backend_sdl`). A handle
 from a different backend means nothing to you, and a NULL handle draws nothing.
 
+A font is the host's, and the constructor has a pair: nothing in the framework
+closes one, so `cf_font_sdl_close` is the host handing back what its own open took,
+and it leaves the zero struct behind so a page still naming that font measures and
+draws nothing instead of reading through bytes that stopped being one. Close fonts
+before you call `destroy` — a font sits on the platform, and the teardown may be the
+thing that stops it.
+
 This split is why text layout is testable with no window: the tests answer the
 same three questions with fixed numbers.
 

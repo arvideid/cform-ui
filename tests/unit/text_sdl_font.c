@@ -55,12 +55,44 @@ static void a_real_font_answers_the_table(void) {
         cf_text_measure(&sentence, (cf_available){.width = CF_PX(80.0f), .height = CF_AUTO},
                         CF_INTRINSIC_MAX_CONTENT);
     CF_CHECK(narrow.height > wide.height, "a narrower box wraps into more lines");
+
+    /* Opened here, handed back here: a font the run keeps is bytes no frame of
+     * this test still needs. The copy is so the measured font above stays the
+     * const the stacks point at. */
+    cf_font closed = font;
+    cf_font_sdl_close(&closed);
+}
+
+/* The constructor's pair. A closed font reads as the font that never opened - the
+ * zero struct, which every caller already knows how to survive - and asking twice,
+ * or asking for nothing, is the same ask. */
+static void a_closed_font_reads_as_no_font(void) {
+    FILE *probe = fopen(CFORM_FONT_PATH, "rb");
+
+    if (probe == NULL) {
+        printf("      skipped: no font at " CFORM_FONT_PATH "\n");
+        return;
+    }
+    fclose(probe);
+
+    cf_font font = cf_font_sdl(CFORM_FONT_PATH, 16.0f);
+    CF_CHECK(font.handle != NULL, "the font opens with a handle behind it");
+
+    cf_font_sdl_close(&font);
+    CF_CHECK(font.handle == NULL && font.ops == NULL, "the close leaves the zero font");
+
+    cf_font_sdl_close(&font);
+    CF_CHECK(font.handle == NULL && font.ops == NULL, "a second close takes nothing back");
+
+    cf_font_sdl_close(NULL);
+    CF_CHECK(font.handle == NULL, "a close of nothing is not a crash");
 }
 
 int main(void) {
     printf("text sdl font\n");
 
     CF_RUN(a_real_font_answers_the_table);
+    CF_RUN(a_closed_font_reads_as_no_font);
 
     return CF_REPORT();
 }

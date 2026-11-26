@@ -142,4 +142,18 @@ void cf_sdl_install_log_sink(void);
  */
 cf_font cf_font_sdl(const char *file_path, float point_size);
 
+/*
+ * Hands back what cf_font_sdl took: the font file's metrics and the platform
+ * reference the constructor held beside them. The font is the caller's, so
+ * nothing above the theme asks for this; a theme that keeps a font keeps it
+ * for the run. After the call the struct is the zero one, which measures and
+ * draws nothing, so a page that still names it shows blanks instead of reading
+ * through bytes that are no longer a font - and a second call on it is
+ * nothing.
+ *
+ * Close the fonts before destroying the backend they were drawn with: a font
+ * belongs to the platform, and the teardown may be the thing that stops it.
+ */
+void cf_font_sdl_close(cf_font *font);
+
 #endif

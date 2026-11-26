@@ -69,6 +69,11 @@ int main(int argc, char **argv) {
         backend.release_texture(backend.user_data, logo.texture);
     }
 
+    /* The fonts go before the window: both were opened on the same platform, and
+     * a teardown that stops it leaves a font with nothing to close through. */
+    cf_font_sdl_close(&body_font);
+    cf_font_sdl_close(&title_font);
+
     if (backend.destroy != NULL) {
         backend.destroy(backend.user_data);
     }
