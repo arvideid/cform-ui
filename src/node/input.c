@@ -398,8 +398,10 @@ void cf_input(cf_ctx *ctx, cf_event event) {
          * ask as a release inside its rect. The question stops at the focused node
          * rather than climbing: the box asked is the box that declared it takes the
          * keyboard, and a label inside a button never holds the focus to be asked.
-         * A node that answered the key is not asked again, which is how a field
-         * that took Enter submits instead of also firing the button around it. */
+         * A node that answered the key is not asked again, so a box that keeps a key
+         * for itself - a dialog that stops Tab to hold the keyboard inside, a field
+         * that stops an arrow to move its caret - hears no second ask out of the same
+         * press. */
         if (!event.stopped && focused != CF_NO_LINK &&
             (event.key == CF_KEY_ENTER || event.key == CF_KEY_SPACE)) {
             const node_record *record = record_of(ctx, focused);

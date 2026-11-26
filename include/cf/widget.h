@@ -77,15 +77,15 @@ typedef struct cf_text_edit {
 } cf_text_edit;
 
 /*
- * A themed text box. The press that starts inside books focus through the climb
- * the field's role stops, and the keys the focused field receives edit the buffer
- * in place: what the keyboard wrote lands at the caret over whatever is
- * selected, backspace and delete take the selection or the scalar on the side
- * they name, and left, right, home and end move the caret - holding shift
- * extends the selection instead. A press places the caret under the pointer and
- * a drag from it selects to wherever the pointer went; the value never wraps,
- * so a field keeps its height whatever it holds, and the box slides along the
- * value to keep the caret in view.
+ * A themed text box. The field declares that it takes the keyboard, so the press
+ * that starts inside books focus on the field itself rather than on a box its role
+ * named, and the keys the focused field receives edit the buffer in place: what
+ * the keyboard wrote lands at the caret over whatever is selected, backspace and
+ * delete take the selection or the scalar on the side they name, and left, right,
+ * home and end move the caret - holding shift extends the selection instead. A
+ * press places the caret under the pointer and a drag from it selects to wherever
+ * the pointer went; the value never wraps, so a field keeps its height whatever it
+ * holds, and the box slides along the value to keep the caret in view.
  *
  * The theme's focused variant hands out the caret and selection tones, so an
  * unfocused field shows its bytes and nothing else. A NULL context, name or
