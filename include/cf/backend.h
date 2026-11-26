@@ -10,14 +10,21 @@
 
 /*
  * The one boundary a renderer crosses to draw a frame. `abi_version` names the
- * stream layout the backend reads and the event struct it writes; a caller
- * checks it before the first submit, because data the backend misreads draws
- * wrong rather than failing.
+ * stream layout the backend reads and the event struct it writes, and
+ * `cf_backend.size` names how big the struct was where the backend was compiled;
+ * a caller checks both before the first submit, because data the backend misreads
+ * draws wrong rather than failing. A number a porter can copy and a size only the
+ * compiler knows catch different mistakes, which is why the struct carries both.
  */
-#define CF_BACKEND_ABI_VERSION 8u
+#define CF_BACKEND_ABI_VERSION 9u
 
 typedef struct cf_backend {
     uint32_t abi_version;
+    /* Set this to `sizeof(cf_backend)` as your translation unit sees it. Slots
+     * are appended, never reordered, so a struct of the wrong size is a library
+     * built against another revision of this header whatever its version number
+     * says. */
+    uint32_t size;
     void *user_data;
     /* Hands the frame's stream over. The commands are borrowed for the call
      * alone - a backend that draws after it returns copies them first. */

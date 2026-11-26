@@ -23,6 +23,7 @@ engine ──submit──▶ shapes ──▶ backend ──▶ screen
 ```c
 typedef struct cf_backend {
     uint32_t abi_version;   /* must equal CF_BACKEND_ABI_VERSION */
+    uint32_t size;          /* must equal sizeof(cf_backend) as you compile it */
     void *user_data;        /* your state; the engine never reads it */
     void (*submit)(void *user_data, const cf_command *commands, uint32_t count);
     void (*present)(void *user_data);
@@ -52,11 +53,22 @@ pointer that you allocate.
 
 There is no error code to return, and no callback from the engine into your code
 beyond the four it calls. A backend that can't open its window returns a struct whose
-functions do nothing and logs the reason once on `CF_LOG_BACKEND`. `abi_version`
-catches a mismatched library: a stream read with the wrong layout draws *wrong*
-rather than failing, so `cf_app_run` compares the number before the first frame
-and idles if it disagrees. A program calling `cf_frame_run` itself has to make
-that comparison.
+functions do nothing and logs the reason once on `CF_LOG_BACKEND`. The two numbers at
+the front catch a mismatched library: `abi_version` is the revision you were built
+against and `size` is how big the struct was where you compiled. Either one is enough
+to fail, and they catch different mistakes — a porter can copy a number and get the
+layout wrong, and a library can be the layout you expect with a number you never saw.
+A stream read with the wrong layout draws *wrong* rather than failing, so `cf_app_run`
+checks both before the first frame and idles if either disagrees. A program calling
+`cf_frame_run` itself has to make that comparison.
+
+A capability is advertised by the function that would provide it: you test the
+pointer and a NULL means this backend does not offer that service. That is why only
+`submit`, `present` and `surface` have to be filled — the rest are optional by their
+own value. A separate table of bits saying the same thing would be a second answer
+to keep in agreement, so there isn't one yet. Bits earn their place when a single
+call has to speak for several services at once, which is the shape the clipboard and
+the cursor will have; until then every service has a slot that can be asked directly.
 
 ## What you may keep, and what you must copy
 
@@ -181,7 +193,7 @@ same three questions with fixed numbers.
 
 ## Porting, in order
 
-1. Fill the struct, set `abi_version`, keep your state in `user_data`.
+1. Fill the struct, set `abi_version` and `size`, keep your state in `user_data`.
 2. `submit`: clear, walk front to back, map each kind onto your fill / stroke /
    glyph-run / textured-quad call, scaled by pixel density, each one under the
    scissor its `clip` names.

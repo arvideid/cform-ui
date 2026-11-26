@@ -126,6 +126,15 @@ static void fake_submit(void *user_data, const cf_command *commands, uint32_t co
     (void)user_data, (void)commands, (void)count;
 }
 
+/* The device a refusal is measured against: a move that earns a frame, a dry ask
+ * that ends the drain, then the quit. Handing only a quit would prove nothing,
+ * because the shell leaves on the first drain whether or not it ever compared the
+ * backend it was given. */
+static const fake_hand build_then_quit[] = {
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_QUIT}, true}};
+
 static cf_backend driven_backend(cf_recorder *recorder) {
     cf_backend backend = cf_backend_recorder(recorder);
     backend.poll_event = fake_poll;
@@ -267,23 +276,61 @@ static void a_shell_that_cannot_run_sits_idle(void) {
     cf_app_run(&empty);
     CF_CHECK(frames_built == 0u, "a config without a build sits idle");
 
-    const cf_app_config without_submit = {.build = counting_box,
-                                          .backend = {.abi_version = CF_BACKEND_ABI_VERSION}};
+    const cf_app_config without_submit = {
+        .build = counting_box,
+        .backend = {.abi_version = CF_BACKEND_ABI_VERSION, .size = sizeof(cf_backend)}};
     cf_app_run(&without_submit);
     CF_CHECK(frames_built == 0u, "a backend that cannot submit is never asked to build");
 
-    cf_app_run(&(cf_app_config){
-        .build = counting_box,
-        .backend = {.abi_version = CF_BACKEND_ABI_VERSION - 1u, .submit = fake_submit}});
+    /* Both comparisons run against a device that would otherwise get a frame
+     * built: a count of zero only means the refusal happened if entering the
+     * loop would have produced a non-zero one. */
+    reset(build_then_quit, 3u);
+
+    cf_app_run(&(cf_app_config){.build = counting_box,
+                                .backend = {.abi_version = CF_BACKEND_ABI_VERSION - 1u,
+                                            .size = sizeof(cf_backend),
+                                            .poll_event = fake_poll,
+                                            .submit = fake_submit,
+                                            .present = fake_present}});
     CF_CHECK(frames_built == 0u, "a backend reading an older stream is not drawn for");
 
     /* submit present but present absent is the incomplete shell the loop must
      * refuse before it ever paints: the old code built a frame and then called
      * a NULL present, crashing on the first one. */
-    cf_app_run(&(cf_app_config){
-        .build = counting_box,
-        .backend = {.abi_version = CF_BACKEND_ABI_VERSION, .submit = fake_submit}});
+    reset(build_then_quit, 3u);
+
+    cf_app_run(&(cf_app_config){.build = counting_box,
+                                .backend = {.abi_version = CF_BACKEND_ABI_VERSION,
+                                            .size = sizeof(cf_backend),
+                                            .poll_event = fake_poll,
+                                            .submit = fake_submit}});
     CF_CHECK(frames_built == 0u, "a backend that cannot present is never entered");
+
+    /* The current number on a struct of another size is a library built against a
+     * different revision of the header: its slots sit at other offsets, so reading
+     * the stream through them would draw wrong rather than fail. */
+    reset(build_then_quit, 3u);
+
+    cf_app_run(&(cf_app_config){.build = counting_box,
+                                .backend = {.abi_version = CF_BACKEND_ABI_VERSION,
+                                            .size = (uint32_t)sizeof(cf_backend) - 8u,
+                                            .poll_event = fake_poll,
+                                            .submit = fake_submit,
+                                            .present = fake_present}});
+    CF_CHECK(frames_built == 0u, "a backend whose struct is not this size is refused");
+
+    /* And the same device with both numbers right is drawn for: the refusals
+     * above are the checks speaking, not a shell that cannot run at all. */
+    reset(build_then_quit, 3u);
+
+    cf_app_run(&(cf_app_config){.build = counting_box,
+                                .backend = {.abi_version = CF_BACKEND_ABI_VERSION,
+                                            .size = sizeof(cf_backend),
+                                            .poll_event = fake_poll,
+                                            .submit = fake_submit,
+                                            .present = fake_present}});
+    CF_CHECK(frames_built == 1u, "a backend that states both numbers correctly is entered");
 }
 
 int main(void) {

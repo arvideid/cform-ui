@@ -100,6 +100,8 @@ static void a_backend_that_reclaims_nothing_says_so(void) {
     const cf_backend recorder_backend = cf_backend_recorder(&recorder);
     CF_CHECK(recorder_backend.release_texture == NULL && recorder_backend.destroy == NULL,
              "the recorder retires nothing it never took");
+    CF_CHECK(recorder_backend.size == sizeof(cf_backend),
+             "and it states the struct the shell will read it as");
 }
 
 /* A host that already had the platform up keeps it: a window borrowed from it

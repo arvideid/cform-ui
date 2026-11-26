@@ -23,8 +23,10 @@ typedef struct cf_app_config {
  * Runs the loop until the backend reports quit: every frame drains the
  * backend's events into the dispatch, runs the build's page through the
  * frame pipeline against the surface the backend offers now, and submits
- * the commands it painted. A config without a build, a backend that cannot
- * submit, or a context the shell's arenas cannot start is a silent no-op.
+ * the commands it painted. A config without a build or a backend that cannot
+ * submit runs no frames and says nothing; a backend that cannot present, or whose
+ * stated stream and struct size this build cannot read, runs no frames and logs
+ * why. A context the shell's arenas cannot start is a silent no-op too.
  */
 void cf_app_run(const cf_app_config *config);
 

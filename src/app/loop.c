@@ -62,10 +62,18 @@ void cf_app_run(const cf_app_config *config) {
     }
 
     /* A backend that reads a different command layout draws wrong rather than
-     * failing, so the mismatch is settled before anything is submitted. */
+     * failing, so the mismatch is settled before anything is submitted. The size
+     * is the second half of that question: a struct built against another revision
+     * of the header carries the slots at other offsets whatever its number claims. */
     if (config->backend.abi_version != CF_BACKEND_ABI_VERSION) {
         cf_logf(CF_LOG_BACKEND, "app: the backend reads stream %u, this build emits %u",
                 config->backend.abi_version, CF_BACKEND_ABI_VERSION);
+        return;
+    }
+
+    if (config->backend.size != sizeof(cf_backend)) {
+        cf_logf(CF_LOG_BACKEND, "app: the backend's struct is %u bytes, this build reads %u",
+                config->backend.size, (uint32_t)sizeof(cf_backend));
         return;
     }
 

@@ -59,11 +59,15 @@ it. Each needs a design conversation before a line of code:
 
 ## Before a 1.0 freezes the ABI
 
-`CF_BACKEND_ABI_VERSION` is 8 and every number after it has been broken on
-purpose. A texture release, a backend teardown and a font close are what 8 added.
-Two slots are still wanted by rows above — clipboard and cursor — and each one is a
-reason to say *now* rather than after a release. Enum values are append-only, so
-the same pressure does not apply to `cf_role`, `cf_key` or `cf_intrinsic`.
+`CF_BACKEND_ABI_VERSION` is 9 and every number after it has been broken on
+purpose. A texture release and a backend teardown are what 8 added; 9 added
+`size`, a second number at the front of the struct, so a backend compiled against
+another revision of the header is refused rather than misread. A change that adds
+no slot — a font close is one, since the font is not part of the struct — needs no
+number of its own. Two slots are still wanted by rows above — clipboard and
+cursor — and each one is a reason to say *now* rather than after a release. Enum
+values are append-only, so the same pressure does not apply to `cf_role`,
+`cf_key` or `cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 

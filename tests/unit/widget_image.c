@@ -124,8 +124,10 @@ static void a_loaded_image_paints_the_texture_and_the_extent_the_loader_answered
     ctx.theme = cf_theme_default();
 
     uint32_t calls = 0u;
-    const cf_backend backend = (cf_backend){
-        .abi_version = CF_BACKEND_ABI_VERSION, .user_data = &calls, .load_image = fake_load_image};
+    const cf_backend backend = (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
+                                            .size = sizeof(cf_backend),
+                                            .user_data = &calls,
+                                            .load_image = fake_load_image};
     cf_image_content unreadable = {.texture = 9u, .width = 4.0f, .height = 4.0f};
 
     /* A file the decoder cannot read answers false and says nothing else: a

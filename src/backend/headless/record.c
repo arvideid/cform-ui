@@ -78,6 +78,7 @@ static void record_present(void *user_data) {
 
 cf_backend cf_backend_recorder(cf_recorder *recorder) {
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
+                        .size = sizeof(cf_backend),
                         .user_data = recorder,
                         .submit = record_submit,
                         .present = record_present};
