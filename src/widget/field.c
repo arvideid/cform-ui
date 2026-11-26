@@ -763,18 +763,22 @@ static bool offset_at(const cf_ctx *ctx, const field_data *field, uint32_t slot,
     cf_text_content content = content_of(field);
     cf_text_line lines[FIELD_VISIBLE_LINES];
     const uint32_t laid = cf_text_lines(&content, wrap, lines, FIELD_VISIBLE_LINES);
+    /* A walk lays every row of the value and fills the array only up to its room, so the
+     * rows below the array exist without being in it. Reading past the last one held is the
+     * bug; naming the held count once keeps the slide and the clamp on the same number. */
+    const uint32_t rows = laid < FIELD_VISIBLE_LINES ? laid : FIELD_VISIBLE_LINES;
 
-    if (laid == 0u || wrap <= 0.0f) {
+    if (rows == 0u || wrap <= 0.0f) {
         return false;
     }
 
-    const cf_point slide = cf_text_scroll(&content, lines, laid, (cf_size){wrap, visible});
+    const cf_point slide = cf_text_scroll(&content, lines, rows, (cf_size){wrap, visible});
     const float y = where.y - (box.y + top - slide.y);
     uint32_t row =
         line_height > 0.0f && y > 0.0f ? (uint32_t)(y / line_height) : 0u; /* below the last row */
 
-    if (row >= laid) {
-        row = laid - 1u;
+    if (row >= rows) {
+        row = rows - 1u;
     }
 
     *out = cf_text_offset_at(&content, &lines[row], where.x - (box.x + left - slide.x));

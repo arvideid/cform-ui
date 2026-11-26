@@ -488,6 +488,52 @@ static void a_press_places_the_caret_and_a_drag_selects_to_where_it_went(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A build may seed a value with more breaks than the field keeps rows for: the count a text walk
+ * returns is the count of the value's rows, while the array behind it holds FIELD_VISIBLE_LINES of
+ * them. A point below the rows held used to name a row past that array, and the only honest answer
+ * is the last row the field can see - the same answer a point below a short value gives. A point
+ * above it still lands where it stands, so the limit did not become the rule.
+ */
+static void a_press_below_the_rows_the_field_holds_stands_on_the_last_one(void) {
+    char bytes[64];
+    memset(bytes, 0, sizeof bytes);
+
+    /* Twelve rows of three bytes, so a row begins every fourth byte and the eighth begins at 28. */
+    for (uint32_t row = 0u; row < 12u; ++row) {
+        bytes[row * 4u] = 'a';
+        bytes[row * 4u + 1u] = 'b';
+        bytes[row * 4u + 2u] = 'c';
+
+        if (row + 1u < 12u) {
+            bytes[row * 4u + 3u] = '\n';
+        }
+    }
+
+    cf_text_edit text = {.chars = bytes, .length = 47u, .capacity = 64u, .caret = 0u, .mark = 0u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    /* The value is laid before the press, because the walk reads the frame's rects. */
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 30.0f);
+
+    CF_CHECK(text.caret < 28u, "a press in the rows the field holds stands in one of them");
+
+    press(&ctx, 10.0f, 190.0f);
+
+    CF_CHECK(text.caret == 28u,
+             "a press below the rows held reads the last row held, not the memory past it");
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_key_that_carries_no_text_edits_nothing(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
@@ -1671,6 +1717,7 @@ int main(void) {
     CF_RUN(a_full_buffer_takes_what_the_selection_frees);
     CF_RUN(the_edit_keys_cut_the_selection_or_the_scalar_they_name);
     CF_RUN(a_press_places_the_caret_and_a_drag_selects_to_where_it_went);
+    CF_RUN(a_press_below_the_rows_the_field_holds_stands_on_the_last_one);
     CF_RUN(copy_puts_the_selection_where_the_host_keeps_bytes);
     CF_RUN(cut_offers_the_bytes_before_it_drops_them);
     CF_RUN(a_refused_write_leaves_the_range_selected);
