@@ -1,0 +1,8 @@
+fill 0.00 0.00 200.00 50.00 #fafafaff radius=0.00
+border 0.00 0.00 200.00 50.00 #d4d4d4ff l=1.00 t=1.00 r=1.00 b=1.00 radius=0.00
+fill 6.00 4.00 40.00 20.00 #bfdbfeff radius=0.00 clip=1.00 1.00 198.00 48.00
+fill 6.00 24.00 40.00 20.00 #bfdbfeff radius=0.00 clip=1.00 1.00 198.00 48.00
+text 6.00 -16.00 50.00 20.00 #0a0a0aff len=5 ellipsis=0 clip=1.00 1.00 198.00 48.00 "three"
+text 6.00 4.00 40.00 20.00 #0a0a0aff len=4 ellipsis=0 clip=1.00 1.00 198.00 48.00 "four"
+text 6.00 24.00 40.00 20.00 #0a0a0aff len=4 ellipsis=0 clip=1.00 1.00 198.00 48.00 "five"
+fill 46.00 24.00 1.00 20.00 #0a0a0aff radius=0.00 clip=1.00 1.00 198.00 48.00

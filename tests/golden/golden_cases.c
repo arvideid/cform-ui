@@ -81,6 +81,7 @@ static const cf_font mono_stack[] = {{.handle = NULL, .ops = &mono_ops}};
 
 static const char wrap_bytes[] = "the quick brown fox jumps over the lazy dog";
 static const char capped_bytes[] = "click one of the panels to switch its view";
+static const char folded_bytes[] = "one\ntwo\nthree\nfour\nfive";
 
 static const cf_text_content wrapped_text = {
     .stack = {.fonts = mono_stack, .count = 1u},
@@ -91,6 +92,14 @@ static const cf_text_content capped_text = {
     .text = {capped_bytes, (uint32_t)(sizeof capped_bytes - 1u)},
     .max_lines = {.present = true, .value = 2u},
     .ellipsis = true};
+
+/* The caret past the last row the box can show, and the mark a shift+arrow would have left
+ * two rows above it: both marks the field paints, from one walk of the bytes. */
+static const cf_text_content folded_text = {
+    .stack = {.fonts = mono_stack, .count = 1u},
+    .text = {folded_bytes, (uint32_t)(sizeof folded_bytes - 1u)},
+    .caret = {.present = true, .value = (uint32_t)(sizeof folded_bytes - 1u)},
+    .mark = {.present = true, .value = 14u}};
 
 static uint32_t add_text(scene *s, uint32_t parent, cf_style style,
                          const cf_text_content *content) {
@@ -366,12 +375,45 @@ static void text_wrap(scene *s) {
     (void)add_text(s, 0u, caption, &capped_text);
 }
 
+/*
+ * A value longer than the box that holds it, the way a memo is: five rows of bytes, a caret
+ * on the last one and a selection reaching back over the row before it. The box states its own
+ * height and clips, so the stream has to show the walk slid up until the caret's row is inside
+ * it - the lines above the clip never reach the stream, and the marks keep the rects the rows
+ * they belong to have rather than being moved to fit. That is the whole of what a reader sees
+ * when a caret goes below the fold, so it is what the snapshot pins.
+ */
+static void caret_below_the_fold(scene *s) {
+    *s = (scene){0};
+
+    cf_style root = cf_style_default();
+    root.width = CF_PX(200.0f);
+    root.height = CF_PX(120.0f);
+    root.direction = CF_DIRECTION_COLUMN;
+    (void)root_node(s, root);
+
+    cf_style editor = filled(stated(250u, 250u, 250u));
+    editor.width = CF_PX(200.0f);
+    editor.height = CF_PX(50.0f);
+    editor.padding = (cf_box){CF_PX(5.0f), CF_PX(5.0f), CF_PX(5.0f), CF_PX(5.0f)};
+    editor.border = (cf_box){CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f), CF_PX(1.0f)};
+    editor.border_color = stated(212u, 212u, 212u);
+    editor.clips_content = true;
+    editor.color = stated(10u, 10u, 10u);
+    /* The theme hands a field these two tones when it is the box the keyboard stands on, and
+     * no mark is laid without them: an unfocused field shows its bytes and nothing else. */
+    editor.caret = stated(10u, 10u, 10u);
+    editor.selection = stated(191u, 219u, 254u);
+    (void)add_text(s, 0u, editor, &folded_text);
+}
+
 static const scene_def scenes[] = {
     {"solid_panel", {0.0f, 0.0f, 200.0f, 150.0f}, solid_panel},
     {"borders_and_corners", {0.0f, 0.0f, 200.0f, 240.0f}, borders_and_corners},
     {"viewport_culling", {0.0f, 0.0f, 150.0f, 90.0f}, viewport_culling},
     {"nested_depth", {0.0f, 0.0f, 120.0f, 120.0f}, nested_depth},
     {"text_wrap", {0.0f, 0.0f, 200.0f, 120.0f}, text_wrap},
+    {"caret_below_the_fold", {0.0f, 0.0f, 200.0f, 120.0f}, caret_below_the_fold},
     {"clipped_content", {0.0f, 0.0f, 200.0f, 160.0f}, clipped_content},
     {"idle_frame", {0.0f, 0.0f, 100.0f, 100.0f}, idle_frame},
 };
