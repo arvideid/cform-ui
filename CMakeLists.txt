@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.25)
 
+# The version is read out of the header that states it rather than written here
+# as well, so a package cannot report a number a caller cannot test.
+include(cmake/cform_version.cmake)
+
 project(cform-ui
-    VERSION 0.1.0
+    VERSION ${CFORM_VERSION}
     DESCRIPTION "A retained-mode, data-oriented UI framework in C."
     LANGUAGES C
 )
@@ -41,6 +45,7 @@ add_library(cf_base STATIC
     src/base/intern.c
     src/base/log.c
     src/base/store.c
+    src/base/version.c
 )
 
 # cf_style is libc and cf_base only; it knows no node, no geometry, no backend.
@@ -282,8 +287,12 @@ configure_package_config_file(cmake/cform-ui-config.cmake.in
     INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cform-ui
 )
 
+# SameMinorVersion while the major is zero: 0.MINOR is where a break is allowed
+# to live, so an install of 0.2 must not answer a find_package that asked for
+# 0.9. At 1.0 this becomes SameMajorVersion and stays there - the promise that
+# makes it safe is the one docs/versioning.md states for a MAJOR.
 write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/cform-ui-config-version.cmake"
-    COMPATIBILITY SameMajorVersion
+    COMPATIBILITY SameMinorVersion
 )
 
 install(FILES
@@ -292,9 +301,10 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/cform-ui
 )
 
-# The same package for a build that does not use CMake. The prefix is baked in
-# rather than derived from where the file sits, because moving a prefix here
-# means reconfiguring, and nothing installs into two prefixes at once.
+# The same package for a build that does not use CMake. The prefix is derived
+# from where the installed file sits, so moving the tree under it - a vendored
+# install, an unpacked archive somewhere else - keeps the file answering without
+# being reconfigured.
 configure_file(cmake/cform.pc.in "${CMAKE_CURRENT_BINARY_DIR}/cform.pc" @ONLY)
 
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/cform.pc"

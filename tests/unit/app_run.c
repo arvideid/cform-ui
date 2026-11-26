@@ -518,7 +518,19 @@ static void the_inspector_toggles_on_f12(void) {
         .build = counting_box, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
 
     CF_CHECK(frames_built == 1u, "the toggle builds the frame it lands in");
-    CF_CHECK(recorder.count == 9u, "the page's fill and the panel's eight commands arrived");
+    CF_CHECK(recorder.count == 10u, "the page's fill and the panel's nine commands arrived");
+
+    bool version_seen = false;
+
+    for (uint32_t i = 0u; i < recorder.count; ++i) {
+        const cf_command command = recorder.commands[i];
+
+        version_seen =
+            version_seen || (command.kind == CF_COMMAND_TEXT && command.text.length >= 9u &&
+                             memcmp(command.text.chars, "cform v0.", 9) == 0);
+    }
+
+    CF_CHECK(version_seen, "the panel states the version it is reporting from");
 
     bool text_seen = false;
 

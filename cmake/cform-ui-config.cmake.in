@@ -1,5 +1,12 @@
 @PACKAGE_INIT@
 
+# The numbers a consumer can print to say what it actually found. The version
+# comes from include/cf/version.h and the ABI number from include/cf/backend.h;
+# both are read at configure time, so a package that claims a version its
+# headers do not is a configure error rather than a surprise at run time.
+set(CFORM_UI_VERSION "@CFORM_VERSION@")
+set(CFORM_UI_BACKEND_ABI_VERSION "@CFORM_BACKEND_ABI_VERSION@")
+
 include("${CMAKE_CURRENT_LIST_DIR}/cform-ui-targets.cmake")
 
 check_required_components(cform-ui)

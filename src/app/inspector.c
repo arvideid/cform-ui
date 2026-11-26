@@ -4,11 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cf/version.h"
+
 /* The panel is a corner, not a windshield: the padding keeps its numbers off
  * the edges and the width holds the longest labeled line. */
 #define PANEL_WIDTH 168.0f
 #define PANEL_PADDING 8.0f
-#define PANEL_LINES 6u
+#define PANEL_LINES 7u
 #define LINE_BYTES 32u
 
 /* "says " plus the widest word the line can carry: the panel prints through the same buffer every
@@ -207,17 +209,20 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
 
     const panel_counts counts = count_of(ctx);
 
-    append_line(ctx, out, fonts, panel, 0u, height, "nodes %u", counts.nodes);
-    append_line(ctx, out, fonts, panel, 1u, height, "dirty %u", counts.dirty);
-    append_line(ctx, out, fonts, panel, 2u, height, "commands %u", painted);
-    append_line(ctx, out, fonts, panel, 3u, height, "page %ux%u", round_points(page.width),
+    /* The version leads the reading, because a number reported from a screen is
+     * only worth reporting next to the number it was built as. */
+    append_line(ctx, out, fonts, panel, 0u, height, "cform v%s", cf_version_string());
+    append_line(ctx, out, fonts, panel, 1u, height, "nodes %u", counts.nodes);
+    append_line(ctx, out, fonts, panel, 2u, height, "dirty %u", counts.dirty);
+    append_line(ctx, out, fonts, panel, 3u, height, "commands %u", painted);
+    append_line(ctx, out, fonts, panel, 4u, height, "page %ux%u", round_points(page.width),
                 round_points(page.height));
-    append_line(ctx, out, fonts, panel, 4u, height, "frame %uus", frame_us);
+    append_line(ctx, out, fonts, panel, 5u, height, "frame %uus", frame_us);
 
     /* Read last: the walk wants the rects cf_frame_layout wrote, and a page with no focused box is
      * the common case rather than a failure, so it prints as an empty ask. */
     focus_words words = {0};
     cf_semantic_visit(ctx, copy_focus_words, &words);
-    append_line(ctx, out, fonts, panel, 5u, height, "says %s",
+    append_line(ctx, out, fonts, panel, 6u, height, "says %s",
                 !words.focused ? "-" : (words.spoken ? words.bytes : "nothing"));
 }

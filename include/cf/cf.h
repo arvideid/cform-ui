@@ -16,6 +16,7 @@
 #include "cf/style.h"
 #include "cf/text.h"
 #include "cf/types.h"
+#include "cf/version.h"
 #include "cf/widget.h"
 
 #endif

@@ -24,6 +24,9 @@ Makefile
 Testing/
 *.cmake
 !cmake/
+# The `*.cmake` rule above is there for the files CMake writes into a build tree,
+# and it catches the modules this repository owns. Those are source.
+!cmake/*.cmake
 
 # --- Compiled objects and libraries ---
 *.o

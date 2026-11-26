@@ -24,6 +24,7 @@ LAYER_OF_HEADER = {
     "cf.h": "umbrella",
     "types.h": "base",
     "base.h": "base",
+    "version.h": "base",
     "style.h": "style",
     "layout.h": "layout",
     "text.h": "text",
