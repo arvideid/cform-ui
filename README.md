@@ -51,7 +51,7 @@ rectangles, text and images to a backend that puts them on a surface.
 | the CSS box model, flexbox, grid | `cf_style` and `cf_layout` |
 | the browser's layout pass | step 2 of [how a frame happens](#how-a-frame-happens) |
 | a display list the compositor builds | `cf_command_list`, the shape list `cf_paint` emits |
-| a graphics backend (Skia, ANGLE) | a `cf_backend`: [six functions](docs/backend-abi.md) |
+| a graphics backend (Skia, ANGLE) | a `cf_backend`: [eight functions](docs/backend-abi.md) |
 | React re-rendering your component tree | describing the whole screen every frame and letting the diff decide |
 | a `click` listener on an ancestor | a handler on a parent box: they run from the one the pointer hit up through its parents, and `cf_stop` ends the walk |
 
@@ -126,7 +126,7 @@ Read this list before planning an application around it. None of it is silently
 accepted and ignored — there is no field that pretends to take these things.
 
 - **Not production-ready.** Version 1.0 is in development, and the API numbers
-  still move: the backend contract is at ABI 7 and has been broken on purpose.
+  still move: the backend contract is at ABI 8 and has been broken on purpose.
 - **Six widgets**: label, button, field, list, scroller, image. No checkbox,
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
@@ -151,8 +151,9 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder
-  goes. Uploaded textures are never reclaimed, so a screen that keeps loading
-  images keeps growing.
+  goes. Retiring an upload is the host's call through `release_texture`, which
+  hands the number back to the next image: nothing in the engine decides that a
+  picture is finished with.
 - **The cursor never changes.** A hovered field reports that it wants an I-beam
   and the frame carries that as far as the backend, which ignores it: no backend
   here sets a system cursor.
@@ -286,7 +287,7 @@ Four steps, and each one can be used on its own:
 4. **Draw.** A backend turns that list onto a real surface, reports clicks and
    keystrokes back, answers how big the surface is and reads an image file. One
    over SDL3 ships here, a headless recorder exists for tests, and writing your
-   own means filling in [six functions](docs/backend-abi.md).
+   own means filling in [eight functions](docs/backend-abi.md).
 
 ## Words this repository uses
 

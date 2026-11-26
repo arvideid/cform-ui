@@ -23,10 +23,12 @@
 typedef struct sdl_state {
     SDL_Window *window;
     SDL_Renderer *renderer;
-    /* The uploads the stream's image commands name, by id minus one. The
-     * table lives as long as the window does, outside every frame arena. */
+    /* The uploads the stream's image commands name, by id minus one. A slot
+     * holds a texture until the host retires it and NULL afterwards, so a
+     * retired id draws nothing and the next upload is handed the number back.
+     * The table lives as long as the window does, outside every frame arena. */
     SDL_Texture **textures;
-    uint32_t texture_count;
+    uint32_t texture_slots;
     uint32_t texture_capacity;
     /* A submit has drawn into the target and no swap has shown it yet. */
     bool damaged;
@@ -228,10 +230,31 @@ static void draw_command(sdl_state *state, const cf_command *command, float scal
     if (command->kind == CF_COMMAND_IMAGE) {
         const uint32_t id = command->texture;
 
-        if (id != 0u && id <= state->texture_count) {
+        /* An id outside the table, or one in a slot the host has handed back,
+         * names nothing to draw: the rect is left as the frame had it rather
+         * than read through a pointer that is no longer there. */
+        if (id != 0u && id <= state->texture_slots && state->textures[id - 1u] != NULL) {
             SDL_RenderTexture(state->renderer, state->textures[id - 1u], NULL, &rect);
         }
     }
+}
+
+/* Room for more slots, doubling from eight. The base allocator zeroes what a
+ * growth adds, which is what makes an untouched slot read as free. */
+static bool grow_textures(sdl_state *state) {
+    const uint32_t capacity = state->texture_capacity == 0u ? 8u : state->texture_capacity * 2u;
+    const size_t held = (size_t)state->texture_capacity * sizeof *state->textures;
+    const size_t wanted = (size_t)capacity * sizeof(SDL_Texture *);
+    SDL_Texture **textures = cf_resize_block(state->textures, held, wanted);
+
+    if (textures == NULL) {
+        return false;
+    }
+
+    state->textures = textures;
+    state->texture_capacity = capacity;
+
+    return true;
 }
 
 /* RGBA8888, one byte per channel, row after row - the layout create_texture
@@ -245,18 +268,17 @@ uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, co
         return 0u;
     }
 
-    if (state->texture_count == state->texture_capacity) {
-        const uint32_t capacity = state->texture_capacity == 0u ? 8u : state->texture_capacity * 2u;
-        const size_t held = (size_t)state->texture_capacity * sizeof *state->textures;
-        const size_t wanted = (size_t)capacity * sizeof(SDL_Texture *);
-        SDL_Texture **textures = cf_resize_block(state->textures, held, wanted);
+    /* The lowest retired slot is the next id handed out, so a page that loads
+     * and drops an image a thousand times holds one texture rather than a
+     * thousand and no number outlives the bytes behind it. */
+    uint32_t at = 0u;
 
-        if (textures == NULL) {
-            return 0u;
-        }
+    while (at < state->texture_slots && state->textures[at] != NULL) {
+        ++at;
+    }
 
-        state->textures = textures;
-        state->texture_capacity = capacity;
+    if (at == state->texture_slots && at == state->texture_capacity && !grow_textures(state)) {
+        return 0u;
     }
 
     SDL_Texture *texture = SDL_CreateTexture(state->renderer, SDL_PIXELFORMAT_RGBA32,
@@ -273,8 +295,59 @@ uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, co
         return 0u;
     }
 
-    state->textures[state->texture_count++] = texture;
-    return state->texture_count;
+    state->textures[at] = texture;
+
+    if (at == state->texture_slots) {
+        state->texture_slots = at + 1u;
+    }
+
+    return at + 1u;
+}
+
+/* The host's ask to forget an upload. An id outside the table and one already
+ * retired are the same nothing: the call has no answer to give, so a host that
+ * releases a texture twice, or after the window took it back, is not a host
+ * that has to check first. */
+static void sdl_release_texture(void *user_data, uint32_t texture) {
+    sdl_state *state = user_data;
+
+    if (state == NULL || texture == 0u || texture > state->texture_slots) {
+        return;
+    }
+
+    SDL_Texture *held = state->textures[texture - 1u];
+
+    if (held != NULL) {
+        SDL_DestroyTexture(held);
+        state->textures[texture - 1u] = NULL;
+    }
+}
+
+/* Everything the backend took for itself, in the order it was taken. The
+ * window was the first thing opened and is the last thing closed, because a
+ * renderer or a texture destroyed under a live window is fine while a window
+ * that outlives its renderer is not. */
+static void sdl_destroy(void *user_data) {
+    sdl_state *state = user_data;
+
+    if (state == NULL) {
+        return;
+    }
+
+    for (uint32_t at = 0u; at < state->texture_slots; ++at) {
+        if (state->textures != NULL && state->textures[at] != NULL) {
+            SDL_DestroyTexture(state->textures[at]);
+        }
+    }
+
+    cf_free_block(state->textures);
+    SDL_StopTextInput(state->window);
+    SDL_DestroyRenderer(state->renderer);
+    SDL_DestroyWindow(state->window);
+    /* This backend started the platform, so it is this backend's to stop it.
+     * A host that owns SDL's lifecycle writes its own backend instead. */
+    SDL_Quit();
+    cf_free_block(state);
 }
 
 /* The density the window is drawing at, so an extent measured in device pixels
@@ -575,9 +648,8 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
      * outside every frame arena, so they go through the base allocator -
      * the only seam that asks the heap for bytes a caller hands back.
      * Everything SDL keeps for itself (the window, the renderer, the
-     * per-texture GPU resource) is third-party internal allocation and
-     * stays SDL's to free. cf_backend_sdl has no destroy path yet; F1
-     * reserves one in the backend ABI. */
+     * per-texture GPU resource) is third-party internal allocation and stays
+     * SDL's to free, which the destroy slot below does on the host's ask. */
     sdl_state *state = cf_alloc_block(sizeof *state);
 
     if (state == NULL) {
@@ -597,5 +669,7 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .create_texture = sdl_create_texture,
                         .poll_event = sdl_poll,
                         .surface = sdl_surface,
-                        .load_image = sdl_load_image};
+                        .load_image = sdl_load_image,
+                        .release_texture = sdl_release_texture,
+                        .destroy = sdl_destroy};
 }

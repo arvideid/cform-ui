@@ -90,6 +90,37 @@ static void fake_present(void *user_data) {
     presents++;
 }
 
+/* The four slots a host calls for itself, counted: a shell that uploaded,
+ * decoded, retired or closed on its own initiative would leave the host holding
+ * a backend it can no longer use or no longer trust. */
+static uint32_t uploads;
+static uint32_t loads;
+static uint32_t releases;
+static uint32_t destroys;
+
+static uint32_t counted_create(void *user_data, uint32_t width, uint32_t height,
+                               const void *pixels) {
+    (void)user_data, (void)width, (void)height, (void)pixels;
+    uploads++;
+    return 1u;
+}
+
+static bool counted_load(void *user_data, const char *path, cf_image_content *out) {
+    (void)user_data, (void)path, (void)out;
+    loads++;
+    return false;
+}
+
+static void counted_release(void *user_data, uint32_t texture) {
+    (void)user_data, (void)texture;
+    releases++;
+}
+
+static void counted_destroy(void *user_data) {
+    (void)user_data;
+    destroys++;
+}
+
 /* A submit that does nothing: the shell only asks whether one exists. */
 static void fake_submit(void *user_data, const cf_command *commands, uint32_t count) {
     (void)user_data, (void)commands, (void)count;
@@ -199,6 +230,33 @@ static void the_inspector_toggles_on_f12(void) {
     CF_CHECK(text_seen, "the panel's numbers ride the stream as text");
 }
 
+static void the_shell_leaves_the_backend_to_its_host(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+
+    backend.create_texture = counted_create;
+    backend.load_image = counted_load;
+    backend.release_texture = counted_release;
+    backend.destroy = counted_destroy;
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 3u);
+    uploads = 0u;
+    loads = 0u;
+    releases = 0u;
+    destroys = 0u;
+
+    cf_app_run(&(cf_app_config){.build = counting_box, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 1u, "the shell ran the frame it was asked to run");
+    CF_CHECK(uploads == 0u && loads == 0u, "the shell asks for no image of its own");
+    CF_CHECK(releases == 0u, "the shell retires no upload on the way out");
+    CF_CHECK(destroys == 0u, "the shell does not close a window it was only handed");
+}
+
 static void a_shell_that_cannot_run_sits_idle(void) {
     frames_built = 0u;
 
@@ -236,6 +294,7 @@ int main(void) {
     CF_RUN(the_shell_skips_undamaged_frames);
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
+    CF_RUN(the_shell_leaves_the_backend_to_its_host);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 
     cf_arena_free(&store);

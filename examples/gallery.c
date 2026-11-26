@@ -59,4 +59,17 @@ int main(int argc, char **argv) {
 
     cf_app_run(
         &(cf_app_config){.build = build, .backend = backend, .theme = theme, .fonts = &body});
+
+    /* The shell borrowed the backend and has returned, so the upload the page
+     * made and the window the backend opened are the host's to hand back. A
+     * window that is closed without this keeps its device bytes until the
+     * process ends, which is what a long-lived host cannot afford.
+     */
+    if (backend.release_texture != NULL) {
+        backend.release_texture(backend.user_data, logo.texture);
+    }
+
+    if (backend.destroy != NULL) {
+        backend.destroy(backend.user_data);
+    }
 }

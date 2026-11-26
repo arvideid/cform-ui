@@ -21,7 +21,7 @@ and this file is the record.
 |---|---|
 | A full field ignores the keystroke | the buffer's capacity is the caller's and a run that will not fit whole is refused, so typing into a full field looks dead. Either truncate at a scalar boundary or show the refusal; today neither is stated |
 | A state block can move | growing a block hands back a new pointer and the old one dangles. The framework no longer reads through the freed pointer itself (the use-after-free in `cf_state_grow` is repaired), but a host that caches a `cf_state` pointer across a growth is still the hazard the API warns about |
-| Textures are never reclaimed | `create_texture` hands back an id and nothing frees it. A screen that loads images as it goes grows until the device stops it |
+| A lost device is not recovered | `release_texture` hands bytes back and `destroy` closes the window, both on a device that is still working. Nothing re-creates an upload after the driver drops it, so a context loss leaves the page drawing nothing until the host starts the window again |
 | The cursor is dead API | `cf_frame_cursor` answers an I-beam over a field and no backend can act on it, because the surface contract has no slot for the ask |
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
 | Selection is by character | no double-click to select a word and no triple-click for the line, though a drag that strays past the box keeps selecting because the press holds the pointer |
@@ -59,11 +59,12 @@ it. Each needs a design conversation before a line of code:
 
 ## Before a 1.0 freezes the ABI
 
-`CF_BACKEND_ABI_VERSION` is 7 and every number after it has been broken on
-purpose. Three slots are already wanted by rows above — clipboard, texture
-release, cursor — and each one is a reason to say *now* rather than after a
-release. Enum values are append-only, so the same pressure does not apply to
-`cf_role`, `cf_key` or `cf_intrinsic`.
+`CF_BACKEND_ABI_VERSION` is 8 and every number after it has been broken on
+purpose. A texture release and a backend teardown are what 8 added. Two slots are
+still wanted by rows above — clipboard, cursor — and so is a close beside
+`cf_font_sdl`, since a font opened per screen outlives every one of them. Each one
+is a reason to say *now* rather than after a release. Enum values are append-only,
+so the same pressure does not apply to `cf_role`, `cf_key` or `cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 

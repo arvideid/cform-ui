@@ -190,6 +190,18 @@ if(CFORM_WITH_SDL_BACKEND)
         set_tests_properties(text_sdl_font PROPERTIES
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     endif()
+
+    # The resource slots are only observable where a device owns bytes, so this
+    # tier opens the window SDL's dummy video driver gives - no display, no
+    # desktop automation - and reads what upload, release and teardown do. The
+    # sanitizer job is what turns "teardown ran" into "teardown freed".
+    cf_add_layer_test(sdl_texture unit/sdl_texture.c cf_backend_sdl cf_backend_headless)
+    set_tests_properties(sdl_texture PROPERTIES ENVIRONMENT "SDL_VIDEO_DRIVER=dummy")
+
+    if(WIN32)
+        set_tests_properties(sdl_texture PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    endif()
 endif()
 
 cf_add_bench(bench_layout bench/bench_layout.c cf_layout)

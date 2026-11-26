@@ -6,16 +6,19 @@ of that agreement each side was built against. This file is that agreement
 between cform and a device.
 
 `cf/backend.h` is the only place the engine touches a window, a GPU, a font file
-or a mouse. It is one struct of six function pointers, and nothing else crosses
+or a mouse. It is one struct of eight function pointers, and nothing else crosses
 the boundary in either direction — which is how the engine runs headless in tests
-and in a browser. If you only want to *use* cform, you can stop here.
+and in a browser. Four are the engine's to call: `submit`, `present`,
+`poll_event` and `surface`. Four are the host's: the two uploads, the release and
+the teardown, which a backend fills in but never waits to be asked for. If you
+only want to *use* cform, you can stop here.
 
 ```
 engine ──submit──▶ shapes ──▶ backend ──▶ screen
        ◀─poll──── input  ◀──── size ──── device
 ```
 
-## The six functions
+## The eight functions
 
 ```c
 typedef struct cf_backend {
@@ -28,6 +31,8 @@ typedef struct cf_backend {
     bool (*poll_event)(void *user_data, cf_event *out);
     cf_size (*surface)(void *user_data);
     bool (*load_image)(void *user_data, const char *path, cf_image_content *out);
+    void (*release_texture)(void *user_data, uint32_t texture);
+    void (*destroy)(void *user_data);
 } cf_backend;
 ```
 
@@ -42,9 +47,11 @@ pointer that you allocate.
 | `poll_event` | Copy one waiting input event into `out`, say whether there was one | Yes — the page runs but nothing is clickable |
 | `surface` | How big the output is, in logical points | Yes — the page lays out against zero space |
 | `load_image` | Decode a file, upload it, name its texture and its extent | Yes — the app uploads its own pixels through `create_texture` |
+| `release_texture` | Hand back the bytes behind an id the page stopped showing (the host calls it) | Yes — a backend that keeps every upload says so by leaving it NULL |
+| `destroy` | Free the backend's own state: the uploads still held, the window, the bytes beside them (the host calls it once the shell has returned) | Yes — a backend with no state of its own has nothing to free |
 
 There is no error code to return, and no callback from the engine into your code
-beyond these six. A backend that can't open its window returns a struct whose
+beyond the four it calls. A backend that can't open its window returns a struct whose
 functions do nothing and logs the reason once on `CF_LOG_BACKEND`. `abi_version`
 catches a mismatched library: a stream read with the wrong layout draws *wrong*
 rather than failing, so `cf_app_run` compares the number before the first frame
@@ -60,12 +67,20 @@ that comparison.
   `text.length` is how far it goes.
 - `cf_command.font` outlives every frame. Fonts belong to the theme, not the page.
   Never free one.
-- `create_texture` ids stay valid as long as your state does. **Zero means "no
-  texture"** — a drawable answer, not an error. A shape naming an id you don't know
-  draws nothing.
-- A texture is never handed back. Nothing above this boundary knows how to free
-  one, so an image is loaded once and kept, and a port that wants to unload one
-  needs a slot the engine can call — there isn't one yet.
+- `create_texture` ids are yours until `release_texture` takes one back. **Zero
+  means "no texture"** — a drawable answer, not an error. An id past every upload,
+  and one just retired, are the same ask and the same nothing: a shape naming
+  either draws no pixels.
+- A retired id may be handed out again by the next upload. That is what the slot is
+  for — a screen that loads images as it goes would otherwise grow one texture per
+  visit forever — and it is why a retired id has to draw nothing rather than
+  whatever the number came to mean.
+- **Release only what no frame can still name.** A backend that defers its drawing
+  past `submit` (a queue, a display list built for later) keeps the textures that
+  stream named until it has drawn them, and only then lets a release destroy them.
+  Nothing above this boundary can see that queue, so the duty is the backend's.
+- `destroy` is the host's, not the shell's: `cf_app_run` borrows the backend and
+  hands it back, so a window outlives the loop unless the host closes it.
 - `user_data` is never read by the engine. It's yours.
 
 ## Everything is in points, not pixels
@@ -168,14 +183,23 @@ same three questions with fixed numbers.
    answer the extent in points. `cf_backend_sdl` reads BMP because SDL already
    does; a port with a wider decoder is the reason the slot exists. Answer false
    for a file you cannot read and leave `*out` alone.
-8. A font constructor whose table measures and whose handle your `submit` can
+8. `release_texture`, once your device can hand bytes back: destroy what the id
+   named and mark the slot free, so the number can be handed out again. Then
+   `destroy`, which tears down every upload still held, the window and your own
+   state — last-opened first, because a window that outlives its renderer is a
+   use-after-free the other way round. Both are the host's to call, so a page like
+   `examples/gallery.c` is the pattern: upload before the loop, release and destroy
+   after it.
+9. A font constructor whose table measures and whose handle your `submit` can
    draw.
-9. Add a CMake target beside `cf_backend_sdl`, behind its own option, linking
-   `cf_paint cf_text` and your device library. Only `src/backend/*/` and
-   `src/app/` may name a platform header.
+10. Add a CMake target beside `cf_backend_sdl`, behind its own option, linking
+    `cf_paint cf_text` and your device library. Only `src/backend/*/` and
+    `src/app/` may name a platform header.
 
-`src/backend/headless/record.c` does two of the six and is a legal backend —
-that is the minimum.
+`src/backend/headless/record.c` does two of the eight and is a legal backend —
+that is the minimum. It takes no uploads and keeps no device state, so its
+resource slots stay NULL; a host that releases through a backend has to ask the
+slot first either way.
 
 ## Checking your work
 

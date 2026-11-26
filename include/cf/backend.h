@@ -14,7 +14,7 @@
  * checks it before the first submit, because data the backend misreads draws
  * wrong rather than failing.
  */
-#define CF_BACKEND_ABI_VERSION 7u
+#define CF_BACKEND_ABI_VERSION 8u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -45,15 +45,37 @@ typedef struct cf_backend {
      * the formats the backend decodes; a file that will not open, a format it
      * cannot read or a backend with no decoder answers false and leaves `out`
      * alone. Load once and keep the answer: an upload per frame is a texture per
-     * frame, and nothing here reclaims one. */
+     * frame, and the id the answer carries is the host's to retire below. */
     bool (*load_image)(void *user_data, const char *path, cf_image_content *out);
+    /*
+     * Retires a texture the stream no longer needs. The id is the host's to
+     * track and the backend's to forget: after the call an image command that
+     * still names it draws nothing, and a later upload may be handed the same
+     * number. A host therefore releases a texture only once no frame in flight
+     * can name it - a backend that defers its drawing past submit keeps the
+     * bytes alive until it has drawn them, so releasing earlier would draw a
+     * texture the host believes it handed back. Zero, and an id retired
+     * already, ask for nothing and say so.
+     */
+    void (*release_texture)(void *user_data, uint32_t texture);
+    /*
+     * Frees what the backend took for itself: the uploads, the window, the
+     * bytes beside them. The host calls it once, after the shell it was handed
+     * to has returned, because the shell borrows the backend and leaves the
+     * host's window standing. Nothing may be submitted through a destroyed
+     * backend, and a backend built as a zero struct has nothing here to call.
+     */
+    void (*destroy)(void *user_data);
 } cf_backend;
 
 /*
  * The headless backend: it keeps the last submitted stream in its own arena
  * so a test reads what a device would have drawn. The store it hands back is
  * owned, so the stream survives the caller rewinding the arena the paint list
- * came out of. The zero state is an empty recorder.
+ * came out of. The zero state is an empty recorder. It takes no uploads and no
+ * device state of its own, so the two resource slots stay NULL: a host that
+ * releases through this backend has to ask the slot first, exactly as it does
+ * for a third-party backend that reclaims nothing.
  */
 typedef struct cf_recorder {
     cf_arena *arena;
