@@ -94,6 +94,10 @@ cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint
     node.style =
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
+    /* The node carries the name its offset lives under, so the tree can read
+     * this scroller's own block back from the record: a stable identity for the
+     * diff, and the handle a keyboard reveal moves. */
+    node.key = data->key;
     /* The scroll axis is the column's: the wrapper hugs what it carries
      * instead of stretching to the window and shrinking it to fit. */
     node.style.direction = CF_DIRECTION_COLUMN;

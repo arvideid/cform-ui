@@ -205,12 +205,70 @@ static void a_notch_the_inner_pane_cannot_take_walks_the_page(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A pane taller than what it shows, with the only focusable box parked below
+ * the fold. Reaching it by keyboard is worth nothing if the eye cannot find it,
+ * so the Tab that lands there moves the pane - and the frame after shows the
+ * box wholly inside. This is the reveal proven through the real build path: the
+ * key writes the offset, the next build reads it back into the content's inset. */
+static void reveal_frame(cf_ctx *ctx) {
+    cf_frame_begin(ctx);
+
+    cf_node filler = {.style = cf_style_default()};
+    filler.style.width = CF_PX(100.0f);
+    filler.style.height = CF_PX(150.0f);
+
+    cf_node button = {.style = cf_style_default()};
+    button.style.width = CF_PX(100.0f);
+    button.style.height = CF_PX(50.0f);
+    button.focusable = true;
+
+    const cf_node inside[] = {filler, button};
+    cf_node pane = cf_scroller(ctx, "pane", inside, 2u);
+    pane.style.width = CF_PX(100.0f);
+    pane.style.height = CF_PX(100.0f);
+
+    cf_diff(ctx, &pane);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(100.0f), .height = CF_PX(100.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+static void tabbing_to_an_offscreen_control_scrolls_it_into_view(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    reveal_frame(&ctx);
+
+    const uint32_t pane = ctx.root_slot;
+    const uint32_t content = child_of(&ctx, pane, 0u);
+    const uint32_t button = child_of(&ctx, content, 1u);
+
+    CF_NEAR(ctx.rects[button].y, 150.0f);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_TAB});
+
+    CF_CHECK(cf_focused(&ctx, button), "the only focusable box takes the Tab");
+
+    reveal_frame(&ctx);
+
+    /* The pane rode the 100 points between the box's bottom and the viewport's,
+     * no further - it stops where the control's edge meets the fold. */
+    CF_NEAR(ctx.rects[content].y, -100.0f);
+    CF_NEAR(ctx.rects[button].y, 50.0f);
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget scroll\n");
 
     CF_RUN(the_wheel_walks_the_content_and_clamps_at_both_ends);
     CF_RUN(a_scroller_without_a_height_of_its_own_never_walks);
     CF_RUN(a_notch_the_inner_pane_cannot_take_walks_the_page);
+    CF_RUN(tabbing_to_an_offscreen_control_scrolls_it_into_view);
 
     return CF_REPORT();
 }

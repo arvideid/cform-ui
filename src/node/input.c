@@ -231,6 +231,56 @@ static uint32_t focus_neighbor(const cf_ctx *ctx, uint32_t from, bool backward) 
     return ring.after != CF_NO_LINK ? ring.after : ring.first;
 }
 
+/*
+ * Brings the box the keyboard just landed on back into every pane that scrolls
+ * it, so a hand on Tab alone reaches the whole page. The rects are the frame
+ * that last laid out, so the shift is measured against where the target sat,
+ * not where the offset will put it; a build reads the offset back at
+ * declaration time, so the reveal lands on the frame after the key rather than
+ * the one the key fired in. Only a CF_ROLE_SCROLL ancestor qualifies - the
+ * widget guarantees the block under its key is a cf_scroll, so the walk never
+ * grows state some nameless node owns.
+ */
+static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
+    if (ctx->rects == NULL || slot == CF_NO_LINK) {
+        return;
+    }
+
+    const cf_rect target = ctx->rects[slot];
+
+    for (uint32_t at = record_of(ctx, slot)->parent; at != CF_NO_LINK;
+         at = record_of(ctx, at)->parent) {
+        const node_record *record = record_of(ctx, at);
+
+        if (record->role != CF_ROLE_SCROLL || record->key == CF_NO_NAME) {
+            continue;
+        }
+
+        const uint32_t content = record->child_first;
+        cf_scroll *held = cf_scroll_of(ctx, record->key);
+
+        if (held == NULL || content == CF_NO_LINK) {
+            continue;
+        }
+
+        const cf_rect view = ctx->rects[at];
+        const float top = target.y - view.y;
+        const float bottom = top + target.height;
+        float walked = held->offset;
+
+        /* The shortest nudge in. A box taller than its pane can never sit
+         * wholly inside, so it is brought to the top - where its reading
+         * starts - rather than chased by an edge that keeps slipping out. */
+        if (top < 0.0f) {
+            walked += top;
+        } else if (bottom > view.height) {
+            walked += bottom - view.height;
+        }
+
+        held->offset = cf_scroll_clamp(walked, view.height, ctx->rects[content].height);
+    }
+}
+
 /* Runs the handlers from the target up through the parents, each with fresh
  * dispatch flags: stopping is this handler's decision about the ones above
  * it, and capturing binds the node whose handler ran. */
@@ -416,6 +466,12 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             const uint32_t next = focus_neighbor(ctx, from, (event.mods & CF_MOD_SHIFT) != 0u);
 
             ctx->focus_id = next != CF_NO_LINK ? cf_store_id(&ctx->nodes, next) : CF_NO_ID;
+
+            /* The new focus is only worth having if the eye can find it, so the
+             * page that hides it moves out of the way. */
+            if (next != CF_NO_LINK) {
+                reveal_slot(ctx, next);
+            }
         }
 
         /* Enter or the space bar on the box the keyboard is standing on is the same
@@ -473,6 +529,7 @@ void cf_focus(cf_ctx *ctx, uint32_t slot) {
     }
 
     ctx->focus_id = cf_store_id(&ctx->nodes, slot);
+    reveal_slot(ctx, slot);
 }
 
 bool cf_hovered(const cf_ctx *ctx, uint32_t slot) {

@@ -1146,13 +1146,6 @@ static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
      * window wider than it. The wheel's range is the wrapper's height, which no
      * cross-axis placement moves. */
     page.style.align_items = CF_ALIGN_CENTER;
-    /* The page fills the viewport, so a pointer anywhere in it hovers the
-     * scroller. The scroll role's hovered paint is a thumb's grey, and in a
-     * window wider than the capped column that grey shows as bands down the
-     * sides instead of the page tone. The container carries no visual role so
-     * its restated page tone stands; the wheel handler rides the node, not the
-     * role, so the page still scrolls. */
-    page.role = CF_ROLE_NONE;
 
     return page;
 }

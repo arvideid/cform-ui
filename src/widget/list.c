@@ -125,6 +125,10 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
     node.style =
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
+    /* The list is a scroller: it carries the name its offset lives under so the
+     * tree reads the block back from the record, the same handle a keyboard
+     * reveal moves. */
+    node.key = data->key;
     /* The scroll axis is the column's: the wrapper hugs its rows instead of
      * stretching to the window and shrinking them to fit. */
     node.style.direction = CF_DIRECTION_COLUMN;

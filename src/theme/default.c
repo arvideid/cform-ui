@@ -69,45 +69,48 @@ static const cf_theme
                              {.background = {.present = true, .value = RGBA(46, 46, 46)}},
                          .pressed =
                              {.background = {.present = true, .value = RGBA(10, 10, 10)}},
+                         /* The ring a keyboard hand leaves behind: a mid grey that clears
+                          * roughly 3:1 against both the button's own dark fill and the light
+                          * surface it rests on, so the edge reads on either side instead of
+                          * vanishing into the fill the way a darker or lighter line would. */
                          .focused =
-                             {.border_color = {.present = true, .value = RGBA(82, 82, 82)}},
+                             {.border_color = {.present = true, .value = RGBA(130, 130, 130)}},
                          .disabled = {.background = {.present = true, .value = RGBA(229, 229, 229)},
                                       .border_color = {.present = true,
                                                        .value = RGBA(212, 212, 212)}}},
                     [CF_ROLE_FIELD] =
-                        {
-                            .base = {.background = {.present = true, .value = RGBA(250, 250, 250)},
-                                     .border_color = {.present = true,
-                                                      .value = RGBA(212, 212, 212)},
-                                     .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
-                                     .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
-                                     .margin = MARGINS,
-                                     .flex_shrink = SHRINK,
-                                     .radius = 6.0f,
-                                     /* A value longer than the box slides under its edge
-                                      * rather than past its border. */
-                                     .clips_content = true},
-                            .hovered = {.border_color = {.present = true,
-                                                         .value = RGBA(163, 163, 163)}},
-                            .focused =
-                                {.border_color = {.present = true, .value = RGBA(10, 10, 10)},
-                                 /* A caret is only worth showing to whoever can type:
-                                  * the focus books both marks, and the caret takes the
-                                  * ink the bytes are drawn in, which is CSS's default
-                                  * for caret-color. */
-                                 .caret = {.present = true, .value = RGBA(10, 10, 10)},
-                                 .selection = {.present = true, .value = RGBA(191, 219, 254)}},
-                            .disabled = {.background = {.present = true,
-                                                        .value = RGBA(229, 229, 229)}}},
-                    [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,
-                                                                 .value = RGBA(229, 229, 229)}}},
-                    [CF_ROLE_SCROLL] =
-                        {.base = {.background = {.present = true, .value = RGBA(212, 212, 212)},
+                        {.base = {.background = {.present = true, .value = RGBA(250, 250, 250)},
+                                  .border_color = {.present = true, .value = RGBA(212, 212, 212)},
+                                  .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
+                                  .padding = {PX(8.0f), PX(6.0f), PX(8.0f), PX(6.0f)},
                                   .margin = MARGINS,
                                   .flex_shrink = SHRINK,
-                                  .radius = 3.0f},
-                         .hovered = {.background = {.present = true, .value = RGBA(163, 163, 163)}},
-                         .pressed = {.background = {.present = true, .value = RGBA(82, 82, 82)}}},
+                                  .radius = 6.0f,
+                                  /* A value longer than the box slides under its edge
+                                   * rather than past its border. */
+                                  .clips_content = true},
+                         .hovered = {.border_color = {.present = true,
+                                                      .value = RGBA(163, 163, 163)}},
+                         .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)},
+                                     /* A caret is only worth showing to whoever can type:
+                                      * the focus books both marks, and the caret takes the
+                                      * ink the bytes are drawn in, which is CSS's default
+                                      * for caret-color. */
+                                     .caret = {.present = true, .value = RGBA(10, 10, 10)},
+                                     .selection = {.present = true, .value = RGBA(191, 219, 254)}},
+                         .disabled =
+                             {.background = {.present = true, .value = RGBA(229, 229, 229)}}},
+                    [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,
+                                                                 .value = RGBA(229, 229, 229)}}},
+                    /* The role styles the scrollable container, not the thumb. A pane that
+                     * darkens wherever the pointer happens to rest is not a control, and the
+                     * thumb that answers a drag carries its own styling; so the container
+                     * paints its track and nothing more under hover or a press. */
+                    [CF_ROLE_SCROLL] = {.base = {.background = {.present = true,
+                                                                .value = RGBA(212, 212, 212)},
+                                                 .margin = MARGINS,
+                                                 .flex_shrink = SHRINK,
+                                                 .radius = 3.0f}},
                     [CF_ROLE_IMAGE] = {.base = {.background = {.present = true,
                                                                .value = RGBA(229, 229, 229)},
                                                 .margin = MARGINS,
