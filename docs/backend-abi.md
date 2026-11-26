@@ -81,6 +81,10 @@ that comparison.
   Nothing above this boundary can see that queue, so the duty is the backend's.
 - `destroy` is the host's, not the shell's: `cf_app_run` borrows the backend and
   hands it back, so a window outlives the loop unless the host closes it.
+- A teardown gives back only what the backend took. If starting it found the
+  platform already running, leaving the platform running is the right half of the
+  job: a host that had its renderer up before your window opened does not expect
+  that window to shut the subsystem down on its way out.
 - `user_data` is never read by the engine. It's yours.
 
 ## Everything is in points, not pixels

@@ -5,18 +5,23 @@
  * The resource half of the backend contract, run against the one backend that
  * owns a device: an upload answers a number, a release takes the bytes back and
  * hands that number to the next upload, and a stream still naming a retired
- * number draws nothing instead of whatever the number came to mean.
+ * number draws nothing instead of whatever the number came to mean. What the
+ * backend takes for the window it also gives back, and only what it took - a
+ * second window does not shut the platform the first one is standing on.
  *
  * The window is opened on SDL's dummy video driver, which the test property sets
- * in the environment: no display, no desktop automation, and the same three
- * slots a real device serves. Where even that cannot open a window the case says
- * so and leaves, the way the font case does, because the headless tiers are what
- * ctest can trust.
+ * in the environment: no display, no desktop automation, and the same four slots
+ * a host calls on a real device. Where even that cannot open a window the case
+ * says so and leaves, the way the font case does.
  */
 
 /* Two RGBA8888 pixels, the layout create_texture promises. */
 static const uint8_t pixels[4u * 2u * 2u] = {255u, 0u,   0u, 255u, 0u, 0u,
                                              255u, 255u, 0u, 0u,   0u, 255u};
+
+static cf_backend open_window(const char *title) {
+    return cf_backend_sdl(&(cf_sdl_config){.title = title, .width = 64u, .height = 64u});
+}
 
 /* One image command naming the texture, which is the whole ask to draw it. */
 static void draw_texture(const cf_backend *backend, uint32_t texture) {
@@ -97,12 +102,41 @@ static void a_backend_that_reclaims_nothing_says_so(void) {
              "the recorder retires nothing it never took");
 }
 
+/* A host that already had the platform up keeps it: a window borrowed from it
+ * must not quit it on the way out, or the other window still drawing through the
+ * same subsystem loses its renderer and its uploads with it. */
+static void a_second_window_leaves_the_first_one_running(void) {
+    const cf_backend first = open_window("cform lifecycle one");
+
+    if (first.submit == NULL) {
+        printf("      skipped: no window this backend can open\n");
+        return;
+    }
+
+    const cf_backend second = open_window("cform lifecycle two");
+
+    if (second.submit == NULL) {
+        first.destroy(first.user_data);
+        printf("      skipped: no second window\n");
+        return;
+    }
+
+    const uint32_t held = upload(&first);
+    second.destroy(second.user_data);
+
+    const uint32_t again = upload(&first);
+    CF_CHECK(again != 0u, "the first window uploads after the second closes");
+    CF_CHECK(again != held, "and an upload there is not the retired one over there");
+    first.release_texture(first.user_data, again);
+    first.release_texture(first.user_data, held);
+    first.destroy(first.user_data);
+}
+
 int main(void) {
-    printf("sdl texture\n");
+    printf("sdl lifecycle\n");
     a_backend_that_reclaims_nothing_says_so();
 
-    cf_backend backend = cf_backend_sdl(
-        &(cf_sdl_config){.title = "cform texture test", .width = 64u, .height = 64u});
+    cf_backend backend = open_window("cform lifecycle");
 
     if (backend.submit == NULL || backend.create_texture == NULL ||
         backend.release_texture == NULL || backend.destroy == NULL) {
@@ -115,10 +149,13 @@ int main(void) {
     a_released_upload_leaves_its_number_behind(&backend);
     a_release_naming_nothing_changes_nothing(&backend);
 
-    /* Last, because nothing may be submitted through a destroyed backend: the
-     * leaks a missing teardown would leave are what the sanitizer tier fails on.
+    /* Last, because nothing may be submitted through a destroyed backend: what a
+     * teardown that skips this leaves behind is bytes the host has no way to reach
+     * again.
      */
     backend.destroy(backend.user_data);
+
+    a_second_window_leaves_the_first_one_running();
 
     return CF_REPORT();
 }

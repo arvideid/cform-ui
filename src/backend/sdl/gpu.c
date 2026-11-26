@@ -39,6 +39,10 @@ typedef struct sdl_state {
      * one clip down a whole column of boxes, and the state call is not free. */
     SDL_Rect clip;
     bool clip_set;
+    /* This backend asked for the video subsystem rather than found it already
+     * there, so stopping it on the way out is this backend's duty and not a
+     * host's surprise. */
+    bool owns_platform;
 } sdl_state;
 
 /*
@@ -344,9 +348,12 @@ static void sdl_destroy(void *user_data) {
     SDL_StopTextInput(state->window);
     SDL_DestroyRenderer(state->renderer);
     SDL_DestroyWindow(state->window);
-    /* This backend started the platform, so it is this backend's to stop it.
-     * A host that owns SDL's lifecycle writes its own backend instead. */
-    SDL_Quit();
+    /* Only the backend that started the platform may stop it: a host that had
+     * SDL up before this window - an engine drawing its own frame beside it -
+     * would lose its subsystems to a teardown it never asked for. */
+    if (state->owns_platform) {
+        SDL_Quit();
+    }
     cf_free_block(state);
 }
 
@@ -610,7 +617,12 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
         return (cf_backend){0};
     }
 
-    if (!SDL_Init(SDL_INIT_VIDEO)) {
+    /* Whether the platform is this backend's to stop is decided here, before the
+     * ask: a host that already had SDL up keeps it, and the failure paths below
+     * and the teardown leave the subsystems exactly as they found them. */
+    const bool started_platform = SDL_WasInit(SDL_INIT_VIDEO) == 0u;
+
+    if (started_platform && !SDL_Init(SDL_INIT_VIDEO)) {
         cf_logf(CF_LOG_BACKEND, "backend: SDL did not start: %s", SDL_GetError());
         return (cf_backend){0};
     }
@@ -626,7 +638,11 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                                      (int)config->width, (int)config->height, SDL_WINDOW_RESIZABLE,
                                      &window, &renderer)) {
         cf_logf(CF_LOG_BACKEND, "backend: no window: %s", SDL_GetError());
-        SDL_Quit();
+
+        if (started_platform) {
+            SDL_Quit();
+        }
+
         return (cf_backend){0};
     }
 
@@ -655,12 +671,17 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     if (state == NULL) {
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
-        SDL_Quit();
+
+        if (started_platform) {
+            SDL_Quit();
+        }
+
         return (cf_backend){0};
     }
 
     state->window = window;
     state->renderer = renderer;
+    state->owns_platform = started_platform;
 
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .user_data = state,
