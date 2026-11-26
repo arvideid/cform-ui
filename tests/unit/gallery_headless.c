@@ -207,6 +207,12 @@ static bool accept_bigger_fill(const cf_command *command) {
 /* The field-box hunt needs the echo's y to sit above it. */
 static float field_echo_y;
 
+/* The memo's caption sits below the box the other mode declared, so the hunt for that box
+ * needs the caption's y the same way the entry's hunt needs its echo. */
+static float memo_caption_y;
+
+static cf_point memo_press;
+
 /* Where the press that focused the field landed, for the case that moves from there. */
 static cf_point field_press;
 
@@ -243,6 +249,18 @@ static cf_rect find_text_rect(const char *needle, bool *found) {
     }
 
     return out;
+}
+
+/*
+ * The memo is the same widget with the other word said about it: two rows of its own, and a
+ * box taller than the entry's. The height window is what separates the two field fills, so a
+ * page that gave the memo a different height would report the hunt as a precondition that
+ * was not met rather than as a wrong assertion.
+ */
+static bool accept_memo_box(const cf_command *command) {
+    return command->rect.y + command->rect.height <= memo_caption_y + 1.0f &&
+           command->rect.width > 100.0f && command->rect.height > 2.0f * FIELD_HEIGHT - 1.0f &&
+           command->rect.height < 3.0f * FIELD_HEIGHT;
 }
 
 static cf_rect find_fill_rect(bool (*accept)(const cf_command *), bool *found) {
@@ -763,6 +781,50 @@ static bool focus_the_field(void) {
     return true;
 }
 
+/*
+ * Chapter two's other box, reached and focused, the way focus_the_field reaches the entry:
+ * the caption is hunted by prefix, the box above it by shape, and the press that books focus
+ * lands in the middle of that box. The buffer is wiped first, because the rows the caption
+ * counts are read out of the bytes the page keeps.
+ */
+static bool focus_the_memo(void) {
+    if (!reveal_to("the memo holds", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "the memo's caption can be reached on the page");
+        return false;
+    }
+
+    bool found = false;
+    const cf_rect caption = find_text_prefix("the memo holds", &found);
+
+    CF_CHECK(found, "the memo's caption is on the page");
+
+    if (!found) {
+        return false;
+    }
+
+    memo_caption_y = caption.y;
+    const cf_rect box = find_fill_rect(accept_memo_box, &found);
+
+    CF_CHECK(found, "the memo box is painted above its own caption");
+
+    if (!found) {
+        return false;
+    }
+
+    CF_CHECK(box.height > 2.0f * FIELD_HEIGHT - 1.0f,
+             "and the box it was painted in is the two rows the build stated");
+
+    memo.length = 0u;
+    memo.refusals = 0u;
+    memo.caret = 0u;
+    memo.mark = 0u;
+    memo_press = (cf_point){.x = box.x + 30.0f, .y = box.y + box.height / 2.0f};
+    step(press_at(memo_press.x, memo_press.y));
+    step(release_at(memo_press.x, memo_press.y));
+
+    return true;
+}
+
 static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     /* One session for the whole case: the reveal moves what the page shows, so the box
      * hunted and the point pressed have to come from the same scrolled frame. */
@@ -1044,6 +1106,72 @@ static void the_gallery_page_hears_the_value_move_and_not_the_caret(void) {
 
     CF_CHECK(typed.length == 0u && page_reads("changes the page heard: 2"),
              "the key that took the bytes is the next report");
+
+    end_session();
+}
+
+/*
+ * The two modes of the same widget, side by side on one page. The memo was declared for rows,
+ * so Enter writes one and the page is asked to save nothing, and its arrows walk the caret
+ * between the rows the box paints; the entry above it keeps the key as the page's ask and
+ * refuses the break altogether. The memo's third row is the other half of the rule: the box
+ * stays the two rows the build stated while the value lays three, because the mode is a word
+ * the build said and not a reading of what the box turned out to be.
+ */
+static void the_two_modes_answer_the_same_keys_differently(void) {
+    start_session(current_size());
+
+    if (!focus_the_memo()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text("first line"));
+    step(key_down(CF_KEY_ENTER));
+    step(typed_text("second"));
+
+    CF_CHECK(memo.length == 17u && memo_chars[10] == '\n',
+             "Enter writes the break a memo is declared to hold");
+    CF_CHECK(page_reads("the memo holds 17 bytes and 1 break"),
+             "and the caption says the break is in the value the page reads");
+    CF_CHECK(page_reads("asked to save: nothing since the page opened"),
+             "the key that broke a line asks the page to save nothing");
+
+    step(key_down(CF_KEY_UP));
+
+    CF_CHECK(memo.caret == 6u, "one arrow steps onto the row above, six scalars in");
+
+    step(shift_arrow(CF_KEY_DOWN));
+
+    CF_CHECK(memo.caret == 17u && memo.mark == 6u,
+             "and holding shift reaches down over the row it came back from");
+
+    /* The shift above left a range held, and a key that writes takes what is selected: end
+     * the walk at the value's own edge before adding to it. */
+    step(key_down(CF_KEY_END));
+    step(key_down(CF_KEY_ENTER));
+    step(typed_text("third"));
+
+    CF_CHECK(memo.length == 23u && page_reads("the memo holds 23 bytes and 2 break"),
+             "a third row lands in the value the same way");
+
+    step(key_down(CF_KEY_UP));
+
+    CF_CHECK(memo.caret == 16u,
+             "and the arrow finds the row above it, which the box slides to show");
+
+    /* The other box on the same page, with the other word said about it. */
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text("done memo"));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(page_reads("asked to save: done memo"),
+             "the single-line box hands the same key to the door the page put on it");
+    CF_CHECK(memo.length == 23u, "and adds no row to the value the other box is keeping");
 
     end_session();
 }
@@ -1599,6 +1727,7 @@ int main(void) {
     CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
     CF_RUN(the_gallery_field_saves_on_enter_and_types_a_space);
     CF_RUN(the_gallery_page_hears_the_value_move_and_not_the_caret);
+    CF_RUN(the_two_modes_answer_the_same_keys_differently);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);
