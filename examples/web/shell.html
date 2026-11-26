@@ -19,16 +19,41 @@
     /* The canvas' CSS box is the page. SDL's Emscripten video driver reads
      * that box when the window is created resizable and matches the drawing
      * buffer to it, so a wider tab lays the page out against a wider surface
-     * rather than scaling the same picture. The width/height attributes below
-     * are only what a browser without WebAssembly sees. */
+     * rather than scaling the same picture. `inset: 0` tracks the layout
+     * viewport, which follows the window and docked dev tools; `100vh` does not,
+     * so it left a strip of the cleared buffer showing when the console closed.
+     * The width/height attributes below are only what a browser without
+     * WebAssembly sees. */
     #canvas {
+      position: fixed;
+      inset: 0;
       display: block;
-      width: 100vw;
-      height: 100vh;
+      width: 100%;
+      height: 100%;
       outline: none;
-      background: #000;
+      background: #14151a;
     }
   </style>
+  <script>
+    /* SDL asks the browser for a WebGL context with preserveDrawingBuffer off,
+     * the default. A browser then clears the drawing buffer every time it
+     * composites the canvas, so any frame the shell does not redraw before the
+     * next composite - the idle frame it presents without drawing, the wait for
+     * the next event - shows the cleared buffer: the page flickers to black
+     * under the cursor and a gap opens below the console. Locking the attribute
+     * on keeps the last drawn frame in the buffer, so a composite the shell did
+     * not redraw still shows that frame. The context type is left exactly as it
+     * was asked for; only the one attribute is added. */
+    (function () {
+      var getContext = HTMLCanvasElement.prototype.getContext;
+      HTMLCanvasElement.prototype.getContext = function (type, attributes) {
+        if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+          attributes = Object.assign({}, attributes, { preserveDrawingBuffer: true });
+        }
+        return getContext.call(this, type, attributes);
+      };
+    })();
+  </script>
 </head>
 
 <body>

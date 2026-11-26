@@ -388,14 +388,18 @@ emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DCFORM_WIT
 cmake --build build-wasm
 ```
 
-The page fills the browser viewport. `examples/web/shell.html` sizes the
-canvas' CSS box to `100vw`/`100vh`, and SDL's Emscripten video driver reads
-that box on every window resize and matches the drawing buffer to it, so the
-layout re-flows against whatever the tab is rather than scaling a fixed
-picture. The build passes `-sSINGLE_FILE=1`, which base64-embeds the wasm and
-the preloaded font into the emitted JS, so a `file://` tab can open the page
-directly - without it, the Same-Origin Policy refuses to fetch the sibling
-`.wasm` and `.data` and the page never boots.
+The page fills the browser viewport. `examples/web/shell.html` pins the canvas'
+CSS box to the layout viewport with `position: fixed; inset: 0`, and SDL's
+Emscripten video driver reads that box on every resize and matches the drawing
+buffer to it, so the layout re-flows against whatever the tab is rather than
+scaling a fixed picture. The same script asks the browser for a WebGL context
+that keeps its drawing buffer between composites: SDL asks for one that does
+not, and a buffer a browser has cleared shows as black on any frame the shell
+presents without redrawing - the idle frame, the wait for the next event. The
+build passes `-sSINGLE_FILE=1`, which base64-embeds the wasm and the font into
+the emitted JS, so a `file://` tab can open the page directly - without it, the
+Same-Origin Policy refuses to fetch the sibling `.wasm` and `.data` and the page
+never boots.
 
 ### The three scripts
 
