@@ -300,6 +300,27 @@ static bool page_reads(const char *prefix) {
     return found;
 }
 
+/*
+ * Whether a pointer can be put on a painted box at all. A row that the scroller
+ * clips at its edge is still recorded, so "the page shows it" is not "the page can
+ * be clicked there": the centre of a box hanging over the bottom edge lands on
+ * nothing, and a tap that fires no handler reads as a dead control.
+ */
+static bool reaches_pointer(cf_rect rect) {
+    return rect.y >= current_viewport.y - 0.5f &&
+           rect.y + rect.height <= current_viewport.y + current_viewport.height - 0.5f &&
+           rect.x >= current_viewport.x - 0.5f &&
+           rect.x + rect.width <= current_viewport.x + current_viewport.width - 0.5f;
+}
+
+/* The needle is on the page and within reach of a pointer. */
+static bool page_reveals(const char *needle) {
+    bool found = false;
+    const cf_rect rect = find_text_rect(needle, &found);
+
+    return found && reaches_pointer(rect);
+}
+
 /* ---------- events ---------- */
 
 static cf_event move_to(float x, float y) {
@@ -529,6 +550,13 @@ static bool tap(const char *name) {
         return false;
     }
 
+    if (!reaches_pointer(label)) {
+        printf("    FAIL %s:%d: '%s' is painted past the edge a pointer can reach\n", __FILE__,
+               __LINE__, name);
+        cf_failures++;
+        return false;
+    }
+
     const float x = label.x + label.width / 2.0f;
     const float y = label.y + label.height / 2.0f;
 
@@ -538,11 +566,11 @@ static bool tap(const char *name) {
 }
 
 /* Walk the current session's page scroll by 192 pixels at a time until the
- * needle appears. The wheel handler would chain to a chapter's own scroller
- * and land wherever it stops, so the helper writes the offset directly and
- * lets the build read it back - the same value a wheel would produce, just
- * without the intermediate hit walk. The session stays open at whichever
- * step found the needle, so the caller can tap it next. */
+ * needle is somewhere a pointer can be put on it. The wheel handler would chain
+ * to a chapter's own scroller and land wherever it stops, so the helper writes
+ * the offset directly and lets the build read it back - the same value a wheel
+ * would produce, just without the intermediate hit walk. The session stays open
+ * at whichever step reached the needle, so the caller can tap it next. */
 #define REVEAL_STEP_PX 192.0f
 #define REVEAL_MAX_STEPS 40u
 
@@ -557,8 +585,8 @@ static bool reveal_to(const char *needle, uint32_t max_steps) {
         start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
     }
 
-    /* If the needle is already visible, no walking needed. */
-    if (page_shows(needle)) {
+    /* If the needle is already reachable, no walking needed. */
+    if (page_reveals(needle)) {
         return true;
     }
 
@@ -584,7 +612,7 @@ static bool reveal_to(const char *needle, uint32_t max_steps) {
         cf_frame_run(&session, build, current_size(), 1.0f / 60.0f, &list);
         record_frame(&list);
 
-        if (page_shows(needle)) {
+        if (page_reveals(needle)) {
             return true;
         }
     }
