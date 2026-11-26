@@ -12,6 +12,7 @@ typedef struct recorder {
     int ups;
     int scrolls;
     int keys;
+    int activates;
     bool stop;
     bool capture;
     uint32_t last_target;
@@ -55,6 +56,17 @@ static void on_key(cf_event *event, void *user_data) {
     recorder *seen = user_data;
 
     seen->keys++;
+    seen->last_target = event->target;
+
+    if (seen->stop) {
+        cf_stop(event);
+    }
+}
+
+static void on_activate(cf_event *event, void *user_data) {
+    recorder *seen = user_data;
+
+    seen->activates++;
     seen->last_target = event->target;
 
     if (seen->stop) {
@@ -1144,6 +1156,84 @@ static void a_ring_that_empties_loses_the_focus(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The keyboard asks the box that holds the focus to do its job, and the ask stops
+ * there: a container is not asked because its child is the one standing on the
+ * key, and a box that answered the key is not asked again.
+ */
+static void the_focused_box_is_the_one_the_key_asks(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder first = {0};
+    recorder second = {0};
+    recorder container = {0};
+    cf_node children[] = {focus_box(50.0f, 50.0f, NULL, NULL), focus_box(50.0f, 50.0f, NULL, NULL)};
+    children[0].handlers.activate = on_activate;
+    children[0].handlers.activate_data = &first;
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &first;
+    children[1].handlers.activate = on_activate;
+    children[1].handlers.activate_data = &second;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.handlers.activate = on_activate;
+    root.handlers.activate_data = &container;
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t a = child_slot(&ctx, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(first.activates == 0 && container.activates == 0,
+             "with nothing focused the ask reaches nobody");
+
+    cf_focus(&ctx, a);
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(first.keys == 1, "the focused box is handed the key");
+    CF_CHECK(first.activates == 1, "and then asked to do its job");
+    CF_CHECK(first.last_target == a, "the event names the box being asked");
+    CF_CHECK(second.activates == 0, "the box ahead of it on the ring is not asked");
+    CF_CHECK(container.activates == 0, "and the ask does not climb to the container");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_SPACE});
+
+    CF_CHECK(first.activates == 2, "the space bar asks the same box the same way");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ESCAPE});
+
+    CF_CHECK(first.activates == 2, "a key that asks nothing runs no handler");
+
+    first.stop = true;
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(first.keys == 4, "the box is handed the key it claims");
+    CF_CHECK(first.activates == 2, "and a box that answered it is not asked again");
+
+    /* Switched off underneath the keyboard: the box still lives and still holds the
+     * focus id, and a control that is off answers no key from anyone. */
+    first.stop = false;
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(first.keys == 4, "a box switched off runs no handler for the key");
+    CF_CHECK(first.activates == 2, "and is not asked to do its job either");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -1170,6 +1260,7 @@ int main(void) {
     CF_RUN(a_press_on_a_box_that_takes_no_focus_leaves_the_keyboard_alone);
     CF_RUN(a_box_that_answers_tab_keeps_the_move_to_itself);
     CF_RUN(a_ring_that_empties_loses_the_focus);
+    CF_RUN(the_focused_box_is_the_one_the_key_asks);
 
     return CF_REPORT();
 }

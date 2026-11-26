@@ -471,6 +471,10 @@ static uint32_t named_key(SDL_Keycode key) {
         return (uint32_t)CF_KEY_ESCAPE;
     case SDLK_TAB:
         return (uint32_t)CF_KEY_TAB;
+    case SDLK_SPACE:
+        /* The bar is a control's ask and a field's character at once: the key
+         * event names the ask, and SDL's text event still carries the space. */
+        return (uint32_t)CF_KEY_SPACE;
     case SDLK_F12:
         return (uint32_t)CF_KEY_F12;
     default:

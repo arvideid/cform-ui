@@ -145,9 +145,9 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
   says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk
-  the declared boxes in document order, and `cf_focus` moves it by hand. What is
-  missing is the key that activates: a focused button is handed **Enter** and
-  presses nothing.
+  the declared boxes in document order, and **Enter** or the space bar asks the
+  focused box to do its job. A dialog keeps the keyboard by answering **Tab**
+  itself; a field still cannot cut, copy or paste.
 - **An editing field has no clipboard.** Cut, copy and paste are not wired to
   the platform. Enter submits nothing. There is no undo, no selection by word,
   no caret blink and no IME, so composing Japanese types nothing.

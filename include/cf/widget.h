@@ -17,9 +17,10 @@
  */
 
 /*
- * The click a button fires: the slot the button kept this frame, so the
+ * The ask a button answers: the slot the button kept this frame, so the
  * handler can read the interaction state and rects off the context, and the
- * user pointer the build handed the button.
+ * user pointer the build handed the button. A click and a key are the same ask
+ * here, and the callback is not told which one came.
  */
 typedef void (*cf_on_press)(cf_ctx *ctx, uint32_t slot, void *user_data);
 
@@ -36,10 +37,12 @@ cf_node cf_label(cf_ctx *ctx, cf_string text, const cf_text_stack *stack, cf_col
 /*
  * A themed press target. The name keys the button's identity across builds;
  * the children - a label, an icon - sit inside the theme's resting box, and
- * the theme's variants paint hover, press, focus and disabled over it. The
- * click fires on the release that starts on the button and ends inside its
- * rect. A NULL context, name or handler answers a declaration that draws
- * nothing and fires nothing.
+ * the theme's variants paint hover, press, focus and disabled over it. The ask
+ * fires on the release that starts on the button and ends inside its rect, and
+ * on Enter or the space bar while the button holds the focus. The button
+ * declares that focus for its caller, since a role paints a control and does not
+ * make it reachable. A NULL context, name or handler answers a declaration that
+ * draws nothing and fires nothing.
  */
 cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *user_data,
                   const cf_node *children, uint32_t child_count);

@@ -47,7 +47,12 @@ typedef enum cf_key {
     CF_KEY_TAB = 11,
     /* The shell's own key: nothing in the tree dispatches it, the loop that
      * owns the inspector reads it and toggles the frame's numbers. */
-    CF_KEY_F12 = 12
+    CF_KEY_F12 = 12,
+    /* The space bar. It is named because a control reads it as an ask to act, the
+     * way a pointer release inside its rect is; what a field types is still the
+     * text event the device sends beside it, so naming the key borrows nothing
+     * from the character. */
+    CF_KEY_SPACE = 13
 } cf_key;
 
 /*

@@ -41,6 +41,15 @@ static void button_pointer(cf_event *event, void *user_data) {
     button->on_press(button->ctx, event->target, button->user_data);
 }
 
+/* The keyboard asks for the same thing a release inside the rect asks. No rect is
+ * read: the box holding the focus is the box that was standing there, and the
+ * press the pointer booked is nobody's business here. */
+static void button_activate(cf_event *event, void *user_data) {
+    button_data *button = user_data;
+
+    button->on_press(button->ctx, event->target, button->user_data);
+}
+
 cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *user_data,
                   const cf_node *children, uint32_t child_count) {
     cf_node node = {.style = cf_style_default()};
@@ -70,6 +79,8 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
     node.focusable = true;
     node.handlers.pointer = button_pointer;
     node.handlers.pointer_data = data;
+    node.handlers.activate = button_activate;
+    node.handlers.activate_data = data;
     node.children = cf_children(ctx, children, child_count);
     node.child_count = node.children != NULL ? child_count : 0u;
     return node;

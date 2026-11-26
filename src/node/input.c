@@ -394,6 +394,24 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             ctx->focus_id = next != CF_NO_LINK ? cf_store_id(&ctx->nodes, next) : CF_NO_ID;
         }
 
+        /* Enter or the space bar on the box the keyboard is standing on is the same
+         * ask as a release inside its rect. The question stops at the focused node
+         * rather than climbing: the box asked is the box that declared it takes the
+         * keyboard, and a label inside a button never holds the focus to be asked.
+         * A node that answered the key is not asked again, which is how a field
+         * that took Enter submits instead of also firing the button around it. */
+        if (!event.stopped && focused != CF_NO_LINK &&
+            (event.key == CF_KEY_ENTER || event.key == CF_KEY_SPACE)) {
+            const node_record *record = record_of(ctx, focused);
+
+            if (!record->disabled && record->handlers.activate != NULL) {
+                event.target = focused;
+                event.stopped = false;
+                event.captured = false;
+                record->handlers.activate(&event, record->handlers.activate_data);
+            }
+        }
+
         return;
     }
 

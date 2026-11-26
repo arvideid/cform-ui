@@ -176,6 +176,73 @@ static void a_disabled_button_neither_presses_nor_fires(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The keyboard is the other door into the same ask: a focused button fires the
+ * press on Enter and on the space bar, and the label inside it never becomes the
+ * one being asked because a label takes no focus.
+ */
+static void the_focused_button_answers_the_keys_that_ask(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    clicks seen = {0};
+
+    frame_of(&ctx, &seen, false);
+
+    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(seen.count == 0, "a button nobody focused fires on no key");
+
+    cf_focus(&ctx, button_slot);
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(seen.count == 1, "Enter on the focused button is the same ask as a click");
+    CF_CHECK(seen.last_slot == button_slot, "and it names the button, not the label inside it");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_SPACE});
+
+    CF_CHECK(seen.count == 2, "the space bar asks for the same thing");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_END});
+
+    CF_CHECK(seen.count == 2, "a key with no ask in it fires nothing");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_disabled_button_takes_no_focus_and_answers_no_key(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    clicks seen = {0};
+
+    frame_of(&ctx, &seen, true);
+
+    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+
+    cf_focus(&ctx, button_slot);
+
+    CF_CHECK(!cf_focused(&ctx, button_slot), "a switched-off button takes no focus");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
+
+    CF_CHECK(seen.count == 0, "and no key hands it the ask it refused the pointer for");
+
+    cf_ctx_free(&ctx);
+}
+
 static void the_button_declares_the_theme_s_resting_box(void) {
     cf_ctx ctx;
 
@@ -206,6 +273,8 @@ int main(void) {
     CF_RUN(a_click_fires_on_the_release_that_ends_inside);
     CF_RUN(a_release_off_the_button_leaves_the_click_unfired);
     CF_RUN(a_disabled_button_neither_presses_nor_fires);
+    CF_RUN(the_focused_button_answers_the_keys_that_ask);
+    CF_RUN(a_disabled_button_takes_no_focus_and_answers_no_key);
     CF_RUN(the_button_declares_the_theme_s_resting_box);
 
     return CF_REPORT();

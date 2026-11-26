@@ -18,6 +18,15 @@ typedef struct cf_handlers {
     void *pointer_data;
     cf_event_fn key;
     void *key_data;
+    /*
+     * "Do the thing this control is for", asked by the keyboard: Enter or the
+     * space bar on the node that holds the focus runs it, and the event still
+     * names which key did. A widget whose action is the same whoever asked hands
+     * its press callback to both doors; a box with no ask of its own leaves it
+     * NULL, and a node that answered the key itself is not asked again.
+     */
+    cf_event_fn activate;
+    void *activate_data;
 } cf_handlers;
 
 /*
@@ -352,6 +361,9 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
  * previous box that takes it, in document order, wrapping at the ends - unless
  * the node holding focus answered the key first, which is how a dialog keeps the
  * keyboard inside itself. A page with nothing focusable loses focus.
+ *
+ * Enter and the space bar ask the focused node to do its job: its activate
+ * handler runs, and no other node is asked.
  */
 void cf_input(cf_ctx *ctx, cf_event event);
 

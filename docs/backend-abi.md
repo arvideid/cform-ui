@@ -187,10 +187,15 @@ sits idle. Map your device's input onto `cf_event_type` and nothing else:
 - The engine uses **F12** — `CF_KEY_F12` — for its own inspector, before your page
   sees it.
 - A key event carries one of the `cf_key` numbers, not your platform's. Map
-  backspace, enter, the four arrows, home, end, delete, escape, tab and F12 onto
-  them. A key you have no word for keeps its own number, which no widget reads,
-  and a key that types a character types it through `CF_EVENT_TEXT` — so letters
-  never need mapping, and a widget never guesses what a keycode spelled.
+  backspace, enter, the four arrows, home, end, delete, escape, tab, the space
+  bar and F12 onto them. A key you have no word for keeps its own number, which
+  no widget reads, and a key that types a character types it through
+  `CF_EVENT_TEXT` — so letters never need mapping, and a widget never guesses
+  what a keycode spelled.
+- The space bar is the one key that does both jobs: report `CF_KEY_SPACE` while the
+  key is down and let the text event carry the character it typed. A control reads
+  the first as an ask to act, a field reads the second as a space, and neither is
+  confused because the two events say which of them they are.
 - `cf_event.mods` carries the `cf_mod` bits held when the key went down: it is how
   a field learns that shift meant "extend the selection" rather than "type a
   capital". Report zero if you would rather not track it, and the widgets that
