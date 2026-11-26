@@ -207,6 +207,9 @@ static bool accept_bigger_fill(const cf_command *command) {
 /* The field-box hunt needs the echo's y to sit above it. */
 static float field_echo_y;
 
+/* Where the press that focused the field landed, for the case that moves from there. */
+static cf_point field_press;
+
 static bool accept_field_box(const cf_command *command) {
     return command->rect.y + command->rect.height <= field_echo_y + 1.0f &&
            command->rect.width > 100.0f && command->rect.height > FIELD_HEIGHT - 1.0f &&
@@ -712,28 +715,32 @@ static void a_switched_off_button_takes_no_click(void) {
     CF_CHECK(*click_count(&session) == 0u, "the button it disabled fired nothing");
 }
 
-static void a_focused_field_takes_what_the_keyboard_wrote(void) {
-    /* One session for the whole case: the reveal moves what the page shows, so the box
-     * hunted and the point pressed have to come from the same scrolled frame. */
-    start_session(current_size());
+/* An arrow with the modifier that turns it into a word key. */
+static cf_event word_arrow(cf_key key, uint32_t extra) {
+    return (cf_event){
+        .type = CF_EVENT_KEY_DOWN, .key = (uint32_t)key, .mods = (uint32_t)CF_MOD_CONTROL | extra};
+}
 
+/*
+ * Chapter two's field, reached and focused. The caption carries the buffer's bytes, so
+ * it is hunted by prefix; the field states its height rather than measuring an empty
+ * buffer, so its box is the painted one above that line. Every step is its own frame,
+ * because the reveal moves what the page shows and the box hunted has to come from the
+ * frame the press lands in. False leaves the precondition reported by the caller.
+ */
+static bool focus_the_field(void) {
     if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
         CF_CHECK(false, "the field's echo line can be reached on the page");
-        end_session();
-        return;
+        return false;
     }
 
-    /* The caption carries the buffer's bytes, so it is hunted by prefix; the
-     * field states its height rather than measuring an empty buffer, so its
-     * box is the last painted one above that line. */
     bool found = false;
     const cf_rect echo = find_text_prefix("the buffer holds", &found);
 
     CF_CHECK(found, "the field's echo line is on the page");
 
     if (!found) {
-        end_session();
-        return;
+        return false;
     }
 
     field_echo_y = echo.y;
@@ -742,21 +749,31 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     CF_CHECK(found, "the entry box is painted above its own echo");
 
     if (!found) {
+        return false;
+    }
+
+    typed.length = 0u;
+    field_press = (cf_point){.x = field.x + 30.0f, .y = field.y + field.height / 2.0f};
+    step(press_at(field_press.x, field_press.y));
+    step(release_at(field_press.x, field_press.y));
+
+    return true;
+}
+
+static void a_focused_field_takes_what_the_keyboard_wrote(void) {
+    /* One session for the whole case: the reveal moves what the page shows, so the box
+     * hunted and the point pressed have to come from the same scrolled frame. */
+    start_session(current_size());
+
+    if (!focus_the_field()) {
         end_session();
         return;
     }
 
-    typed.length = 0u;
-
-    const float x = field.x + 30.0f;
-    const float y = field.y + field.height / 2.0f;
-
-    step(press_at(x, y));
-    step(release_at(x, y));
     step(typed_text("hello"));
     step(typed_text(" world"));
     step(key_down(CF_KEY_BACKSPACE));
-    step(move_to(x, y));
+    step(move_to(field_press.x, field_press.y));
 
     /* The shell's two answers are read as the session closes, so the close comes first:
      * what the last frame asked for is what the case then checks. */
@@ -822,39 +839,11 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
     start_session(current_size());
     session.clipboard = &clipboard;
 
-    if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
-        CF_CHECK(false, "the field's echo line can be reached on the page");
+    if (!focus_the_field()) {
         end_session();
         return;
     }
 
-    bool found = false;
-    const cf_rect echo = find_text_prefix("the buffer holds", &found);
-
-    CF_CHECK(found, "the field's echo line is on the page");
-
-    if (!found) {
-        end_session();
-        return;
-    }
-
-    field_echo_y = echo.y;
-    const cf_rect field = find_fill_rect(accept_field_box, &found);
-
-    CF_CHECK(found, "the entry box is painted above its own echo");
-
-    if (!found) {
-        end_session();
-        return;
-    }
-
-    typed.length = 0u;
-
-    const float x = field.x + 30.0f;
-    const float y = field.y + field.height / 2.0f;
-
-    step(press_at(x, y));
-    step(release_at(x, y));
     step(typed_text("hello"));
     step(shift_arrow(CF_KEY_LEFT));
     step(shift_arrow(CF_KEY_LEFT));
@@ -885,39 +874,11 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
 static void the_gallery_field_walks_its_own_typing_back(void) {
     start_session(current_size());
 
-    if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
-        CF_CHECK(false, "the field's echo line can be reached on the page");
+    if (!focus_the_field()) {
         end_session();
         return;
     }
 
-    bool found = false;
-    const cf_rect echo = find_text_prefix("the buffer holds", &found);
-
-    CF_CHECK(found, "the field's echo line is on the page");
-
-    if (!found) {
-        end_session();
-        return;
-    }
-
-    field_echo_y = echo.y;
-    const cf_rect field = find_fill_rect(accept_field_box, &found);
-
-    CF_CHECK(found, "the entry box is painted above its own echo");
-
-    if (!found) {
-        end_session();
-        return;
-    }
-
-    typed.length = 0u;
-
-    const float x = field.x + 30.0f;
-    const float y = field.y + field.height / 2.0f;
-
-    step(press_at(x, y));
-    step(release_at(x, y));
     step(typed_text("hello"));
     step(typed_text(" world"));
 
@@ -935,6 +896,46 @@ static void the_gallery_field_walks_its_own_typing_back(void) {
     step(chord('y', (uint32_t)CF_MOD_CONTROL));
 
     CF_CHECK(typed.length == 5u, "and the key beside it comes forward to where the walk stood");
+
+    end_session();
+}
+
+/*
+ * The word keys and select-all over the page's own build. `widget_field` checks the same
+ * rules against a context it assembles; this is the case that says the chords reach the
+ * field through the frame run, since a page that lost the handler would still type and
+ * still undo nothing through a path no key takes.
+ */
+static void the_gallery_field_steps_a_word_and_holds_the_value(void) {
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text("let me in"));
+    step(key_down(CF_KEY_HOME));
+
+    CF_CHECK(typed.caret == 0u && typed.mark == 0u, "the caret starts at the front of the value");
+
+    step(word_arrow(CF_KEY_RIGHT, 0u));
+
+    CF_CHECK(typed.caret == 3u && typed.mark == 3u, "one word key spends the word it stands in");
+
+    step(word_arrow(CF_KEY_RIGHT, (uint32_t)CF_MOD_SHIFT));
+
+    CF_CHECK(typed.caret == 6u && typed.mark == 3u,
+             "with shift it crosses the blank and selects the run beyond it");
+
+    step(chord('a', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.caret == 9u && typed.mark == 0u, "and the chord holds the whole value");
+
+    step(typed_text("x"));
+
+    CF_CHECK(typed.length == 1u && typed_bytes[0] == 'x',
+             "so the next run typed goes over all of it");
 
     end_session();
 }
@@ -1453,6 +1454,7 @@ int main(void) {
     CF_RUN(a_focused_field_takes_what_the_keyboard_wrote);
     CF_RUN(the_gallery_field_trades_bytes_with_the_host_it_names);
     CF_RUN(the_gallery_field_walks_its_own_typing_back);
+    CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);
