@@ -8,6 +8,25 @@
 #include "cf/types.h"
 
 /*
+ * A public symbol a caller should stop reaching for. The mark is a promise
+ * rather than a hint: a deprecated symbol stays for one MAJOR and is named in
+ * that release's notes, so a caller has a build that warns before a build that
+ * fails. The spelling is the compiler's; the message a caller writes after it
+ * says what to call instead.
+ */
+#if defined(_MSC_VER)
+#define CF_DEPRECATED __declspec(deprecated)
+#elif defined(__has_attribute)
+#if __has_attribute(deprecated)
+#define CF_DEPRECATED __attribute__((deprecated))
+#else
+#define CF_DEPRECATED
+#endif
+#else
+#define CF_DEPRECATED
+#endif
+
+/*
  * Bump allocator. Everything the engine builds per frame comes from an arena
  * that is cleared, not freed, so a frame's memory cost is its high-water mark
  * and the reset itself is the only deallocation step.
