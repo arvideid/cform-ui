@@ -444,7 +444,9 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
 /*
  * A device's code for a key into the number the tree reads. One it has no word
  * for keeps its own code: no widget above this file reads that, and inventing a
- * number for it would be worse than passing the platform's through.
+ * number for it would be worse than passing the platform's through. A Latin letter
+ * is the case where passing it through is the answer - SDL's code for one is its
+ * ASCII code, and event.h names that number the shortcut keys read.
  */
 static uint32_t named_key(SDL_Keycode key) {
     switch (key) {

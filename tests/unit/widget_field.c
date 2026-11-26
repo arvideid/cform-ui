@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "cf/node.h"
 #include "cf/widget.h"
 
@@ -31,9 +33,14 @@ static bool mono_has_glyph(void *font, uint32_t codepoint) {
 static const cf_text_ops mono_ops = {mono_metrics, mono_advance, mono_has_glyph};
 static const cf_font mono = {.handle = NULL, .ops = &mono_ops};
 
-/* One frame of the loop: a field over the build's buffer, declared inside
- * the frame - the bytes it keeps live in the arena cf_frame_begin emptied. */
-static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
+/*
+ * One frame of the loop: a field over the build's buffer, declared inside
+ * the frame - the bytes it keeps live in the arena cf_frame_begin emptied.
+ * `keys` is the root's own key handler, for the cases that need to know which
+ * chords the field below it let through.
+ */
+static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
+                          void *key_data) {
     cf_frame_begin(ctx);
 
     const cf_text_stack stack = {.fonts = &mono, .count = 1u};
@@ -48,11 +55,17 @@ static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
     root.style.height = CF_PX(200.0f);
     root.children = roots;
     root.child_count = 1u;
+    root.handlers.key = keys;
+    root.handlers.key_data = key_data;
 
     cf_diff(ctx, &root);
     cf_frame_resolve(ctx);
     cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
                     (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
+    frame_watched(ctx, text, disabled, NULL, NULL);
 }
 
 static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
@@ -483,6 +496,307 @@ static void a_key_that_carries_no_text_edits_nothing(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The desk the field moves bytes through, scripted: a run the test fills and
+ * reads back, the two refusals a real clipboard answers with, and the counters
+ * that say how often the field asked. Nothing here needs a window, so the
+ * contract the SDL port keeps is checked against a pair that keeps it.
+ */
+typedef struct fake_board {
+    char text[32];
+    uint32_t length;
+    bool refuses_read;
+    bool refuses_write;
+    uint32_t reads;
+    uint32_t writes;
+} fake_board;
+
+static cf_string board_read(void *user_data, char *out, uint32_t capacity) {
+    fake_board *board = user_data;
+
+    board->reads++;
+
+    if (board->refuses_read) {
+        return (cf_string){0};
+    }
+
+    cf_string answer = {.chars = NULL, .length = board->length};
+
+    if (out != NULL && capacity > 0u) {
+        const uint32_t taken = board->length < capacity ? board->length : capacity;
+        memcpy(out, board->text, taken);
+        answer = (cf_string){.chars = out, .length = taken};
+    }
+
+    return answer;
+}
+
+static bool board_write(void *user_data, cf_string utf8) {
+    fake_board *board = user_data;
+
+    board->writes++;
+
+    if (board->refuses_write || utf8.chars == NULL || utf8.length > sizeof board->text) {
+        return false;
+    }
+
+    memcpy(board->text, utf8.chars, utf8.length);
+    board->length = utf8.length;
+
+    return true;
+}
+
+/* The pair over one board, and the bytes the desk is said to hold. */
+static cf_clipboard board_of(fake_board *board) {
+    return (cf_clipboard){.read = board_read, .write = board_write, .user_data = board};
+}
+
+static void host_holds(fake_board *board, const char *run) {
+    board->length = (uint32_t)strlen(run);
+    memcpy(board->text, run, board->length);
+}
+
+/* The page's own ear: a root handler counting the keys the field let through. */
+static void count_keys(cf_event *event, void *user_data) {
+    (void)event;
+    (*(uint32_t *)user_data)++;
+}
+
+/* One letter key with the modifiers a desk would have put on it. */
+static void chord(cf_ctx *ctx, char letter, uint32_t mods) {
+    cf_input(ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)letter, .mods = mods});
+}
+
+/* A field focused with `run` typed into it and the last `count` scalars selected -
+ * the state every copy and cut case starts from, reached with the same keys a hand
+ * uses rather than by writing the marks by hand. */
+static void select_tail(cf_ctx *ctx, const char *run, uint32_t count) {
+    press(ctx, 10.0f, 10.0f);
+    type(ctx, run, (uint32_t)strlen(run));
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        hold(ctx, CF_KEY_LEFT, true);
+    }
+}
+
+static void copy_puts_the_selection_where_the_host_keeps_bytes(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'c', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.writes == 1u, "copy asks the host once");
+    CF_CHECK(board.length == 2u && board.text[0] == 'b' && board.text[1] == 'c',
+             "the selected run lands in the host's bytes");
+    CF_CHECK(text.length == 3u && text.caret == 1u && text.mark == 3u,
+             "and copy leaves the page holding exactly what it copied");
+
+    cf_ctx_free(&ctx);
+}
+
+static void cut_offers_the_bytes_before_it_drops_them(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.length == 2u && board.text[0] == 'b' && board.text[1] == 'c',
+             "the host has the run the buffer is about to lose");
+    CF_CHECK(text.length == 1u && bytes[0] == 'a', "and only then does the range go");
+    CF_CHECK(text.caret == 1u && text.mark == 1u, "with the caret where the bytes were");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_refused_write_leaves_the_range_selected(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {.refuses_write = true};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.writes == 1u, "the field asked, once, and was refused");
+    CF_CHECK(text.length == 3u && bytes[1] == 'b' && bytes[2] == 'c',
+             "bytes the host would not take stay in the buffer");
+    CF_CHECK(text.caret == 1u && text.mark == 3u,
+             "and stay selected, which is the state a retry can use");
+
+    cf_ctx_free(&ctx);
+}
+
+static void paste_inserts_what_the_host_holds_over_the_selection(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    host_holds(&board, "xy");
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abcd", 4u);
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 2u && bytes[0] == 'x' && bytes[1] == 'y',
+             "the host's run takes the place of the selected range");
+    CF_CHECK(text.caret == 2u && text.mark == 2u, "and the caret stands after it, alone");
+    CF_CHECK(board.reads == 2u,
+             "the length is asked for before the bytes, so the run crosses once");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_host_run_too_long_for_the_buffer_lands_nowhere(void) {
+    char bytes[8] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 4u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    host_holds(&board, "wxyzq");
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && bytes[0] == 'a' && bytes[2] == 'c',
+             "a run the buffer cannot hold is refused whole, not cut to fit");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_host_with_no_text_leaves_the_page_alone(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {.refuses_read = true};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.reads > 0u, "the field did ask the host");
+    CF_CHECK(text.length == 3u && bytes[1] == 'b',
+             "and an empty desk writes nothing over what was selected");
+    CF_CHECK(text.caret == 1u && text.mark == 3u, "leaving the range for the user to act on");
+
+    cf_ctx_free(&ctx);
+}
+
+static void either_primary_modifier_carries_the_chord_and_alt_does_not(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    uint32_t seen = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_watched(&ctx, &text, false, count_keys, &seen);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'c', (uint32_t)CF_MOD_META);
+
+    CF_CHECK(board.length == 2u && board.text[0] == 'b',
+             "a command key carries the shortcut where control does on another desk");
+    CF_CHECK(seen == 0u, "a chord the field serves stops there and reaches no handler above");
+
+    chord(&ctx, 'c', (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_ALT);
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.writes == 1u, "an alt chord is the host's, and a letter with no meaning here is "
+                                 "nobody's to serve");
+    CF_CHECK(seen == 2u, "and both are let through to whoever above is listening");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_page_with_no_host_buffer_leaves_the_chord_unstopped(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    uint32_t seen = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_watched(&ctx, &text, false, count_keys, &seen);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && bytes[1] == 'b', "with no clipboard a cut key deletes nothing");
+    CF_CHECK(text.caret == 1u && text.mark == 3u,
+             "and the selection it would have moved stays put");
+    CF_CHECK(seen == 1u,
+             "the chord the field cannot serve is left to the page rather than swallowed");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -498,6 +812,14 @@ int main(void) {
     CF_RUN(a_full_buffer_takes_what_the_selection_frees);
     CF_RUN(the_edit_keys_cut_the_selection_or_the_scalar_they_name);
     CF_RUN(a_press_places_the_caret_and_a_drag_selects_to_where_it_went);
+    CF_RUN(copy_puts_the_selection_where_the_host_keeps_bytes);
+    CF_RUN(cut_offers_the_bytes_before_it_drops_them);
+    CF_RUN(a_refused_write_leaves_the_range_selected);
+    CF_RUN(paste_inserts_what_the_host_holds_over_the_selection);
+    CF_RUN(a_host_run_too_long_for_the_buffer_lands_nowhere);
+    CF_RUN(a_host_with_no_text_leaves_the_page_alone);
+    CF_RUN(either_primary_modifier_carries_the_chord_and_alt_does_not);
+    CF_RUN(a_page_with_no_host_buffer_leaves_the_chord_unstopped);
 
     return CF_REPORT();
 }

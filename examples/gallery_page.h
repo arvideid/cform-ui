@@ -1084,7 +1084,11 @@ static cf_node build(cf_ctx *ctx) {
             "arrive, so a capital lands as the capital that was typed. Backspace drops the last "
             "character, and a run too long for the buffer is refused whole rather than cut in "
             "half. The widget copies the text nowhere, so the line under it reads the same bytes "
-            "back.",
+            "back. Hold ctrl (or the command key) and press c to put a selection on the clipboard, "
+            "x to put it there and drop it, v to write what the clipboard holds over the "
+            "selection; "
+            "the three ask the host for its clipboard, and where a host names none they do "
+            "nothing at all.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

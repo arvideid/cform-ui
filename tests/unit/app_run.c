@@ -54,6 +54,31 @@ static cf_node animating_box(cf_ctx *ctx) {
     return counting_box(ctx);
 }
 
+/*
+ * A clipboard that serves nothing, to see the wiring with: what these cases ask is
+ * whether the pair the host named in its config reaches the context a build reads,
+ * and a build is the only place that is visible from outside the shell.
+ */
+static uint32_t boards_seen;
+
+static cf_string silent_read(void *user_data, char *out, uint32_t capacity) {
+    (void)user_data, (void)out, (void)capacity;
+    return (cf_string){0};
+}
+
+static bool silent_write(void *user_data, cf_string utf8) {
+    (void)user_data, (void)utf8;
+    return false;
+}
+
+static cf_node noting_board(cf_ctx *ctx) {
+    if (ctx->clipboard != NULL) {
+        boards_seen++;
+    }
+
+    return counting_box(ctx);
+}
+
 typedef struct fake_hand {
     cf_event event;
     bool hands;
@@ -149,6 +174,7 @@ static void reset(const fake_hand *hands, uint32_t count) {
     schedule_at = 0u;
     frames_built = 0u;
     presents = 0u;
+    boards_seen = 0u;
 }
 
 static void the_shell_runs_until_the_device_quits(void) {
@@ -333,6 +359,27 @@ static void a_shell_that_cannot_run_sits_idle(void) {
     CF_CHECK(frames_built == 1u, "a backend that states both numbers correctly is entered");
 }
 
+/* The host's pair arrives at the page it was named for, and its absence arrives
+ * as an absence rather than as something a widget has to guess about. */
+static void the_shell_hands_the_page_the_clipboard_the_host_named(void) {
+    const cf_clipboard board = {.read = silent_read, .write = silent_write, .user_data = NULL};
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    reset(build_then_quit, 3u);
+    cf_app_run(&(cf_app_config){
+        .build = noting_board, .backend = backend, .theme = NULL, .clipboard = &board});
+
+    CF_CHECK(frames_built == 1u, "the scripted move earned a frame");
+    CF_CHECK(boards_seen == 1u, "and the build could read the pair the config named");
+
+    reset(build_then_quit, 3u);
+    cf_app_run(&(cf_app_config){.build = noting_board, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 1u, "the same move earns a frame without one");
+    CF_CHECK(boards_seen == 0u, "and the page is handed no clipboard it did not ask for");
+}
+
 int main(void) {
     printf("app run\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -342,6 +389,7 @@ int main(void) {
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
     CF_RUN(the_shell_leaves_the_backend_to_its_host);
+    CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 
     cf_arena_free(&store);

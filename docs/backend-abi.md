@@ -67,8 +67,10 @@ pointer and a NULL means this backend does not offer that service. That is why o
 `submit`, `present` and `surface` have to be filled — the rest are optional by their
 own value. A separate table of bits saying the same thing would be a second answer
 to keep in agreement, so there isn't one yet. Bits earn their place when a single
-call has to speak for several services at once, which is the shape the clipboard and
-the cursor will have; until then every service has a slot that can be asked directly.
+call has to speak for several services at once, which is the shape a cursor set might
+grow into — it has to say which shapes this backend draws. Until then every service is
+asked directly: the eight slots, or the host's own clipboard pair below, whose two
+functions answer for themselves by refusing.
 
 ## What you may keep, and what you must copy
 
@@ -200,6 +202,10 @@ sits idle. Map your device's input onto `cf_event_type` and nothing else:
   a field learns that shift meant "extend the selection" rather than "type a
   capital". Report zero if you would rather not track it, and the widgets that
   read it see no modifier, which is honest.
+- `cf_event.key` is one of the `cf_key` numbers, and a Latin letter's key down is its
+  lowercase ASCII code — the agreement `event.h` states and the reason a field can
+  answer Ctrl+C without a device's key table. The modifier bits say which of Control
+  and the platform's command key were with it.
 - Pointer positions must be in points.
 - A pointer that went away without letting go — the window lost it to another
   one, a touch slid off the surface — is a `CF_EVENT_POINTER_CANCEL` rather than
@@ -228,6 +234,34 @@ thing that stops it.
 
 This split is why text layout is testable with no window: the tests answer the
 same three questions with fixed numbers.
+
+## The clipboard
+
+Copy, cut and paste move bytes between a widget and the machine. The pair a widget
+reaches for is **not** a `cf_backend` slot: it is a `cf_clipboard` the host owns and
+names in its `cf_app_config`, which the shell hands to the context unchanged. A
+drawing backend and a clipboard have nothing to say to each other — a shell that
+draws into one window may be asked to put bytes somewhere else entirely — so the
+seam sits where a widget can reach it rather than under the command stream.
+
+Two rules make a port:
+
+- `read(user_data, out, capacity)` copies what fits into the caller's buffer and
+  answers a `cf_string` pointing into it. Asked with no buffer it answers the length
+  alone, which is how a field pays for a whole run once instead of guessing a size.
+  Bytes past the capacity drop at the edge of a scalar: cut a UTF-8 sequence in the
+  middle and the reader is handed half a character it cannot decode.
+- `write(user_data, utf8)` is handed borrowed bytes and answers whether they were
+  kept. Copy what you mean to keep past the call.
+
+A refusal is the ordinary answer — nothing on the desk, a picture instead of text,
+the platform saying no — so `read` answers a run of none, `write` answers false, and
+the field keeps its selection. Nothing reports it. A port with nowhere to put bytes
+leaves the pair out and the keys ask for nothing, which is better than pretending.
+
+`cf_clipboard_sdl()` is the desktop's. It keeps no state between calls: SDL hands
+over bytes SDL allocated, they are copied, and `SDL_free` returns them — the one call
+in the tree that gives memory back to the platform rather than to `src/base`.
 
 ## Porting, in order
 

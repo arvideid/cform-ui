@@ -39,7 +39,12 @@ typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } 
  * key stays the device's business: the backend turns its codes into these, and a
  * key with no word here keeps its platform number, which no widget reads. A key
  * that types a character types it as a text event, so nothing here names a
- * letter. The numbers are the agreement a backend and a build share, so a value
+ * letter. The letters have one door left open for them: a key down for a Latin
+ * letter carries the number of its lowercase ASCII code, which is the number every
+ * platform this framework reaches already agrees on and which shift only moves
+ * between the two cases of it. That is what lets a field answer Ctrl+C without
+ * knowing what any device calls the C key. A backend whose codes differ maps them
+ * onto these. The numbers are the agreement a backend and a build share, so a value
  * is appended and never renumbered.
  */
 typedef enum cf_key {

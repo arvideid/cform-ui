@@ -58,6 +58,11 @@ ALLOWED["umbrella"] = set(ALLOWED)
 CF_INCLUDE = re.compile(r'^\s*#\s*include\s+"cf/([a-z0-9_/]+\.h)"')
 SDL_INCLUDE = re.compile(r'^\s*#\s*include\s+[<"]SDL3')
 ALLOCATION = re.compile(r"\b(?:SDL_)?(malloc|calloc|realloc|free)\s*\(")
+# The one allocator a port may hand bytes back to is the one that allocated them:
+# SDL_GetClipboardText returns memory SDL owns and documents SDL_free as its
+# deallocator. Only that call is allowed, only in the SDL port, so framework
+# memory still begins and ends in src/base.
+PLATFORM_FREE = re.compile(r"\bSDL_free\s*\(")
 PLATFORM_HEADERS = re.compile(
     r'^\s*#\s*include\s+[<"](windows\.h|unistd\.h|pthread\.h)')
 MAGIC_ZERO = re.compile(r"\b0 (means|is)\b|\bmeans 0\b|\bunset\b")
@@ -70,12 +75,20 @@ def layer_of(path):
     return relative.parts[0] if len(relative.parts) > 1 else None
 
 
+def layer_of_sdl_port(path):
+    """True for a file under src/backend/sdl/, where the platform's own bytes are
+    met and therefore returned to the platform that made them."""
+    relative = path.relative_to(SRC)
+    return relative.parts[:2] == ("backend", "sdl")
+
+
 def check_source(path):
     layer = layer_of(path)
     if layer is None:
         return
 
     may_allocate = layer == "base"
+    hands_back_platform_bytes = layer_of_sdl_port(path)
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         where = f"{path.relative_to(ROOT)}:{number}"
 
@@ -99,6 +112,8 @@ def check_source(path):
 
         if ALLOCATION.search(line) and not may_allocate:
             stripped = line.split("//")[0]
+            if PLATFORM_FREE.search(stripped) and hands_back_platform_bytes:
+                continue
             if not stripped.lstrip().startswith(("*", "/*")):
                 errors.append(
                     f"{where}: allocation outside src/base - use cf_alloc, "

@@ -356,6 +356,17 @@ static cf_event tab_key(bool backward) {
                       .mods = backward ? (uint32_t)CF_MOD_SHIFT : 0u};
 }
 
+/* An arrow with shift held, which is how a hand makes a selection. */
+static cf_event shift_arrow(cf_key key) {
+    return (cf_event){
+        .type = CF_EVENT_KEY_DOWN, .key = (uint32_t)key, .mods = (uint32_t)CF_MOD_SHIFT};
+}
+
+/* A letter key with the modifiers the desk held down with it. */
+static cf_event chord(char letter, uint32_t mods) {
+    return (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)letter, .mods = mods};
+}
+
 /* A scripted schedule: an array of events, the last one a QUIT so the loop
  * knows to stop after submitting what the last event produced. */
 
@@ -732,6 +743,109 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     CF_CHECK(typed.length == 10u, "five plus six minus the deleted scalar is ten bytes");
     CF_CHECK(memcmp(typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
     CF_CHECK(last_cursor == CF_CURSOR_TEXT, "and the pointer over the field asks for the I-beam");
+}
+
+/*
+ * The clipboard the page is handed, scripted: the bytes the field's chords write
+ * and read, so the case checks against a desk it owns rather than against whatever
+ * the machine running it happens to hold.
+ */
+typedef struct scripted_board {
+    char text[32];
+    uint32_t length;
+} scripted_board;
+
+static cf_string script_read(void *user_data, char *out, uint32_t capacity) {
+    scripted_board *board = user_data;
+    cf_string answer = {.chars = NULL, .length = board->length};
+
+    if (out != NULL && capacity > 0u) {
+        const uint32_t taken = board->length < capacity ? board->length : capacity;
+        memcpy(out, board->text, taken);
+        answer = (cf_string){.chars = out, .length = taken};
+    }
+
+    return answer;
+}
+
+static bool script_write(void *user_data, cf_string utf8) {
+    scripted_board *board = user_data;
+
+    if (utf8.chars == NULL || utf8.length > sizeof board->text) {
+        return false;
+    }
+
+    memcpy(board->text, utf8.chars, utf8.length);
+    board->length = utf8.length;
+
+    return true;
+}
+
+static void script_holds(scripted_board *board, const char *run) {
+    board->length = (uint32_t)strlen(run);
+    memcpy(board->text, run, board->length);
+}
+
+/*
+ * The field in the page answers the three chords through the clipboard its host
+ * named: the wiring the SDL shell runs on, checked here because a page built with a
+ * context that never got the pair would type fine and move nothing.
+ */
+static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
+    scripted_board board = {0};
+    const cf_clipboard clipboard = {
+        .read = script_read, .write = script_write, .user_data = &board};
+
+    start_session(current_size());
+    session.clipboard = &clipboard;
+
+    bool found = false;
+    const cf_rect echo = find_text_prefix("the buffer holds", &found);
+
+    CF_CHECK(found, "the field's echo line is on the page");
+
+    if (!found) {
+        end_session();
+        return;
+    }
+
+    field_echo_y = echo.y;
+    const cf_rect field = find_fill_rect(accept_field_box, &found);
+
+    CF_CHECK(found, "the entry box is painted above its own echo");
+
+    if (!found) {
+        end_session();
+        return;
+    }
+
+    typed.length = 0u;
+
+    const float x = field.x + 30.0f;
+    const float y = field.y + field.height / 2.0f;
+
+    step(press_at(x, y));
+    step(release_at(x, y));
+    step(typed_text("hello"));
+    step(shift_arrow(CF_KEY_LEFT));
+    step(shift_arrow(CF_KEY_LEFT));
+    step(chord('c', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(board.length == 2u && board.text[0] == 'l' && board.text[1] == 'o',
+             "the chord puts the field's selection on the desk the page was given");
+    CF_CHECK(typed.length == 5u, "and copy takes no byte out of the buffer");
+
+    step(chord('x', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.length == 3u, "cut drops the bytes the host agreed to hold");
+
+    script_holds(&board, " world");
+    step(chord('v', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.length == 9u && memcmp(typed_bytes, "hel world", 9) == 0,
+             "and paste writes what the host holds over what the field had");
+
+    end_session();
 }
 
 static void the_narrow_button_pins_the_well_and_the_lines_follow(void) {
@@ -1190,6 +1304,7 @@ int main(void) {
     CF_RUN(a_click_counts_and_a_clear_ends_the_count);
     CF_RUN(a_switched_off_button_takes_no_click);
     CF_RUN(a_focused_field_takes_what_the_keyboard_wrote);
+    CF_RUN(the_gallery_field_trades_bytes_with_the_host_it_names);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);

@@ -116,10 +116,11 @@ cf_backend cf_backend_recorder(cf_recorder *recorder);
  * Rects arrive in logical points; the window's pixel density is the
  * backend's to apply.
  *
- * The three SDL-shaped names below (cf_backend_sdl, cf_sdl_install_log_sink
- * and cf_font_sdl) belong to the source tree. cmake --install packages the
- * headless backend only, because the SDL target's interface names SDL3::SDL3,
- * a FetchContent artifact that lives inside a build tree and nowhere else.
+ * The four SDL-shaped names below (cf_backend_sdl, cf_sdl_install_log_sink,
+ * cf_clipboard_sdl and cf_font_sdl) belong to the source tree. cmake --install
+ * packages the headless backend only, because the SDL target's interface names
+ * SDL3::SDL3, a FetchContent artifact that lives inside a build tree and nowhere
+ * else.
  * A consumer taking the installed package either builds cform with
  * CFORM_WITH_SDL_BACKEND=ON and links cf_backend_sdl from the same tree, or
  * writes its own backend against the cf_backend struct above. The
@@ -152,6 +153,15 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config);
  * for a pluggable backend wants to avoid.
  */
 void cf_sdl_install_log_sink(void);
+
+/*
+ * The desk's clipboard as the pair a field reads and writes, built when
+ * CFORM_WITH_SDL_BACKEND is on. Hand it to cf_app_config.clipboard, or to a
+ * context's own slot, and the page's copy, cut and paste reach the desktop; leave
+ * it out and those keys move nothing. Nothing is remembered between the calls, so
+ * the pair needs no closing: a page that stops using it has nothing to hand back.
+ */
+cf_clipboard cf_clipboard_sdl(void);
 
 /*
  * The SDL font table over a TrueType or OpenType file, built when

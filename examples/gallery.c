@@ -57,8 +57,17 @@ int main(int argc, char **argv) {
                                   .height = 32.0f};
     }
 
-    cf_app_run(
-        &(cf_app_config){.build = build, .backend = backend, .theme = theme, .fonts = &body});
+    /* The desk's clipboard, named for the page: the field in chapter two copies,
+     * cuts and pastes through it, and a host that named none would leave those keys
+     * asking for nothing. The shell borrows the pair, so it lives as long as the run.
+     */
+    const cf_clipboard clipboard = cf_clipboard_sdl();
+
+    cf_app_run(&(cf_app_config){.build = build,
+                                .backend = backend,
+                                .theme = theme,
+                                .fonts = &body,
+                                .clipboard = &clipboard});
 
     /* The shell borrowed the backend and has returned, so the upload the page
      * made and the window the backend opened are the host's to hand back. A

@@ -84,6 +84,10 @@ void cf_app_run(const cf_app_config *config) {
     }
 
     ctx.theme = config->theme;
+    /* The clipboard is the host's, not the backend's: a shell that draws through
+     * one window can still be asked to move bytes somewhere else entirely, and a
+     * host that names nowhere hands NULL. */
+    ctx.clipboard = config->clipboard;
     const cf_name inspector_key = cf_intern_text(&ctx.names, INSPECTOR_KEY);
     bool painted = false;
     cf_size offer = {0.0f, 0.0f};

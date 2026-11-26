@@ -147,10 +147,13 @@ accepted and ignored — there is no field that pretends to take these things.
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk
   the declared boxes in document order, and **Enter** or the space bar asks the
   focused box to do its job. A dialog keeps the keyboard by answering **Tab**
-  itself; a field still cannot cut, copy or paste.
-- **An editing field has no clipboard.** Cut, copy and paste are not wired to
-  the platform. Enter submits nothing. There is no undo, no selection by word,
-  no caret blink and no IME, so composing Japanese types nothing.
+  itself; nothing puts the focus back where a closed dialog found it.
+- **Copy, cut and paste need a clipboard from the host.** The field answers
+  **Ctrl** or **Cmd** with **C**, **X** and **V** through `cf_clipboard`, a read/write
+  pair the shell names in its `cf_app_config`; `cf_clipboard_sdl()` is the desktop's,
+  and a host that names none leaves those keys asking for nothing. Enter submits
+  nothing. There is no undo, no selection by word, no caret blink and no IME, so
+  composing Japanese types nothing.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

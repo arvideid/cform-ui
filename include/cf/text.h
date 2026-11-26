@@ -146,4 +146,31 @@ cf_point cf_text_scroll(const cf_text_content *content, const cf_text_line *line
 uint32_t cf_text_line_of(const cf_text_content *content, const cf_text_line *lines, uint32_t count,
                          uint32_t offset);
 
+/*
+ * The bytes a control moves out of the page and back in: what copy, cut and paste
+ * carry between this program's buffers and whatever the host keeps beside it.
+ *
+ * The host owns the pair and decides where it reaches - a desktop clipboard, a
+ * buffer inside the process, or nowhere. A context with no pair, or a pair whose
+ * slots refuse, is a page whose fields still select and still type and simply move
+ * nothing: a refusal is an answer rather than an error, and the widget that asked
+ * has no better way to spend it than keeping its bytes.
+ *
+ * `read` fills `out` with up to `capacity` bytes of UTF-8 and answers the run it
+ * wrote there, pointing into `out` rather than at a buffer of its own. Asked with
+ * no buffer it answers the length alone, which is how a caller that wants the whole
+ * run allocates for it once. Bytes past the capacity drop at the edge of a scalar,
+ * so a reader that asked for less than the whole never sees half a character. A
+ * clipboard with no text - empty, holding a picture, refused by the platform -
+ * answers a run of none.
+ *
+ * `write` is handed the bytes the caller holds, borrowed for the call alone: a host
+ * that keeps them copies them. False says they went nowhere.
+ */
+typedef struct cf_clipboard {
+    cf_string (*read)(void *user_data, char *out, uint32_t capacity);
+    bool (*write)(void *user_data, cf_string utf8);
+    void *user_data;
+} cf_clipboard;
+
 #endif

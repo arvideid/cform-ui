@@ -5,6 +5,7 @@
 #include "cf/event.h"
 #include "cf/layout.h"
 #include "cf/paint.h"
+#include "cf/text.h"
 
 /*
  * The node's handlers, one table rather than a field per event. The data
@@ -90,6 +91,13 @@ typedef struct cf_ctx {
     /* The design system cf_frame_resolve reads. Borrowed, never copied; a
      * build that styles every box itself leaves it NULL. */
     const cf_theme *theme;
+    /*
+     * What a widget reaches when it is asked to move bytes out of the page: the
+     * host's copy, cut and paste. NULL is a page with no such place to put them,
+     * which a field answers by keeping its selection rather than by failing.
+     * Borrowed the way the theme is, and for as long as the context reads it.
+     */
+    const cf_clipboard *clipboard;
     /* The view cf_layout reads, rebuilt by every diff into the frame arena. */
     cf_tree layout;
     cf_id hover_id;

@@ -8,8 +8,8 @@
  * The shell a whole program fits in: the build that declares each frame's
  * page, the backend that reads its events and draws its stream, and the
  * theme the resolver styles the view with. The backend is a value, built
- * before the run starts; the theme and the fonts are borrowed and must
- * outlive the run. The fonts are the inspector's printing press: without
+ * before the run starts; the theme, the fonts and the clipboard are borrowed and
+ * must outlive the run. The fonts are the inspector's printing press: without
  * them the F12 panel draws bare.
  */
 typedef struct cf_app_config {
@@ -17,6 +17,10 @@ typedef struct cf_app_config {
     cf_backend backend;
     const cf_theme *theme;
     const cf_text_stack *fonts;
+    /* What the page's copy, cut and paste reach. NULL leaves the shortcuts asking
+     * for nothing and getting nothing, which is what a host that has not decided
+     * where its bytes go should get rather than a silent desktop write. */
+    const cf_clipboard *clipboard;
 } cf_app_config;
 
 /*

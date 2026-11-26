@@ -130,8 +130,104 @@ static void cut(cf_text_edit *text, uint32_t from, uint32_t to) {
     text->mark = from;
 }
 
+/* The bytes between the marks, or none where the field has selected nothing. */
+static cf_string selection(const cf_text_edit *text) {
+    const uint32_t from = sel_from(text);
+    const uint32_t to = sel_to(text);
+
+    return (cf_string){.chars = text->chars + from, .length = to - from};
+}
+
+/*
+ * The key's letter, lower case, or nothing for a key that is not a Latin letter. A
+ * backend hands over the ASCII number - event.h states that agreement - so naming
+ * the letter here reads no device's code for the key beside it.
+ */
+static char letter_of(uint32_t key) {
+    if (key >= (uint32_t)'A' && key <= (uint32_t)'Z') {
+        return (char)(key + ((uint32_t)'a' - (uint32_t)'A'));
+    }
+
+    return key >= (uint32_t)'a' && key <= (uint32_t)'z' ? (char)key : '\0';
+}
+
+/*
+ * The selection, offered to the host. Cutting carries the same bytes and drops them
+ * only once the host has taken them: a refused write leaves the bytes selected,
+ * which is the state the user can still do something about.
+ */
+static void carry_out(field_data *field, bool remove) {
+    const cf_clipboard *board = field->ctx->clipboard;
+    cf_text_edit *text = field->text;
+    const cf_string run = selection(text);
+
+    if (board == NULL || board->write == NULL || run.length == 0u ||
+        !board->write(board->user_data, run)) {
+        return;
+    }
+
+    if (remove) {
+        cut(text, sel_from(text), sel_to(text));
+    }
+}
+
+/*
+ * What the host holds, put over the selection. The length is asked for first so the
+ * run crosses once and the frame arena holds it exactly once: a clipboard the frame
+ * cannot pay for, like one the buffer cannot hold, is refused whole rather than
+ * half-inserted, which is the rule this field already keeps for bytes that will not
+ * fit.
+ */
+static void bring_in(field_data *field) {
+    const cf_clipboard *board = field->ctx->clipboard;
+
+    if (board == NULL || board->read == NULL) {
+        return;
+    }
+
+    const uint32_t wanted = board->read(board->user_data, NULL, 0u).length;
+    char *scratch = wanted > 0u ? cf_alloc(&field->ctx->frame, wanted) : NULL;
+
+    if (scratch == NULL) {
+        return;
+    }
+
+    replace(field->text, board->read(board->user_data, scratch, wanted));
+}
+
+/*
+ * The three asks a selection answers with, on either of the two bits a platform
+ * puts its main modifier on: which of Control and a command key carries a shortcut
+ * is the platform's decision, and a field that reads either is right on each rather
+ * than wrong on one. Alt stays out of them - a chord with Alt in it is the desk or
+ * the host's to keep - and a field handed no clipboard leaves the chord to whoever
+ * above it, because the keys it cannot serve are not its to swallow.
+ */
+static bool serve_shortcut(field_data *field, cf_event *event) {
+    const char letter = letter_of(event->key);
+    const uint32_t primary = (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META;
+
+    if (field->ctx->clipboard == NULL || letter == '\0' ||
+        (event->mods & (uint32_t)CF_MOD_ALT) != 0u || (event->mods & primary) == 0u) {
+        return false;
+    }
+
+    if (letter == 'c') {
+        carry_out(field, false);
+    } else if (letter == 'x') {
+        carry_out(field, true);
+    } else if (letter == 'v') {
+        bring_in(field);
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
 static void field_key(cf_event *event, void *user_data) {
-    cf_text_edit *text = ((field_data *)user_data)->text;
+    field_data *field = user_data;
+    cf_text_edit *text = field->text;
 
     clamp_marks(text);
 
@@ -142,6 +238,13 @@ static void field_key(cf_event *event, void *user_data) {
     }
 
     if (event->type != CF_EVENT_KEY_DOWN) {
+        return;
+    }
+
+    /* Copy, cut and paste come before the keys that move the caret: they are the
+     * ones the user asks the selection to do something about. */
+    if (serve_shortcut(field, event)) {
+        cf_stop(event);
         return;
     }
 

@@ -10,7 +10,6 @@ and this file is the record.
 | what is missing | what that means on screen | how it gets closed |
 |---|---|---|
 | **Focus put back** | a dialog that opens takes the keyboard and leaves it nowhere when it closes | the shell remembers the box that held focus when the dialog opened and restores it with `cf_focus` — the widget side wants a container that owns the ask |
-| **The clipboard** | a field cannot copy, cut or paste | one backend slot for reading and writing UTF-8 text, an answer from the headless recorder, and `CF_MOD_CONTROL`/`CF_MOD_META` paths in the field |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
 | **Undo** | a mistyped run is gone for good | a ring of (bytes, caret, mark) in the field's own state block. Unit cases: type, undo, redo, and an undo that stops at the buffer's edge |
 | **IME composition** | typing Japanese, Chinese or accented-by-composition characters sends nothing | a composition event pair from the backend and a marked span the field paints differently. This one needs a real desktop to test, so it needs a plan before code |
@@ -64,10 +63,11 @@ purpose. A texture release and a backend teardown are what 8 added; 9 added
 `size`, a second number at the front of the struct, so a backend compiled against
 another revision of the header is refused rather than misread. A change that adds
 no slot — a font close is one, since the font is not part of the struct — needs no
-number of its own. Two slots are still wanted by rows above — clipboard and
-cursor — and each one is a reason to say *now* rather than after a release. Enum
-values are append-only, so the same pressure does not apply to `cf_role`,
-`cf_key` or `cf_intrinsic`.
+number of its own. One slot is still wanted by a row above — the cursor — and it is
+a reason to say *now* rather than after a release. The clipboard went the other way:
+it is a host pair on the context (`cf_clipboard`), not a backend slot, so serving it
+bumps no number. Enum values are append-only, so the same pressure does not apply to
+`cf_role`, `cf_key` or `cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 
