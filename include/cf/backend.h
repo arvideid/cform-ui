@@ -18,8 +18,11 @@
  *
  * 10 added the cursor: a shape to show, which an output that has no pointer can
  * leave unanswered.
+ *
+ * 11 added the text-input ask: whether the page currently has a box that takes
+ * written text, which a device with no keyboard to show can leave unanswered.
  */
-#define CF_BACKEND_ABI_VERSION 10u
+#define CF_BACKEND_ABI_VERSION 11u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -89,6 +92,17 @@ typedef struct cf_backend {
      * the one it has.
      */
     void (*set_cursor)(void *user_data, cf_cursor cursor);
+    /*
+     * Opens or shuts off the device's service that turns keys into written text -
+     * the screen keyboard, the input method, whatever the platform calls it. The
+     * page's answer is `cf_frame_takes_text`, and the shell calls this only when the
+     * answer moves, so a page the keyboard is resting on costs no platform call per
+     * frame. It is the pair the platform documents as one: a device where the text
+     * arrives whatever it is told, and one with nothing to show, both leave the slot
+     * NULL and are no worse for it - the words a field receives come through the same
+     * `CF_EVENT_TEXT` either way.
+     */
+    void (*set_text_input)(void *user_data, bool enabled);
 } cf_backend;
 
 /*
@@ -111,7 +125,8 @@ typedef struct cf_backend {
  * releases through this backend has to ask the slot first, exactly as it does
  * for a third-party backend that reclaims nothing. It keeps the last cursor it
  * was asked to show, which is how a test tells "the shell applied the frame's
- * answer" from "someone read the frame's answer".
+ * answer" from "someone read the frame's answer", and it keeps the last
+ * text-input ask for the same reason.
  */
 typedef struct cf_recorder {
     cf_arena *arena;
@@ -120,6 +135,8 @@ typedef struct cf_recorder {
     uint32_t capacity;
     /* The shape the shell last asked this device to put under the pointer. */
     cf_cursor cursor;
+    /* Whether the shell last asked this device to take written text. */
+    bool text_input;
 } cf_recorder;
 
 /* A backend that records instead of draws. A NULL recorder submits nothing. */

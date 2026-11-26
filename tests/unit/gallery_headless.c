@@ -42,6 +42,9 @@ static uint32_t recorded_count;
 static cf_ctx session;
 static bool session_open;
 static cf_cursor last_cursor;
+/* The frame's other device answer, read where the cursor's is: whether the box holding
+ * the keyboard takes written text. */
+static bool last_text;
 static cf_backend shell_backend;
 /* The last rendered viewport, so helpers and stream checks can judge
  * geometry against the same offer the layout was measured in. */
@@ -486,6 +489,7 @@ static void start_session(cf_size size) {
 
 static void end_session(void) {
     last_cursor = cf_frame_cursor(&session);
+    last_text = cf_frame_takes_text(&session);
 
     if (getenv("GALLERY_DEBUG") != NULL) {
         cf_recorder *r = shell_backend.user_data;
@@ -743,6 +747,7 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     CF_CHECK(typed.length == 10u, "five plus six minus the deleted scalar is ten bytes");
     CF_CHECK(memcmp(typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
     CF_CHECK(last_cursor == CF_CURSOR_TEXT, "and the pointer over the field asks for the I-beam");
+    CF_CHECK(last_text, "and the field the press focused asks the device for written text");
 }
 
 /*
@@ -1146,6 +1151,8 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
     step(key_down(CF_KEY_ENTER));
 
     CF_CHECK(*click_count(&session) == 2u, "a walk off the end of the page returns to its start");
+    CF_CHECK(!cf_frame_takes_text(&session),
+             "and the box it stopped on takes the keyboard without asking for one to show");
 
     end_session();
 }

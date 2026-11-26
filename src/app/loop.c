@@ -93,6 +93,12 @@ void cf_app_run(const cf_app_config *config) {
     /* The shape the backend was last told to show. A window opens as an arrow, so
      * that is what the shell believes it has until a frame says otherwise. */
     cf_cursor applied_cursor = CF_CURSOR_DEFAULT;
+    /* Whether the device has been told about written text yet, and what it was
+     * told. There is no guess at the window's starting state here: a shell that
+     * assumed it could leave a page that opens focused on a field with no way to
+     * type, on the one platform where the guess costs a keystroke. */
+    bool told_text = false;
+    bool asked_text = false;
     cf_size offer = {0.0f, 0.0f};
     struct timespec last;
     timespec_get(&last, TIME_UTC);
@@ -175,6 +181,20 @@ void cf_app_run(const cf_app_config *config) {
             if (asked != applied_cursor) {
                 applied_cursor = asked;
                 config->backend.set_cursor(config->backend.user_data, asked);
+            }
+        }
+
+        /* Whether the page has a box that takes written text is the frame's other
+         * answer, read and sent the same way: a device that shows a keyboard or an
+         * input method should show it for the field this frame placed the keyboard
+         * on, and hide it when the keyboard has moved somewhere text cannot go. */
+        if (config->backend.set_text_input != NULL) {
+            const bool wants_text = cf_frame_takes_text(&ctx);
+
+            if (!told_text || wants_text != asked_text) {
+                told_text = true;
+                asked_text = wants_text;
+                config->backend.set_text_input(config->backend.user_data, wants_text);
             }
         }
 

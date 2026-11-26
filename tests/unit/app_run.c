@@ -59,6 +59,35 @@ static cf_node clickable_box(cf_ctx *ctx) {
     return root;
 }
 
+/* The page the keyboard walks: a field that takes written text beside a box that
+ * takes the keyboard without ever wanting a keyboard drawn for it. The pair is what
+ * makes the shell's answer worth counting - a page of fields alone could be answered
+ * by a port that never shuts the service off. */
+static cf_node typed_page(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    cf_node field = {0};
+    cf_node button = {0};
+
+    field.style = cf_style_default();
+    field.style.width = CF_PX(20.0f);
+    field.style.height = CF_PX(20.0f);
+    field.role = CF_ROLE_FIELD;
+    field.focusable = true;
+    field.handlers.pointer = noting_pointer;
+
+    button.style = cf_style_default();
+    button.style.width = CF_PX(20.0f);
+    button.style.height = CF_PX(20.0f);
+    button.focusable = true;
+    button.handlers.pointer = noting_pointer;
+
+    const cf_node children[] = {field, button};
+    root.children = children;
+    root.child_count = 2u;
+
+    return root;
+}
+
 /* The page's own way out: a press inside the box asks the shell to stop, and the
  * counter says how many presses the dispatch ever got. */
 static uint32_t presses;
@@ -221,6 +250,35 @@ static void counted_cursor(void *user_data, cf_cursor cursor) {
     cursor_asks++;
 }
 
+/* The same count for the other ask: what the shell told the device about written
+ * text, in the order it told it. */
+static uint32_t text_asks;
+static bool asked_text[4u];
+
+static void counted_text(void *user_data, bool enabled) {
+    (void)user_data;
+
+    if (text_asks < (uint32_t)(sizeof asked_text / sizeof asked_text[0])) {
+        asked_text[text_asks] = enabled;
+    }
+
+    text_asks++;
+}
+
+/* The device the keyboard walk runs on: a hand, a dry ask to end the drain, the same
+ * press again now the page has a rect to land on, a press on the box that takes no
+ * text, a move that changes nothing, then the quit. */
+static const fake_hand keyboard_walk[] = {
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {10.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {30.0f, 10.0f}, .button = 1u}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_QUIT}, true}};
+
 static cf_backend driven_backend(cf_recorder *recorder) {
     cf_backend backend = cf_backend_recorder(recorder);
     backend.poll_event = fake_poll;
@@ -229,7 +287,13 @@ static cf_backend driven_backend(cf_recorder *recorder) {
     return backend;
 }
 
+/* Every case starts the shell from the same place: the device's queue, the counters,
+ * and the arena the recorder carves its store out of. That arena is one allocation
+ * for the whole binary, so rewinding it is what keeps a case that filled it from
+ * leaving the next one holding an empty stream - which reads as a shell that never
+ * submitted, not as a heap that ran out. */
 static void reset(const fake_hand *hands, uint32_t count) {
+    cf_arena_clear(&store);
     schedule = hands;
     schedule_len = count;
     schedule_at = 0u;
@@ -238,9 +302,14 @@ static void reset(const fake_hand *hands, uint32_t count) {
     boards_seen = 0u;
     cursor_asks = 0u;
     presses = 0u;
+    text_asks = 0u;
 
     for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_shapes / sizeof asked_shapes[0]); ++at) {
         asked_shapes[at] = CF_CURSOR_DEFAULT;
+    }
+
+    for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_text / sizeof asked_text[0]); ++at) {
+        asked_text[at] = false;
     }
 }
 
@@ -480,6 +549,44 @@ static void a_device_with_no_cursor_slot_still_runs(void) {
     CF_CHECK(recorder.cursor == CF_CURSOR_TEXT, "and the device was handed no shape at all");
 }
 
+/*
+ * The keyboard's service is the shell's to hand over, on the same agreement the
+ * cursor's is: told once before the page has anywhere for text, again when a press
+ * reaches a field, again when the keyboard moves where text cannot go, and not at all
+ * by the frame that changed nothing. The press that focuses the field is the second
+ * one - the first is absorbed for want of a layout, the way the cursor walk finds it.
+ */
+static void the_shell_opens_the_keyboard_only_for_a_field(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_text_input = counted_text;
+
+    reset(keyboard_walk, 9u);
+    cf_app_run(&(cf_app_config){.build = typed_page, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 4u, "four waking drains earned four frames");
+    CF_CHECK(text_asks == 3u, "and the device was told three times, not once per frame");
+    CF_CHECK(!asked_text[0u], "the frame that laid the page out shut the service no field needed");
+    CF_CHECK(asked_text[1u], "the press that reached the field opened it again");
+    CF_CHECK(!asked_text[2u], "and the press onto a box that takes no text shut it");
+}
+
+/* A device with no keyboard to show - an offscreen run, a headless render, a platform
+ * that types whatever it is told - is a legal device: the frames it runs are the frames
+ * it would have run, and its own answer is left untouched. */
+static void a_device_with_no_keyboard_slot_still_runs(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_text_input = NULL;
+    recorder.text_input = true;
+
+    reset(keyboard_walk, 9u);
+    cf_app_run(&(cf_app_config){.build = typed_page, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 4u, "the frames ran with nowhere to send the ask");
+    CF_CHECK(recorder.text_input, "and the device was handed no answer at all");
+}
+
 /* The two ends of a run differ only in who names them: the window's close button
  * arrives as an event, and a control inside the page has no event to send, so it
  * asks through its context. The frame that answered the press is shown, and the
@@ -523,6 +630,8 @@ int main(void) {
     CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);
     CF_RUN(the_shell_asks_for_the_shape_only_when_it_moves);
     CF_RUN(a_device_with_no_cursor_slot_still_runs);
+    CF_RUN(the_shell_opens_the_keyboard_only_for_a_field);
+    CF_RUN(a_device_with_no_keyboard_slot_still_runs);
     CF_RUN(a_page_that_asks_leaves_after_the_frame_that_answers_it);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 

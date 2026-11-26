@@ -93,11 +93,28 @@ static void record_set_cursor(void *user_data, cf_cursor cursor) {
     recorder->cursor = cursor;
 }
 
+/*
+ * Whether the page has a box that takes written text, kept rather than acted on.
+ * A headless run has no keyboard to show and still has to answer the ask, because
+ * the test that cares is the one reading whether the shell asked at all and with
+ * which answer - the same reason the shape above is stored rather than drawn.
+ */
+static void record_set_text_input(void *user_data, bool enabled) {
+    cf_recorder *recorder = user_data;
+
+    if (recorder == NULL) {
+        return;
+    }
+
+    recorder->text_input = enabled;
+}
+
 cf_backend cf_backend_recorder(cf_recorder *recorder) {
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .size = sizeof(cf_backend),
                         .user_data = recorder,
                         .submit = record_submit,
                         .present = record_present,
-                        .set_cursor = record_set_cursor};
+                        .set_cursor = record_set_cursor,
+                        .set_text_input = record_set_text_input};
 }

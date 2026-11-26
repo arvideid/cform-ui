@@ -96,6 +96,14 @@ static cf_node focus_box(float width, float height, cf_event_fn pointer, void *p
     return node;
 }
 
+/* A box that edits the bytes under it, declared the way cf_field declares one:
+ * it takes the keyboard, and its role says what the keyboard is for. */
+static cf_node field_box(float width, float height, cf_event_fn pointer, void *pointer_data) {
+    cf_node node = focus_box(width, height, pointer, pointer_data);
+    node.role = CF_ROLE_FIELD;
+    return node;
+}
+
 static bool context_of(cf_ctx *ctx) {
     if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
@@ -191,6 +199,85 @@ static void the_cursor_names_the_pointer_only_over_a_handler(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
 
     CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_POINTER, "the handler asks for the pointer");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The frame's other device ask: whether the box holding the keyboard takes written
+ * text. Two gates answer it, and each one is a case of its own - the role, because
+ * a button takes keys without ever wanting a keyboard drawn for it, and the reach
+ * the keyboard has, because a field the user cannot tab back to has no business
+ * holding one up.
+ */
+static void only_a_reachable_field_asks_for_written_text(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder log = {0};
+    cf_node children[] = {
+        field_box(50.0f, 50.0f, on_pointer, &log),
+        focus_box(50.0f, 50.0f, on_pointer, &log),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t field = child_slot(&ctx, 0u);
+    const uint32_t button = child_slot(&ctx, 1u);
+
+    CF_CHECK(!cf_frame_takes_text(NULL), "no context asks the device for nothing");
+    CF_CHECK(!cf_frame_takes_text(&ctx), "a page the keyboard has not reached wants no text");
+
+    cf_focus(&ctx, button);
+
+    CF_CHECK(cf_focused(&ctx, button), "a button takes the keyboard");
+    CF_CHECK(!cf_frame_takes_text(&ctx), "and still asks for no keyboard to be shown for it");
+
+    cf_focus(&ctx, field);
+
+    CF_CHECK(cf_frame_takes_text(&ctx), "the field's role is the ask");
+
+    /* Switched off where it stands: the node is still live, so only the keyboard's
+     * reach has changed - and with it the ask. */
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, field), "a box switched off under the keyboard keeps the focus");
+    CF_CHECK(!cf_frame_takes_text(&ctx), "and loses the ask for a keyboard with the reach");
+
+    /* Back on and hidden instead: the other way the same gate refuses. */
+    children[0].disabled = false;
+    children[0].style.display = CF_DISPLAY_NONE;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_frame_takes_text(&ctx), "a field the layout dropped takes no text either");
+
+    children[0].style.display = CF_DISPLAY_FLEX;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_frame_takes_text(&ctx), "and the ask comes back with the box");
+
+    /* The field retires under the keyboard: the id the focus holds names no node,
+     * and an answer read from the slot that took its place would be a keyboard for
+     * whatever lives there now. */
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, NULL);
+
+    CF_CHECK(!cf_frame_takes_text(&ctx), "a retired field asks for nothing");
 
     cf_ctx_free(&ctx);
 }
@@ -1361,6 +1448,7 @@ int main(void) {
 
     CF_RUN(a_move_hovers_the_topmost_child_at_the_point);
     CF_RUN(the_cursor_names_the_pointer_only_over_a_handler);
+    CF_RUN(only_a_reachable_field_asks_for_written_text);
     CF_RUN(a_press_marks_and_focuses_the_node_it_hit);
     CF_RUN(a_release_off_the_pressed_node_still_reaches_it);
     CF_RUN(a_press_on_a_plain_child_lands_on_the_button_around_it);

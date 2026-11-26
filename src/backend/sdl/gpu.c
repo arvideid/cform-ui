@@ -671,6 +671,29 @@ static void sdl_set_cursor(void *user_data, cf_cursor cursor) {
     }
 }
 
+/*
+ * The device's written-text service, opened or shut on the page's ask. SDL takes
+ * both directions in any order and is idempotent either way, so no answer is
+ * cached here: the shell already sends one only when it moves, and a copy of what
+ * SDL keeps for the window would be a second fact to invalidate. A refused ask is
+ * not logged, for the reason the cursor's refusal is not - the words a field
+ * receives still arrive as CF_EVENT_TEXT, so the page works either way and the
+ * host has nothing to do with the line.
+ */
+static void sdl_set_text_input(void *user_data, bool enabled) {
+    sdl_state *state = user_data;
+
+    if (state == NULL) {
+        return;
+    }
+
+    if (enabled) {
+        (void)SDL_StartTextInput(state->window);
+    } else {
+        (void)SDL_StopTextInput(state->window);
+    }
+}
+
 /* The window's own size, which is what logical points lay out against; the
  * pixel density between points and device pixels stays inside the draw. */
 static cf_size sdl_surface(void *user_data) {
@@ -782,7 +805,10 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
     }
 
     /* Text events are off until a window asks for them, and a window that
-     * never receives them has no way to say what the keyboard typed. */
+     * never receives them has no way to say what the keyboard typed. A shell that
+     * drives the slot below overrides this on the first frame it lays out; one
+     * that does not leaves the window typing, which is what it did before the
+     * page had a say. */
     SDL_StartTextInput(window);
 
     /* The state and its texture table live as long as the window does,
@@ -819,5 +845,6 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .load_image = sdl_load_image,
                         .release_texture = sdl_release_texture,
                         .set_cursor = sdl_set_cursor,
+                        .set_text_input = sdl_set_text_input,
                         .destroy = sdl_destroy};
 }

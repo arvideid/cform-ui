@@ -424,4 +424,15 @@ bool cf_focused(const cf_ctx *ctx, uint32_t slot);
  */
 cf_cursor cf_frame_cursor(const cf_ctx *ctx);
 
+/*
+ * Whether the box holding the keyboard takes written text: true for a field the
+ * keyboard can reach by Tab, false when focus is on a button, on nothing, or on
+ * a box that has since been switched off or hidden. A device with a screen
+ * keyboard or an input method should be showing one only while the answer is
+ * true, so cf_app_run puts it on the backend's `set_text_input` whenever it
+ * moves; a host that runs the pipeline itself asks the same question in its own
+ * loop.
+ */
+bool cf_frame_takes_text(const cf_ctx *ctx);
+
 #endif

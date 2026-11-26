@@ -504,3 +504,21 @@ cf_cursor cf_frame_cursor(const cf_ctx *ctx) {
      * bytes are, which is the other ask a node can make. */
     return record->role == CF_ROLE_FIELD ? CF_CURSOR_TEXT : CF_CURSOR_POINTER;
 }
+
+bool cf_frame_takes_text(const cf_ctx *ctx) {
+    if (ctx == NULL) {
+        return false;
+    }
+
+    const uint32_t focused = live_slot(ctx, ctx->focus_id);
+
+    if (focused == CF_NO_LINK) {
+        return false;
+    }
+
+    /* The gate is the one Tab walks, so the keyboard service is up only where the
+     * keyboard could have reached by hand: a field that has been switched off or
+     * hidden since it took focus loses the ask along with its reach. Past that
+     * gate, the role is the widget's own word for a box that edits bytes. */
+    return takes_focus(ctx, focused) && record_of(ctx, focused)->role == CF_ROLE_FIELD;
+}

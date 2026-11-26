@@ -71,7 +71,7 @@ call has to speak for several services at once, which is what `set_cursor` came
 closest to — it cannot say *which* shapes this desk draws. It does not have to: a
 shape the platform will not make is refused by the platform, the pointer keeps the
 shape it had, and the caller has nothing to do differently. Until a service needs
-one call to mean several things, every one of the nine slots is asked directly, and
+one call to mean several things, every one of the ten slots is asked directly, and
 the host's own clipboard pair below answers for itself by refusing.
 
 ## What you may keep, and what you must copy
@@ -290,6 +290,31 @@ The shapes are the three `cf_cursor` names. A number that is not one of them —
 value appended after your backend was written — is yours to treat as the default, and
 reading it as an index into a table is how that becomes a crash.
 
+## The written-text service
+
+`cf_frame_takes_text` answers whether the box holding the keyboard takes written text —
+true for a field the keyboard can reach, false for a button, for nothing focused, and
+for a field that has been switched off or hidden since — and `cf_app_run` puts that
+answer on `set_text_input`. This is the ask that shows a screen keyboard or opens an
+input method on the platforms that have them.
+
+- **Only a moved answer arrives**, on the same terms as the shape above: the shell
+  tells the device what the frame answered when the answer changed, and a page the
+  keyboard is resting on costs no call per frame.
+- **The frame that placed the keyboard is the frame that asks.** The shell reads the
+  answer after a frame has run, so the box the user just reached is the one the device
+  is opened for; a build that moves focus by hand is answered in its own frame.
+- **NULL is a normal backend.** A recorder, an offscreen target and a platform whose
+  text arrives whatever it is told leave the slot out. The words still reach the field
+  as `CF_EVENT_TEXT` either way — this slot is about showing the user a way to type, not
+  about receiving it.
+
+A backend that starts its window accepting text should keep doing it when the slot is
+not there, since an older host never asks. Where the slot *is* there, expect the first
+frame's answer to arrive whether or not it matches what you opened with: the shell
+guesses nothing about a device it has not spoken to, and a page that opens focused on a
+field would otherwise have no way to say so.
+
 ## Porting, in order
 
 1. Fill the struct, set `abi_version` and `size`, keep your state in `user_data`.
@@ -312,17 +337,22 @@ reading it as an index into a table is how that becomes a crash.
    use-after-free the other way round. Both are the host's to call, so a page like
    `examples/gallery.c` is the pattern: upload before the loop, release and destroy
    after it.
-9. A font constructor whose table measures and whose handle your `submit` can
-   draw.
-10. Add a CMake target beside `cf_backend_sdl`, behind its own option, linking
+9. `set_cursor` and `set_text_input`, the two asks the frame answers for the device
+   rather than for the picture: show the shape the page named or refuse it, open the
+   written-text service or shut it. Leave either one out on an output that has nothing
+   to show, and expect the shell to ask only when the answer moves.
+10. A font constructor whose table measures and whose handle your `submit` can
+    draw.
+11. Add a CMake target beside `cf_backend_sdl`, behind its own option, linking
     `cf_paint cf_text` and your device library. Only `src/backend/*/` and
     `src/app/` may name a platform header.
 
-`src/backend/headless/record.c` does three of the nine and is a legal backend —
-that is the minimum. It takes no uploads and keeps no device state, so its
-resource slots stay NULL; a host that releases through a backend has to ask the
-slot first either way. It does keep the cursor it was last asked for, which is how
-the app tests tell a shape the shell applied from a shape nobody looked at.
+`src/backend/headless/record.c` does four of the ten and is a legal backend — the two a
+shell has to have, and the two device asks it keeps rather than acts on. It takes no
+uploads and keeps no device state, so its resource slots stay NULL; a host that releases
+through a backend has to ask the slot first either way. Keeping the shape and the
+written-text answer instead of showing them is how the app tests tell a decision the
+shell made from one nobody read.
 
 ## Checking your work
 

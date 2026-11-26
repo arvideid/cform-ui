@@ -18,6 +18,12 @@
  * that a desk with no cursor survives being asked. Which shape lands under the
  * hand on a real desk is a person's call, in the gallery window.
  *
+ * The written-text service is the other half of the same agreement and answers the
+ * other way: SDL keeps that state for the window itself, so both asks are taken here
+ * whatever the driver can show. What this tier proves about it is that the pair is
+ * safe in every order and around a teardown; whether a keyboard rises on a device
+ * that has one to show is the platform's, and this run cannot see it.
+ *
  * Where even that cannot open a window the case says so and leaves, the way the
  * font case does.
  */
@@ -139,6 +145,37 @@ static void asking_for_a_shape_survives_a_desk_that_has_none(const cf_backend *b
     backend->release_texture(backend->user_data, live);
 }
 
+/*
+ * Opening and shutting the service that turns keys into written text, both directions
+ * and in the orders a page produces them: a field focused, a field left, the same
+ * answer twice from a host that drives the pipeline from its own loop, and an ask
+ * through no state at all. A frame that still uploads afterwards is the point - a
+ * port that treated the keyboard as essential would stop drawing over a service the
+ * desk has no way to show.
+ */
+static void the_keyboard_takes_both_asks(const cf_backend *backend) {
+    CF_CHECK(backend->set_text_input != NULL, "a window offers the keyboard slot");
+
+    for (uint32_t round = 0u; round < 3u; ++round) {
+        backend->set_text_input(backend->user_data, true);
+        backend->set_text_input(backend->user_data, false);
+    }
+
+    backend->set_text_input(backend->user_data, false);
+    backend->set_text_input(backend->user_data, false);
+    backend->set_text_input(NULL, true);
+
+    const uint32_t live = upload(backend);
+    CF_CHECK(live != 0u, "the frame after the asks still uploads");
+    draw_texture(backend, live);
+    backend->release_texture(backend->user_data, live);
+
+    /* Left open on the way out, so the teardown below is the one that has to shut it:
+     * a window that closes with its service running is a window a second one inherits
+     * the state from. */
+    backend->set_text_input(backend->user_data, true);
+}
+
 /* Every ask that names nothing the backend holds: a host should not have to know
  * which of these it is, and none of them may reach a texture to destroy. */
 static void a_release_naming_nothing_changes_nothing(cf_backend *backend) {
@@ -220,6 +257,7 @@ int main(void) {
     an_upload_that_cannot_be_described_is_refused(&backend);
     a_release_naming_nothing_changes_nothing(&backend);
     asking_for_a_shape_survives_a_desk_that_has_none(&backend);
+    the_keyboard_takes_both_asks(&backend);
 
     /* Last, because nothing may be submitted through a destroyed backend: what a
      * teardown that skips this leaves behind is bytes the host has no way to reach

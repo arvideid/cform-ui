@@ -51,7 +51,7 @@ rectangles, text and images to a backend that puts them on a surface.
 | the CSS box model, flexbox, grid | `cf_style` and `cf_layout` |
 | the browser's layout pass | step 2 of [how a frame happens](#how-a-frame-happens) |
 | a display list the compositor builds | `cf_command_list`, the shape list `cf_paint` emits |
-| a graphics backend (Skia, ANGLE) | a `cf_backend`: [nine functions](docs/backend-abi.md) |
+| a graphics backend (Skia, ANGLE) | a `cf_backend`: [ten functions](docs/backend-abi.md) |
 | React re-rendering your component tree | describing the whole screen every frame and letting the diff decide |
 | a `click` listener on an ancestor | a handler on a parent box: they run from the one the pointer hit up through its parents, and `cf_stop` ends the walk |
 
@@ -126,7 +126,7 @@ Read this list before planning an application around it. None of it is silently
 accepted and ignored — there is no field that pretends to take these things.
 
 - **Not production-ready.** Version 1.0 is in development, and the API numbers
-  still move: the backend contract is at ABI 10 and has been broken on purpose.
+  still move: the backend contract is at ABI 11 and has been broken on purpose.
 - **Six widgets**: label, button, field, list, scroller, image. No checkbox,
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
@@ -147,13 +147,19 @@ accepted and ignored — there is no field that pretends to take these things.
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk
   the declared boxes in document order, and **Enter** or the space bar asks the
   focused box to do its job. A dialog keeps the keyboard by answering **Tab**
-  itself; nothing puts the focus back where a closed dialog found it.
+  itself; nothing puts the focus back where a closed dialog found it. The field
+  holding the keyboard is also what asks the device for a way to type: the frame's
+  `cf_frame_takes_text` answer reaches `set_text_input`, so a screen keyboard or an
+  input method is offered while a box can take the words and not while it cannot.
 - **Copy, cut and paste need a clipboard from the host.** The field answers
   **Ctrl** or **Cmd** with **C**, **X** and **V** through `cf_clipboard`, a read/write
   pair the shell names in its `cf_app_config`; `cf_clipboard_sdl()` is the desktop's,
   and a host that names none leaves those keys asking for nothing. Enter submits
-  nothing. There is no undo, no selection by word, no caret blink and no IME, so
-  composing Japanese types nothing.
+  nothing. There is no undo, no selection by word and no caret blink. An input
+  method's committed words arrive as ordinary text, but the half-composed text is
+  never drawn and the platform is never told where the caret is, so a candidate
+  window lands wherever the desk decides — the composition row of
+  `docs/backlog.md` is the one that closes it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder
@@ -306,10 +312,11 @@ Four steps, and each one can be used on its own:
    screen emits the same shapes as the one before. It costs nothing only because
    the shell stops calling the pipeline once it sees nothing moved.
 4. **Draw.** A backend turns that list onto a real surface, reports clicks and
-   keystrokes back, answers how big the surface is, reads an image file and puts
-   the shape the frame asked for under the pointer. One over SDL3 ships here, a
-   headless recorder exists for tests, and writing your own means filling in
-   [nine functions](docs/backend-abi.md).
+   keystrokes back, answers how big the surface is, reads an image file, puts the
+   shape the frame asked for under the pointer and opens or shuts the service that
+   takes written text. One over SDL3 ships here, a headless recorder exists for
+   tests, and writing your own means filling in
+   [ten functions](docs/backend-abi.md).
 
 ## Words this repository uses
 

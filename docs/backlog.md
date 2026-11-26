@@ -12,7 +12,7 @@ and this file is the record.
 | **Focus put back** | a dialog that opens takes the keyboard and leaves it nowhere when it closes | the shell remembers the box that held focus when the dialog opened and restores it with `cf_focus` — the widget side wants a container that owns the ask |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
 | **Undo** | a mistyped run is gone for good | a ring of (bytes, caret, mark) in the field's own state block. Unit cases: type, undo, redo, and an undo that stops at the buffer's edge |
-| **IME composition** | typing Japanese, Chinese or accented-by-composition characters sends nothing | a composition event pair from the backend and a marked span the field paints differently. This one needs a real desktop to test, so it needs a plan before code |
+| **IME composition** | the committed words reach the field, but the text still being composed is never drawn and the platform is never told where the caret is, so a candidate window lands wherever the desk decides | a composition event pair from the backend and a marked span the field paints differently, plus the text area the platform asks for. Opening the service is done — `set_text_input` — so what is left is the marked span, and it needs a real desktop to test, so it needs a plan before code |
 
 ## Rough edges that will bite a user
 
@@ -23,6 +23,7 @@ and this file is the record.
 | A lost device is not recovered | a refused present now ends the drawing: the backend says so once, submits nothing and takes no further upload, and still answers a release and a teardown. Nothing re-creates the device or re-uploads what was in flight, and no headless tier can make SDL refuse a frame, so recovery stays a desktop case a human qualifies (or a Wasm context-restart fixture) with the host closing and opening a backend |
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
 | Which shape arrives under the pointer is unqualified | the shell asks and the SDL port maps the three shapes onto SDL's own, but SDL's dummy driver makes no cursor at all: the headless case only proves that a refused ask leaves the window drawing. Reading the mapping needs a gallery window — the hand over a button, the I-beam in a field, the arrow elsewhere |
+| Whether a keyboard appears is unqualified | the shell's ask reaches SDL's `SDL_StartTextInput` and `SDL_StopTextInput`, and the dummy driver takes both because it keeps that state for the window rather than for the hardware — so what no tier can see is a screen keyboard rising on a device that has one to show, which is a touch platform's check |
 | Selection is by character | no double-click to select a word and no triple-click for the line, though a drag that strays past the box keeps selecting because the press holds the pointer |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
 
@@ -58,17 +59,20 @@ it. Each needs a design conversation before a line of code:
 
 ## Before a 1.0 freezes the ABI
 
-`CF_BACKEND_ABI_VERSION` is 10 and every number after it has been broken on
+`CF_BACKEND_ABI_VERSION` is 11 and every number after it has been broken on
 purpose. A texture release and a backend teardown are what 8 added; 9 added
 `size`, a second number at the front of the struct, so a backend compiled against
 another revision of the header is refused rather than misread; 10 added the cursor, the
-slot `cf_frame_cursor` had been answering into nowhere. A change that adds no slot needs no
+slot `cf_frame_cursor` had been answering into nowhere, and 11 the written-text ask,
+which had the same problem on the keyboard's side — `cf_frame_takes_text` knew the
+field was focused and had nowhere to say so. A change that adds no slot needs no
 number of its own — a font close is one, since the font is not part of the struct, and
 so is the clipboard, which went onto the context as a host-owned pair (`cf_clipboard`)
-instead of into the backend. Text-input lifecycle and composition are the rows left
-that would want a slot, and they are the ones to decide about *now* rather than after a
-release. Enum values are append-only, so the same pressure does not apply to `cf_role`,
-`cf_key` or `cf_intrinsic`.
+instead of into the backend. Composition events are the row left that would want a
+slot, and that row is the one to decide about *now* rather than after a release, because
+a marked span cannot be added from a text event that was already dropped. Enum values
+are append-only, so the same pressure does not apply to `cf_role`, `cf_key` or
+`cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 
