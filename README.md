@@ -173,11 +173,19 @@ accepted and ignored — there is no field that pretends to take these things.
   that will not fit whole is refused outright. `cf_text_edit.refusals` counts the runs
   it turned away and chapter two's line prints it, so a page can say "there is no room
   left" instead of watching a caret that stopped moving.
-- **A field's Enter belongs to the page.** The ask a click is, the key can be: an
-  unmodified **Enter** runs the focused box's own `activate` handler, so a page puts its
-  save code on the field node and chapter two copies the buffer out and prints it. The
+- **A field's Enter belongs to the page — until you say otherwise.** The ask a click is, the
+  key can be: an unmodified **Enter** runs the focused box's own `activate` handler, so a page
+  puts its save code on the field node and chapter two copies the buffer out and prints it. The
   space bar a field holds the keyboard under is the character the device sends beside it,
   so the box keeps that key — typing a word never reads as a submission.
+- **The field's mode is the build's word, not a reading of the box.** `cf_field` takes
+  `CF_FIELD_SINGLE` or `CF_FIELD_MULTILINE`, and the mode says what the value asks of its box
+  and what three keys are. A multiline field breaks a line on **Enter** and asks the page to
+  save nothing, takes the newline a paste carries, and answers **Up** and **Down** by stepping
+  the rows its box paints; a single-line field keeps one row's height, leaves **Enter** for the
+  page and lets both arrows climb. Nothing is inferred from a rendered height: chapter two
+  shows a memo two rows tall because it was declared so, and the golden
+  `caret_below_the_fold` pins the walk sliding until a caret below the fold is inside the box.
 - **A key that moved the value says so.** Every edit the field's own keys make runs the
   node's `change` handler once, on the event that moved the bytes: an arrow that walks the
   caret, a **Ctrl**+**A** that holds the whole value, and a run the buffer turned away all
@@ -210,7 +218,7 @@ accepted and ignored — there is no field that pretends to take these things.
   grid named lines and areas, and every transition and animation but the
   ones you write in C against the frame's elapsed seconds.
 - No drag-and-drop building, no theming tool, no loading a font from memory
-  (`cf_font_sdl` takes a path), no multiline field. Device pixels stop at the
+  (`cf_font_sdl` takes a path). Device pixels stop at the
   backend: only the SDL one reads a pixel density, and a window whose surface
   changes shape is resized by relayout, not by scaling a bitmap.
 

@@ -98,6 +98,11 @@ static cf_image_content logo;
 static char typed_bytes[64];
 static cf_text_edit typed = {.chars = typed_bytes, .capacity = sizeof typed_bytes};
 
+/* The second field's buffer, in the mode that breaks lines: the same widget, the same
+ * kind of extent, a different word about what Enter means. */
+static char memo_chars[96];
+static cf_text_edit memo = {.chars = memo_chars, .capacity = sizeof memo_chars};
+
 /* Eight panel boxes and eight list rows are ever named at once, and a ring of
  * eight each never rewrites bytes a label in the same frame still points at.
  * The two keep separate rings because both declare in one frame. */
@@ -122,6 +127,7 @@ static char status_bytes[32];
 static char echo_bytes[96];
 static char submit_bytes[96];
 static char change_bytes[64];
+static char memo_bytes[96];
 static char list_bytes[64];
 static char motion_bytes[96];
 static char keyboard_bytes[96];
@@ -543,7 +549,7 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
 
 /* Chapter two: the field, and the same buffer read straight back. */
 static cf_node make_field_demo(cf_ctx *ctx) {
-    cf_node entry = cf_field(ctx, "entry", &typed, &body);
+    cf_node entry = cf_field(ctx, "entry", &typed, &body, CF_FIELD_SINGLE);
     /* The door cf_field leaves its caller: the keys a field cannot serve for itself are
      * asked of the node, which is where a page puts what to do with the value. */
     entry.handlers.activate = submit_entry;
@@ -572,6 +578,27 @@ static cf_node make_field_demo(cf_ctx *ctx) {
         snprintf(change_bytes, sizeof change_bytes, "changes the page heard: %u",
                  changes != NULL ? *changes : 0u);
 
+    /* The other mode of the same widget: Enter writes a row instead of asking, so the
+     * page hears no save out of a memo that is still being written. The height is stated
+     * because the mode is, and not because a box measured two rows of bytes. */
+    cf_node block = cf_field(ctx, "memo", &memo, &body, CF_FIELD_MULTILINE);
+    block.style.width = CF_PERCENT(100.0f);
+    block.style.height = CF_PX(2.0f * FIELD_HEIGHT);
+    block.style.align_items = CF_ALIGN_START;
+
+    /* The page counts the breaks the keys wrote, which is a fact about the buffer. How many
+     * rows those bytes lay is the widget's own walk and depends on the width the box was
+     * given, so the caption states neither the rows nor a height it read back. */
+    uint32_t breaks = 0u;
+    for (uint32_t i = 0u; i < memo.length; ++i) {
+        if (memo_chars[i] == '\n') {
+            breaks++;
+        }
+    }
+
+    const int memo_length = snprintf(memo_bytes, sizeof memo_bytes,
+                                     "the memo holds %u bytes and %u breaks", memo.length, breaks);
+
     return demo_column(
         ctx, 8.0f,
         (cf_node[]){
@@ -579,8 +606,10 @@ static cf_node make_field_demo(cf_ctx *ctx) {
             cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted),
             cf_label(ctx, (cf_string){submit_bytes, (uint32_t)saved_length}, &body, theme->muted),
             cf_label(ctx, (cf_string){change_bytes, (uint32_t)moved_length}, &body, theme->muted),
+            block,
+            cf_label(ctx, (cf_string){memo_bytes, (uint32_t)memo_length}, &body, theme->muted),
         },
-        4u);
+        6u);
 }
 
 /* Chapter three: a paragraph that breaks itself, the same words capped, and the
@@ -1218,7 +1247,12 @@ static cf_node build(cf_ctx *ctx) {
             "same node before the page is built again, which is where a form validating as you "
             "type looks; the fourth line counts those reports, and an arrow that moves the caret "
             "or a ctrl that selects the value adds nothing to it, because neither of them "
-            "changed what the buffer holds.",
+            "changed what the buffer holds. The box under those lines is the same widget named "
+            "the other mode: its Enter writes a row rather than asking the page, up and down step "
+            "the caret between the rows the box lays, and a run that carries a newline is taken in "
+            "whole instead of refused. The mode is the build's word and never a reading of the "
+            "box - the memo is two rows tall because it was declared so, and the field above it "
+            "would break lines just the same if it had been named this way.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

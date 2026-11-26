@@ -3,19 +3,20 @@
 #include "cf/widget.h"
 
 /*
- * The lines a click can land on. A field's value refuses to wrap, so one row
- * is what a typed run lays; the rest is the room a buffer holds between the
- * breaks a build put in itself. A point below them all reads the last line
- * rather than nothing.
+ * The lines a click can land on and the rows an arrow steps between. A single-line
+ * field's value refuses to wrap, so one row is what a typed run lays; the rest is the
+ * room a buffer holds between the breaks the field's own Enter wrote. A point below them
+ * all, or a step past them, reads the last line rather than nothing.
  */
 #define FIELD_VISIBLE_LINES 8u
 
 /*
  * What a handler needs and the declaration does not carry: the context to read
  * the box's rect and the interaction off, the buffer to edit, the name the
- * history is keyed under, and the fonts to lay the bytes in - the stack the build
+ * history is keyed under, the fonts to lay the bytes in - the stack the build
  * handed the field, borrowed for as long as the field is declared, which is the
- * rule a label's stack already follows.
+ * rule a label's stack already follows - and the mode that decides what Enter and
+ * the vertical arrows are.
  *
  * `edited` is a fact about the key being served rather than about the box: the value
  * moves once per event however many runs the chord put in, so the edit sites note it and
@@ -26,6 +27,7 @@ typedef struct field_data {
     cf_text_edit *text;
     cf_name key;
     cf_text_stack stack;
+    cf_field_mode mode;
     bool edited;
 } field_data;
 
@@ -257,9 +259,11 @@ static bool undo_step(const undo_book *book, bool back) {
 }
 
 /*
- * The walk the box paints and the click reads, built from the same buffer both
- * times: what the paint drew is what an offset is measured along, so a caret a
- * click places stands under the pointer that placed it.
+ * The walk the box paints, the click reads and an arrow steps along, built from the same
+ * buffer every time: what the paint drew is what an offset is measured along, so a caret
+ * a click places stands under the pointer that placed it and a caret an arrow moves
+ * lands on the row the eye sees. The mode is the only difference: a single-line field
+ * refuses to wrap, so only the breaks it holds make rows.
  */
 static cf_text_content content_of(const field_data *field) {
     const cf_text_edit *text = field->text;
@@ -268,7 +272,7 @@ static cf_text_content content_of(const field_data *field) {
                              .text = {text->chars, text->length},
                              .caret = {.present = true, .value = text->caret},
                              .mark = {.present = true, .value = text->mark},
-                             .nowrap = true};
+                             .nowrap = field->mode == CF_FIELD_SINGLE};
 }
 
 /* One scalar back: over the continuation bytes the scalar owns, then off its
@@ -409,12 +413,15 @@ static uint32_t back_word(const cf_text_edit *text, uint32_t at) {
                                     : run_start(text, at, other_lead);
 }
 
-/* A run carrying a line break is refused whole: the field shows one run of
- * bytes, and a break in the middle would put the caret on a row no key here
- * can reach back to. */
-static bool holds_break(cf_string run) {
+/* A break the mode cannot show is refused whole: a single-line field would put the caret
+ * on a row no key here reaches back to, and a carriage return lays no row in either mode
+ * - the walk breaks a line at the newline a device sends, and the byte beside it would
+ * hold a place in the value while naming no row. */
+static bool holds_refused_break(const field_data *field, cf_string run) {
     for (uint32_t i = 0u; i < run.length; ++i) {
-        if (run.chars[i] == '\n' || run.chars[i] == '\r') {
+        const char byte = run.chars[i];
+
+        if (byte == '\r' || (byte == '\n' && field->mode == CF_FIELD_SINGLE)) {
             return true;
         }
     }
@@ -434,7 +441,7 @@ static bool holds_break(cf_string run) {
 static void replace(field_data *field, cf_string run) {
     cf_text_edit *text = field->text;
 
-    if (run.chars == NULL || run.length == 0u || holds_break(run)) {
+    if (run.chars == NULL || run.length == 0u || holds_refused_break(field, run)) {
         return;
     }
 
@@ -624,6 +631,86 @@ static void claim(field_data *field, cf_event *event) {
     cf_stop(event);
 }
 
+/*
+ * One read of the box: the rows the value lays and the numbers around them, so a click
+ * and an arrow measure along the same lines the paint painted and neither of them
+ * re-derives the insets on its own. `rows` is how many `lines` holds, which is never more
+ * than the array - a walk longer than the room stops at its last row rather than reading
+ * past it. False says there is nothing to place a caret in: no frame drawn yet, no font
+ * to lay the bytes with, no value to lay, or a box too narrow to hold a row.
+ */
+typedef struct field_walk {
+    cf_text_content content;
+    cf_text_line lines[FIELD_VISIBLE_LINES];
+    cf_rect box;
+    cf_point origin; /* where a row's left edge and the first row's top sit */
+    uint32_t rows;
+    float wrap;
+    float visible; /* the height the rows are slid within */
+    float line_height;
+} field_walk;
+
+static bool walk_of(const cf_ctx *ctx, const field_data *field, uint32_t slot, field_walk *walk) {
+    const cf_tree *view = cf_frame_tree(ctx);
+
+    if (view == NULL || view->styles == NULL || ctx->rects == NULL || slot >= view->node_count ||
+        field->stack.count == 0u || field->text->length == 0u) {
+        return false;
+    }
+
+    const cf_style *style = &view->styles[slot];
+    const cf_font *primary = &field->stack.fonts[0];
+
+    walk->box = ctx->rects[slot];
+
+    const cf_edges insets = cf_box_resolve(style->padding, walk->box.width);
+    const cf_edges stroke = cf_box_resolve(style->border, walk->box.width);
+
+    walk->origin =
+        (cf_point){walk->box.x + insets.left + stroke.left, walk->box.y + insets.top + stroke.top};
+    walk->line_height = primary->ops->metrics(primary->handle).line_height;
+    walk->wrap = walk->box.width - insets.left - stroke.left - insets.right - stroke.right;
+    walk->visible = walk->box.height - insets.top - stroke.top - insets.bottom - stroke.bottom;
+    walk->content = content_of(field);
+
+    if (walk->wrap <= 0.0f) {
+        return false;
+    }
+
+    const uint32_t laid =
+        cf_text_lines(&walk->content, walk->wrap, walk->lines, FIELD_VISIBLE_LINES);
+
+    walk->rows = laid < FIELD_VISIBLE_LINES ? laid : FIELD_VISIBLE_LINES;
+    return walk->rows > 0u;
+}
+
+/*
+ * One arrow between the rows: the caret keeps the distance it had travelled across the row
+ * it stands on, which is the same question a click answers in reverse and the reason a
+ * walk down a column of words lands under the word the eye was reading rather than at the
+ * row's edge. Past the first or the last row the caret stays there, because a row the box
+ * does not lay is not a row an arrow can reach.
+ */
+static void step_row(field_data *field, uint32_t slot, bool back, bool shift) {
+    cf_text_edit *text = field->text;
+    field_walk walk;
+
+    if (!walk_of(field->ctx, field, slot, &walk)) {
+        return;
+    }
+
+    const uint32_t row = cf_text_line_of(&walk.content, walk.lines, walk.rows, text->caret);
+    const uint32_t target =
+        back ? (row > 0u ? row - 1u : 0u) : (row + 1u < walk.rows ? row + 1u : walk.rows - 1u);
+    const float across = cf_text_caret_x(&walk.content, &walk.lines[row], text->caret);
+
+    text->caret = cf_text_offset_at(&walk.content, &walk.lines[target], across);
+
+    if (!shift) {
+        text->mark = text->caret;
+    }
+}
+
 static void field_key(cf_event *event, void *user_data) {
     field_data *field = user_data;
     cf_text_edit *text = field->text;
@@ -725,6 +812,35 @@ static void field_key(cf_event *event, void *user_data) {
         }
         break;
 
+    /* Enter is the whole difference between the two modes. A single-line field leaves it
+     * unstopped, which is how the page's `activate` gets the ask a form's save button
+     * answers; a multiline one writes the break the row walk steps between and stops, so
+     * the same key never both breaks a line and submits the value. A chord rides it the
+     * way it rides the space: a binding the page made is not a character. */
+    case CF_KEY_ENTER:
+        if (field->mode == CF_FIELD_SINGLE ||
+            (event->mods &
+             ((uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META | (uint32_t)CF_MOD_ALT)) != 0u) {
+            return;
+        }
+
+        const char line_break = '\n';
+        replace(field, (cf_string){&line_break, 1u});
+        break;
+
+    /* Up and down name rows, and only the mode says whether this field has any. It is the
+     * build's word rather than a reading of the box: a multiline field in a box one row
+     * tall still breaks lines on Enter, and a single-line one that grew past a row still
+     * leaves both arrows to the page. */
+    case CF_KEY_UP:
+    case CF_KEY_DOWN:
+        if (field->mode != CF_FIELD_MULTILINE) {
+            return;
+        }
+
+        step_row(field, event->target, event->key == (uint32_t)CF_KEY_UP, shift);
+        break;
+
     default:
         /* A key the field has no word for writes nothing and stops nothing:
          * the number a modifier carries is not a character, and an arrow the
@@ -736,52 +852,28 @@ static void field_key(cf_event *event, void *user_data) {
 }
 
 /*
- * The byte offset a point in the box lands on, read back along the lines the
- * box paints: the same insets, the same wrap and the same slide, so the caret
- * goes where the glyph is. False when the box has nothing to place a caret in.
+ * The byte offset a point in the box lands on, read back along the lines the box paints:
+ * the same insets, the same wrap and the same slide, so the caret goes where the glyph is.
+ * False when the box has nothing to place a caret in.
  */
 static bool offset_at(const cf_ctx *ctx, const field_data *field, uint32_t slot, cf_point where,
                       uint32_t *out) {
-    const cf_tree *view = cf_frame_tree(ctx);
-    const cf_text_edit *text = field->text;
+    field_walk walk;
 
-    if (view == NULL || view->styles == NULL || ctx->rects == NULL || field->stack.count == 0u ||
-        text->length == 0u) {
+    if (!walk_of(ctx, field, slot, &walk)) {
         return false;
     }
 
-    const cf_style *style = &view->styles[slot];
-    const cf_rect box = ctx->rects[slot];
-    const cf_edges insets = cf_box_resolve(style->padding, box.width);
-    const cf_edges stroke = cf_box_resolve(style->border, box.width);
-    const float left = insets.left + stroke.left;
-    const float top = insets.top + stroke.top;
-    const float wrap = box.width - left - insets.right - stroke.right;
-    const cf_font *primary = &field->stack.fonts[0];
-    const float line_height = primary->ops->metrics(primary->handle).line_height;
-    const float visible = box.height - top - insets.bottom - stroke.bottom;
-    cf_text_content content = content_of(field);
-    cf_text_line lines[FIELD_VISIBLE_LINES];
-    const uint32_t laid = cf_text_lines(&content, wrap, lines, FIELD_VISIBLE_LINES);
-    /* A walk lays every row of the value and fills the array only up to its room, so the
-     * rows below the array exist without being in it. Reading past the last one held is the
-     * bug; naming the held count once keeps the slide and the clamp on the same number. */
-    const uint32_t rows = laid < FIELD_VISIBLE_LINES ? laid : FIELD_VISIBLE_LINES;
+    const cf_point slide =
+        cf_text_scroll(&walk.content, walk.lines, walk.rows, (cf_size){walk.wrap, walk.visible});
+    const float y = where.y - (walk.box.y + walk.origin.y - slide.y);
+    uint32_t row = walk.line_height > 0.0f && y > 0.0f ? (uint32_t)(y / walk.line_height) : 0u;
 
-    if (rows == 0u || wrap <= 0.0f) {
-        return false;
+    if (row >= walk.rows) {
+        row = walk.rows - 1u; /* below the last row the walk laid */
     }
 
-    const cf_point slide = cf_text_scroll(&content, lines, rows, (cf_size){wrap, visible});
-    const float y = where.y - (box.y + top - slide.y);
-    uint32_t row =
-        line_height > 0.0f && y > 0.0f ? (uint32_t)(y / line_height) : 0u; /* below the last row */
-
-    if (row >= rows) {
-        row = rows - 1u;
-    }
-
-    *out = cf_text_offset_at(&content, &lines[row], where.x - (box.x + left - slide.x));
+    *out = cf_text_offset_at(&walk.content, &walk.lines[row], where.x - (walk.origin.x - slide.x));
     return true;
 }
 
@@ -824,7 +916,8 @@ static void field_pointer(cf_event *event, void *user_data) {
     }
 }
 
-cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack) {
+cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack,
+                 cf_field_mode mode) {
     cf_node node = {.style = cf_style_default()};
 
     if (ctx == NULL || name == NULL || text == NULL || text->chars == NULL) {
@@ -844,7 +937,8 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
     *data = (field_data){.ctx = ctx,
                          .text = text,
                          .key = node.key,
-                         .stack = stack != NULL ? *stack : (cf_text_stack){0}};
+                         .stack = stack != NULL ? *stack : (cf_text_stack){0},
+                         .mode = mode};
 
     clamp_marks(text);
 

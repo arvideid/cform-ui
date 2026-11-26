@@ -40,19 +40,29 @@ static const cf_font mono = {.handle = NULL, .ops = &mono_ops};
  * through. `ask` and `moved` are the doors cf_field leaves its caller beside the keys it
  * keeps for itself, which is where a page puts what to do with a value once it has moved
  * and once it is done with.
+ *
+ * `mode` is that word the build says, and `height` the box it pins the field in: a case
+ * about the mode has to be able to state both, because the mode decides what a row is
+ * whatever the box turned out to be. A height of none leaves the box to the measure, so a
+ * case can read the height a field asks for.
  */
-static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
-                        void *key_data, cf_event_fn ask, void *ask_data, cf_event_fn moved,
-                        void *moved_data) {
+static void frame_at(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_field_mode mode,
+                     float height, cf_event_fn keys, void *key_data, cf_event_fn ask,
+                     void *ask_data, cf_event_fn moved, void *moved_data) {
     cf_frame_begin(ctx);
 
     const cf_text_stack stack = {.fonts = &mono, .count = 1u};
-    cf_node field = cf_field(ctx, "entry", text, &stack);
+    cf_node field = cf_field(ctx, "entry", text, &stack, mode);
     field.disabled = disabled;
     field.handlers.activate = ask;
     field.handlers.activate_data = ask_data;
     field.handlers.change = moved;
     field.handlers.change_data = moved_data;
+
+    if (height > 0.0f) {
+        field.style.height = CF_PX(height);
+    }
+
     const cf_node roots[] = {field};
     cf_node root = {.style = cf_style_default()};
     /* A column, so the field stretches across the page: the width the box keeps
@@ -69,6 +79,14 @@ static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event
     cf_frame_resolve(ctx);
     cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
                     (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+/* The field of the mode this API shipped with, in a box the value's own rows make. */
+static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
+                        void *key_data, cf_event_fn ask, void *ask_data, cf_event_fn moved,
+                        void *moved_data) {
+    frame_at(ctx, text, disabled, CF_FIELD_SINGLE, 0.0f, keys, key_data, ask, ask_data, moved,
+             moved_data);
 }
 
 static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
@@ -1702,6 +1720,348 @@ static void the_change_door_answers_the_box_whose_value_moved(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * One read of what a mode asks a box for: the field declared, the value typed into it, and
+ * the height the next build's layout gave it. Typing moves the buffer and not the box, so
+ * the answer only shows up once the field is declared again over the value it now holds -
+ * which is exactly the sequence a page that keeps its field alive goes through.
+ */
+static float field_box_height(cf_ctx *ctx, cf_text_edit *text, cf_field_mode mode, float height,
+                              const char *run) {
+    frame_at(ctx, text, false, mode, height, NULL, NULL, NULL, NULL, NULL, NULL);
+    press(ctx, 10.0f, 10.0f);
+    type(ctx, run, (uint32_t)strlen(run));
+    frame_at(ctx, text, false, mode, height, NULL, NULL, NULL, NULL, NULL, NULL);
+
+    return ctx->rects[child_of(ctx, ctx->root_slot, 0u)].height;
+}
+
+/*
+ * The rows a field lays are the mode's doing, and the first thing the mode says is what the
+ * value asks of its box: the same bytes in the same 200-point column keep one row's height
+ * when the field refuses to wrap and take as many rows as the width breaks them into when
+ * it does. The mono pen moves ten points a scalar and the field spends eighteen points of
+ * the column on its border and padding, so thirty bytes of ordinary English lay two rows in
+ * a wrapping field and one in a field that refuses to be laid out over more.
+ */
+static void a_multiline_field_asks_for_the_height_its_rows_need(void) {
+    static const char value[] = "the quick brown fox jumps over";
+    char flat_bytes[64] = {0};
+    char tall_bytes[64] = {0};
+    cf_text_edit flat = {.chars = flat_bytes, .length = 0u, .capacity = 64u};
+    cf_text_edit tall = {.chars = tall_bytes, .length = 0u, .capacity = 64u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    const float single = field_box_height(&ctx, &flat, CF_FIELD_SINGLE, 0.0f, value);
+
+    cf_ctx_free(&ctx);
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts again");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    const float multi = field_box_height(&ctx, &tall, CF_FIELD_MULTILINE, 0.0f, value);
+
+    cf_ctx_free(&ctx);
+
+    CF_CHECK(single > 0.0f && multi > single,
+             "the same bytes ask a wrapping field for more height than a nowrap one");
+    CF_CHECK(multi - single == 20.0f, "and the difference is whole rows of the line height");
+}
+
+/*
+ * The whole difference between the two modes on one key. A single-line field leaves Enter
+ * unstopped, which is how a form's save handler hears the value is done with; a multiline
+ * one writes the break the rows are made of and stops, so the same keystroke never both
+ * breaks a line and submits the buffer. The break is bytes the field wrote, so the change
+ * door runs for it like it runs for any other run.
+ */
+static void enter_writes_a_row_in_one_mode_and_asks_in_the_other(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    uint32_t asks = 0u;
+    uint32_t through = 0u;
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, count_keys, &asks,
+             count_change, &moved);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold_with(&ctx, CF_KEY_ENTER, 0u);
+
+    CF_CHECK(text.length == 3u && bytes[2] == '\n', "Enter writes the break a row is made of");
+    CF_CHECK(text.caret == 3u && text.mark == 3u, "and the caret comes to stand past it");
+    CF_CHECK(asks == 0u && through == 0u,
+             "the key that broke a line asks the page to save nothing, and climbs no further");
+    CF_CHECK(moved.calls == 2u, "a break the field wrote is a change the page hears");
+
+    /* A chord is still a binding rather than a character, so it is left to whoever above
+     * made it - the same rule the space bar keeps in both modes. */
+    hold_with(&ctx, CF_KEY_ENTER, (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && through == 1u && asks == 0u,
+             "and a chord on Enter breaks no row and saves nothing");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * Up and down name rows, so the mode says whether the field has any to step between. A
+ * single-line field stops for neither arrow: a page that binds them to its own history of
+ * values still gets them. A multiline one answers them along the rows it paints, and keeps
+ * the distance the caret had travelled across its own row - the same question a click
+ * answers in reverse, which is what makes a step down a column land under the word the eye
+ * was reading instead of at the row's edge.
+ */
+static void the_vertical_arrows_belong_to_the_mode_and_not_the_page(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    uint32_t through = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, NULL, NULL, NULL,
+             NULL);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold_with(&ctx, CF_KEY_ENTER, 0u);
+    type(&ctx, "cd", 2u);
+
+    CF_CHECK(text.length == 5u && text.caret == 5u, "the second run landed on the new row");
+
+    hold(&ctx, CF_KEY_UP, false);
+
+    CF_CHECK(text.caret == 2u && text.mark == 2u && through == 0u,
+             "one arrow steps back onto the row above, at the distance it had travelled");
+
+    hold(&ctx, CF_KEY_DOWN, true);
+
+    CF_CHECK(text.caret == 5u && text.mark == 2u,
+             "shift keeps the mark where the walk began, so the arrow reaches a row of the");
+
+    /* Past the last row there is nowhere to go, and the arrow is spent rather than
+     * passed on: a page that scrolls with its arrows would otherwise scroll a field that
+     * was only asking to move its caret. */
+    hold(&ctx, CF_KEY_DOWN, false);
+
+    CF_CHECK(text.caret == 5u && through == 0u, "an arrow past the last row stays there");
+
+    cf_ctx_free(&ctx);
+
+    memset(bytes, 0, sizeof bytes);
+    text = (cf_text_edit){.chars = bytes, .length = 0u, .capacity = 32u};
+    through = 0u;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts again");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 0.0f, count_keys, &through, NULL, NULL, NULL,
+             NULL);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold(&ctx, CF_KEY_UP, false);
+    hold(&ctx, CF_KEY_DOWN, false);
+
+    CF_CHECK(through == 2u && text.caret == 2u,
+             "a field that names no row leaves both arrows to whoever above bound them");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * What a field shows of a run the host holds is the mode's answer too: a pasted newline
+ * lands on a row of its own in a multiline field and is refused whole in a single-line one,
+ * because half a refused break is a value that reads back differently than it was written.
+ * A carriage return is refused in either, since it lays no row anywhere and would only hold
+ * a place in the bytes.
+ */
+static void a_pasted_break_lands_where_the_mode_puts_rows(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, NULL, NULL, NULL, NULL, count_change,
+             &moved);
+    press(&ctx, 10.0f, 10.0f);
+    host_holds(&board, "a\nb");
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && bytes[1] == '\n',
+             "a pasted break opens a row in a multiline field");
+    CF_CHECK(moved.calls == 1u, "and the run that landed is one change");
+
+    /* The device's own spelling of a break: it names no row here either, so the bytes
+     * beside it would hold a place in the value while standing nowhere. */
+    host_holds(&board, "x\ry");
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && moved.calls == 1u,
+             "a carriage return is refused whole in either mode");
+
+    cf_ctx_free(&ctx);
+
+    memset(bytes, 0, sizeof bytes);
+    text = (cf_text_edit){.chars = bytes, .length = 0u, .capacity = 32u};
+    board = (fake_board){0};
+    moved = (moved_note){0};
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts again");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 0.0f, NULL, NULL, NULL, NULL, count_change,
+             &moved);
+    press(&ctx, 10.0f, 10.0f);
+    host_holds(&board, "a\nb");
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 0u && moved.calls == 0u,
+             "the same run lands nowhere in a field that has no rows to put it in");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The mode is a word the build says, not a reading of the box the word ended up in. A
+ * multiline field pinned to one row's height still takes the break Enter writes - the value
+ * is longer than the box shows, and the arrows and the click walk reach it all the same -
+ * and a single-line field given two rows' height still refuses it. A mode inferred from a
+ * rendered height would turn both of these over the moment a window changed width, which is
+ * why the road asks for the mode to be stated.
+ */
+static void the_mode_survives_the_box_it_was_pinned_in(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    uint32_t asks = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 34.0f, NULL, NULL, count_keys, &asks, NULL,
+             NULL);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold_with(&ctx, CF_KEY_ENTER, 0u);
+
+    CF_CHECK(text.length == 3u && asks == 0u,
+             "a box one row tall does not turn a multiline field into a single-line one");
+    CF_CHECK(ctx.rects[child_of(&ctx, ctx.root_slot, 0u)].height == 34.0f,
+             "and the box stayed the height it was pinned at rather than the rows it holds");
+
+    hold(&ctx, CF_KEY_UP, false);
+
+    CF_CHECK(text.caret == 2u, "the arrow still walks back onto the row the box cannot show");
+
+    cf_ctx_free(&ctx);
+
+    memset(bytes, 0, sizeof bytes);
+    text = (cf_text_edit){.chars = bytes, .length = 0u, .capacity = 32u};
+    asks = 0u;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts again");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 54.0f, NULL, NULL, count_keys, &asks, NULL, NULL);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold_with(&ctx, CF_KEY_ENTER, 0u);
+
+    CF_CHECK(text.length == 2u && asks == 1u,
+             "and height handed to a single-line field does not give it rows to break into");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The rows one walk holds are a fixed count and a value can outgrow them: twelve forced
+ * breaks lay twelve rows and the walk keeps the first handful. Past the rows it kept there is
+ * no row an arrow can reach, so the caret stays on the last one the walk laid rather than
+ * stepping for a line the walk never measured - reading one would take whatever bytes sat
+ * where a line should have been and place the caret from them, and a caret placed from bytes
+ * the field does not hold is a caret nobody can find again.
+ */
+static void an_arrow_past_the_rows_the_walk_holds_stays_on_the_last_one(void) {
+    static const char value[] = "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl";
+    char bytes[64] = {0};
+    memcpy(bytes, value, sizeof(value) - 1u);
+    cf_text_edit text = {.chars = bytes,
+                         .length = (uint32_t)(sizeof(value) - 1u),
+                         .caret = 0u,
+                         .mark = 0u,
+                         .capacity = 64u};
+    uint32_t through = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, NULL, NULL, NULL,
+             NULL);
+    press(&ctx, 10.0f, 10.0f);
+    hold(&ctx, CF_KEY_HOME, false);
+
+    /* One step per row the walk could hold, and four past them. Each row is two bytes, so the
+     * eighth one starts where the fourteenth byte is. */
+    for (uint32_t i = 0u; i < 12u; ++i) {
+        hold(&ctx, CF_KEY_DOWN, false);
+    }
+
+    CF_CHECK(text.caret == 14u, "the walk stops at the last row it laid a caret into");
+    CF_CHECK(through == 0u, "and a step that found nowhere to go is still a key the field used");
+
+    hold(&ctx, CF_KEY_UP, false);
+
+    CF_CHECK(text.caret == 12u, "the row above it is reached the same way as any other");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -1746,6 +2106,12 @@ int main(void) {
     CF_RUN(the_change_door_hears_the_bytes_and_not_the_caret);
     CF_RUN(cutting_pasting_and_stepping_the_history_move_the_value);
     CF_RUN(the_change_door_answers_the_box_whose_value_moved);
+    CF_RUN(a_multiline_field_asks_for_the_height_its_rows_need);
+    CF_RUN(enter_writes_a_row_in_one_mode_and_asks_in_the_other);
+    CF_RUN(the_vertical_arrows_belong_to_the_mode_and_not_the_page);
+    CF_RUN(a_pasted_break_lands_where_the_mode_puts_rows);
+    CF_RUN(the_mode_survives_the_box_it_was_pinned_in);
+    CF_RUN(an_arrow_past_the_rows_the_walk_holds_stays_on_the_last_one);
 
     return CF_REPORT();
 }

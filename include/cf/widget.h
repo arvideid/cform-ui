@@ -85,6 +85,19 @@ typedef struct cf_text_edit {
 } cf_text_edit;
 
 /*
+ * Whether a field's Enter breaks a line, and with it what the value asks of its box.
+ * The mode is the build's word and never a reading of the box: a field whose box came
+ * out one row tall is still a multiline field if that is what was declared, and one
+ * that grew past a row is still a single-line one. CF_FIELD_SINGLE (the zero value) is
+ * the field this API shipped with - the value refuses to wrap, so it keeps one row's
+ * height whatever it holds, and Enter is left unstopped for the node's `activate`.
+ * CF_FIELD_MULTILINE lets the value break where it wraps and where a newline puts it:
+ * Enter writes that break, a pasted run may carry one, and up and down step the caret
+ * between the rows the box lays. Appended, so the modes stay the numbers they are.
+ */
+typedef enum cf_field_mode { CF_FIELD_SINGLE, CF_FIELD_MULTILINE } cf_field_mode;
+
+/*
  * A themed text box. The field declares that it takes the keyboard, so the press
  * that starts inside books focus on the field itself rather than on a box its role
  * named, and the keys the focused field receives edit the buffer in place: what
@@ -92,8 +105,8 @@ typedef struct cf_text_edit {
  * delete take the selection or the scalar on the side they name, and left, right,
  * home and end move the caret - holding shift extends the selection instead. A
  * press places the caret under the pointer and a drag from it selects to wherever
- * the pointer went; the value never wraps, so a field keeps its height whatever it
- * holds, and the box slides along the value to keep the caret in view. Left and
+ * the pointer went; a single-line field keeps its height whatever it holds, and the
+ * box slides along the value to keep the caret in view. Left and
  * right held on either Control or a command key move a word rather than a scalar:
  * the run of letters and digits the caret stands in, the run of anything else, or
  * the blanks ahead and the run after them. A word is read off the bytes, so a
@@ -117,9 +130,15 @@ typedef struct cf_text_edit {
  *
  * Two keys are left for whoever declared the box. The field keeps a bare space bar as
  * the character the device sends beside it, so no ask to act comes out of the box a
- * person is still typing into, and it leaves Enter unstopped: the shell asks the node's
- * own `activate` handler, which is where a page puts what to do with a value that is
- * done with. A space held with a chord modifier climbs with the chord.
+ * person is still typing into, and a single-line field leaves Enter unstopped: the shell
+ * asks the node's own `activate` handler, which is where a page puts what to do with a
+ * value that is done with. A space held with a chord modifier climbs with the chord, and
+ * so does an Enter that a chord rode in on - in either mode.
+ *
+ * Up and down belong to the mode. A single-line field names no row, so it stops for
+ * neither and the arrows climb to the page; a multiline one lays the value into rows and
+ * answers the same two keys the way a click is answered - along the rows the box paints,
+ * at the distance the caret had travelled across its own.
  *
  * The other door is `change`, and the field reports through it: every key that wrote or
  * took bytes runs it once, on the event that did it, before the page is built again, so a
@@ -127,7 +146,8 @@ typedef struct cf_text_edit {
  * or the selection, a run the buffer had no room for and a step at the end of the history
  * write nothing, so they report nothing.
  */
-cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
+cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack,
+                 cf_field_mode mode);
 
 /*
  * A viewport that walks its children with the wheel: the offset lives in the
