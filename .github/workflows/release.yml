@@ -1,0 +1,353 @@
+name: Release
+
+# One tag, one release. Nothing here runs on a branch push: a version becomes
+# public because someone wrote down that it is, which is the whole difference
+# between a release and a build nobody asked for.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # The tag is the promise, so the tag is read before anything is built with its
+  # name. Each step refuses a different way a release can lie: a number that is
+  # not the header's, a commit main has never carried, a surface the version
+  # cannot cover, a baseline that stopped describing the shipped tree.
+  verify:
+    name: The tag keeps its word
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Tags and history, both: the previous release has to be findable and
+          # the tagged commit has to be provably inside main's line.
+          fetch-depth: 0
+
+      - name: Read the version the tag states
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "release: $tag is not vMAJOR.MINOR.PATCH, with an optional -suffix" >&2
+            exit 1
+          fi
+          echo "number=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          echo "release: $tag is version ${BASH_REMATCH[1]}"
+
+      - name: The header states the same number
+        # CFORM_EXPECTED_VERSION is the tag's number. The script compares it with
+        # what include/cf/version.h says and with what project() was handed, so all
+        # three have to agree before a single artefact carries the tag's name.
+        run: |
+          cmake -DCFORM_EXPECTED_VERSION="${{ steps.version.outputs.number }}" \
+            -P cmake/cform_version.cmake --check
+
+      - name: Install the toolchain the suite needs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
+      # The gate the tag claims to ship, run rather than trusted from the branch's
+      # log: a release is the one build that gets no benefit of the doubt.
+      - name: Build and test the tree being shipped
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCFORM_BUILD_TESTS=ON -DCFORM_BUILD_EXAMPLES=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure -LE bench
+
+      # A tag on a commit main has never carried would ship a tree no CI run has
+      # ever gated. Fetched by ref because a tag checkout carries no remote branch.
+      - name: The commit is on main
+        run: |
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main || {
+            echo "release: $GITHUB_SHA is not in main's history, so nothing has gated it" >&2
+            exit 1
+          }
+          echo "release: the tagged commit is on main"
+
+      # The smallest bump the surface diff allows is compared inside the script with
+      # the bump between the previous release's baseline and this tag's number. A
+      # first release has no previous tag to describe, so 0.1.0 - the committed
+      # baseline from before the versioning contract - is where the count starts.
+      - name: The surface matches the bump the tag took
+        run: |
+          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^@" 2>/dev/null \
+            || echo v0.1.0)"
+          echo "release: gating against tests/api/${previous#v}.txt"
+          python3 tools/check_api.py --baseline "tests/api/${previous#v}.txt"
+
+      # docs/releases.md asks for this file in the same commit as the number. Checked
+      # rather than remembered: a baseline nobody refreshes passes every later
+      # release by inheriting the diff it was meant to catch.
+      - name: The released surface is committed as a baseline
+        run: |
+          baseline="tests/api/${{ steps.version.outputs.number }}.txt"
+          test -f "$baseline" || {
+            echo "release: $baseline is not committed. docs/releases.md step 3:" >&2
+            echo "    python3 tools/api_surface.py -o $baseline" >&2
+            exit 1
+          }
+          python3 tools/api_surface.py -o build/shipped.txt
+          diff -u "$baseline" build/shipped.txt || {
+            echo "release: $baseline is not the surface this tag ships" >&2
+            exit 1
+          }
+
+  # The floors an outside project takes: installed into a prefix that was never
+  # configured, then consumed from it, so a discovery file that names a build tree
+  # fails here instead of on the adopter's machine.
+  artifacts:
+    name: Package ${{ matrix.label }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: windows-latest
+            label: windows-x86_64
+          - os: macos-latest
+            label: macos-aarch64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read the version the package has to carry
+        run: cmake -P cmake/cform_version.cmake >> "$GITHUB_ENV"
+
+      - name: Configure and build
+        # No SDL: the backend's interface names SDL3::SDL3, a FetchContent target
+        # that exists in a build tree and nowhere else, so it is not installable and
+        # is not in the archive. An adopter's window is their platform's own link
+        # line, and the package promising one would be a promise per toolchain.
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+
+      - name: Install into a prefix that was never configured
+        run: cmake --install build --prefix stage --config Release
+
+      - name: Check the archive holds what a consumer reads
+        run: |
+          for want in \
+            lib/cmake/cform-ui/cform-ui-config.cmake \
+            lib/cmake/cform-ui/cform-ui-config-version.cmake \
+            lib/cmake/cform-ui/cform-ui-targets.cmake \
+            lib/pkgconfig/cform.pc \
+            include/cf/cf.h \
+            include/cf/version.h; do
+            test -f "stage/$want" || { echo "the installed tree is missing $want"; exit 1; }
+          done
+
+      - name: Consume the installed tree through find_package
+        shell: bash
+        run: |
+          cmake -S tests/consumer -B build-consumer \
+            -DCMAKE_PREFIX_PATH="$PWD/stage" \
+            -DCFORM_CONSUMER_VERSION="$CFORM_VERSION" \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY="$PWD/consumer-bin" \
+            -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE="$PWD/consumer-bin"
+          cmake --build build-consumer --config Release
+          ./consumer-bin/consumer${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+
+      - name: Archive the installed tree
+        run: tar -czf "cform-ui-${CFORM_VERSION}-${{ matrix.label }}.tar.gz" -C stage .
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.label }}
+          path: cform-ui-${{ env.CFORM_VERSION }}-${{ matrix.label }}.tar.gz
+          retention-days: 90
+
+  # The browser is part of the reach claim, so the page a person opens is a
+  # release artefact built by the same tag rather than something someone compiled
+  # locally and hoped for.
+  web:
+    name: WebAssembly and amalgamation
+    needs: verify
+    runs-on: ubuntu-latest
+    env:
+      # Pinned for the reason ci.yml pins it: an SDK moving mid-air would fail a
+      # release for something nobody wrote into the diff.
+      EMSDK_VERSION: "7.0.0"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read the version the artefacts are named for
+        run: cmake -P cmake/cform_version.cmake >> "$GITHUB_ENV"
+
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+
+      - name: Build the pages
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          cmake --preset web
+          cmake --build --preset web --parallel
+
+      - name: Pack the one header
+        run: cmake --build --preset web --target cf_amalgamate
+
+      # A missing page fails the release rather than publishing a site with a blank
+      # tab in it.
+      - name: Check every artefact arrived
+        run: |
+          for want in build/wasm/bin/site.html build/wasm/bin/gallery.html \
+                      build/wasm/amalgam/cf_layout.h; do
+            test -f "$want" || { echo "the build produced no $want"; exit 1; }
+          done
+          cp build/wasm/amalgam/cf_layout.h "cf_layout-${CFORM_VERSION}.h"
+
+      - name: Upload the pages
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages
+          path: |
+            build/wasm/bin/site.html
+            build/wasm/bin/gallery.html
+          retention-days: 90
+
+      - name: Upload the amalgamated header
+        uses: actions/upload-artifact@v4
+        with:
+          name: amalgam
+          path: cf_layout-${{ env.CFORM_VERSION }}.h
+          retention-days: 90
+
+  # The notes come out of the commits, so a release cannot be published without
+  # them and cannot describe a change nobody made.
+  notes:
+    name: Write the release notes
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate
+        run: |
+          python3 tools/release_notes.py --tag "$GITHUB_REF_NAME" \
+            --repo "https://github.com/${GITHUB_REPOSITORY}" \
+            --url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME}" \
+            --notes release.md --index releases.json
+          cat release.md
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: notes
+          path: |
+            release.md
+            releases.json
+          retention-days: 90
+
+  # gh is on the runner, so publishing adds no third-party action to trust and no
+  # dependency to watch. The source tarball comes from GitHub itself at
+  # /archive/<tag>.tar.gz; rebuilding one here would only differ in what it
+  # chose to leave out.
+  github-release:
+    name: Publish the release
+    needs: [artifacts, web, notes]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download what the release carries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{package-*,amalgam,notes}"
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        shell: bash
+        run: |
+          test -f dist/release.md || { echo "the notes job produced no release.md"; exit 1; }
+          args=(--title "cform-ui $GITHUB_REF_NAME" --notes-file dist/release.md)
+
+          # A tag with a suffix is a release to try rather than one to depend on,
+          # and it must not become the repository's latest: an adopter asking for
+          # the newest stable version should not be handed an -rc.
+          case "$GITHUB_REF_NAME" in
+            *-*) args+=(--prerelease) ;;
+          esac
+
+          while IFS= read -r asset; do args+=("$asset"); done < <(
+            find dist -type f \( -name '*.tar.gz' -o -name 'cf_layout-*.h' \) | sort)
+          gh release create "$GITHUB_REF_NAME" "${args[@]}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Pages is served from this workflow rather than from a branch, so the site a
+  # person reads is the tree one tag named. The markdown travels along as text: a
+  # canvas is not selectable, not searchable and not crawled, and prose that only
+  # exists as pixels is prose nobody can quote or link to.
+  site:
+    name: Publish the site
+    needs: [web, notes]
+    # A prerelease is something to try, not the documentation to land on.
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download the built pages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{pages,notes}"
+          path: dist
+          merge-multiple: true
+
+      - name: Assemble the bundle
+        run: |
+          mkdir -p public/playground public/repo-docs
+          cp dist/site.html public/index.html
+          cp dist/gallery.html public/playground/gallery.html
+          cp dist/releases.json public/releases.json
+          cp docs/*.md public/repo-docs/
+
+      - name: Check the Pages source is set to Actions
+        # A repository still pointed at a branch answers the deploy with a 409 and
+        # a line about the build context. Asked first and answered in plain words,
+        # because no workflow can change the setting it needs.
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/pages" > /dev/null 2>&1 || {
+            echo "GitHub Pages is not enabled for ${GITHUB_REPOSITORY}. In Settings ->" \
+              "Pages, set Source to 'GitHub Actions' - docs/releases.md, step 0."
+            exit 1
+          }
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Pages artefact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
