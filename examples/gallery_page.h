@@ -123,6 +123,7 @@ static char echo_bytes[96];
 static char list_bytes[64];
 static char motion_bytes[96];
 static char keyboard_bytes[96];
+static char leaving_bytes[96];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -1020,14 +1021,36 @@ static cf_node make_keyboard_demo(cf_ctx *ctx) {
                        2u);
 }
 
+/* The press the page's own ending rides on. It is handed the context, which is the
+ * one thing a build owns, and that is where the ask goes: a page has no way to reach
+ * the window it is drawn into and should not need one. */
+static void end_the_run(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot, (void)user_data;
+    cf_request_quit(ctx);
+}
+
+/* Chapter eleven: the two asks a build has. One keeps the frames coming, the other
+ * stops them, and what the shell does with either is the host's. */
+static cf_node make_leaving_demo(cf_ctx *ctx) {
+    const int length =
+        snprintf(leaving_bytes, sizeof leaving_bytes,
+                 cf_quit_requested(ctx) ? "the page has asked to be done" : "nothing asked yet");
+
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){make_button(ctx, "end the run", end_the_run, NULL),
+                                   cf_label(ctx, (cf_string){leaving_bytes, (uint32_t)length},
+                                            &body, theme->muted)},
+                       2u);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
 
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
-    const cf_node note =
-        cf_label(ctx, cf_string_of("ten rules, each with something to try"), &body, theme->muted);
+    const cf_node note = cf_label(ctx, cf_string_of("eleven rules, each with something to try"),
+                                  &body, theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
@@ -1173,6 +1196,18 @@ static cf_node build(cf_ctx *ctx) {
             "border darken on the box that took it; the line below names the last chip that "
             "answered, and the switched-off one never appears in it.",
             make_keyboard_demo(ctx)),
+        make_chapter(
+            ctx, "11", "The end the page asks for",
+            "A run has two endings and the page may name one of them. The window's close "
+            "button reaches the shell as an event the tree never sees, while a control inside "
+            "the page has no event to send, so it asks through its context - the one thing a "
+            "build owns, and why it is handed to the press. The ask is not a close: the frame "
+            "that answered the press is laid out, painted and submitted first, because the press "
+            "the user made is the one they should see land, and the ask then stands until the "
+            "context is freed. A host that runs the pipeline itself reads the same ask and "
+            "decides what it is worth - this window leaves, a dialog would be dismissed, and "
+            "nothing in the framework closes a window a page has no handle on.",
+            make_leaving_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against and the "

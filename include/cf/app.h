@@ -24,7 +24,8 @@ typedef struct cf_app_config {
 } cf_app_config;
 
 /*
- * Runs the loop until the backend reports quit: every frame drains the
+ * Runs the loop until the run is over - the backend reported quit, or the page
+ * asked for the end through cf_request_quit: every frame drains the
  * backend's events into the dispatch, runs the build's page through the
  * frame pipeline against the surface the backend offers now, and submits
  * the commands it painted. A config without a build or a backend that cannot

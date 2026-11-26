@@ -57,3 +57,15 @@ void cf_request_frame(cf_ctx *ctx) {
 bool cf_frame_requested(const cf_ctx *ctx) {
     return ctx != NULL && ctx->frame_requested;
 }
+
+void cf_request_quit(cf_ctx *ctx) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    ctx->quit_requested = true;
+}
+
+bool cf_quit_requested(const cf_ctx *ctx) {
+    return ctx != NULL && ctx->quit_requested;
+}

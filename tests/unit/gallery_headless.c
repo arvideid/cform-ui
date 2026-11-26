@@ -1137,9 +1137,10 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
     CF_CHECK(page_reads("the keyboard last asked: chip two"),
              "reverse Tab walks back and the space bar asks the same way Enter does");
 
-    /* Two more steps forward from the second chip: the third, then past the end
-     * of the page and round to its first control - the only box whose ask moves
-     * the count the first chapter keeps. */
+    /* Three steps forward from the second chip: the third, the page's own way out at
+     * the end of the document, and one past it - the ring wraps to its first box, the
+     * only control whose ask moves the count the first chapter keeps. */
+    step(tab_key(false));
     step(tab_key(false));
     step(tab_key(false));
     step(key_down(CF_KEY_ENTER));
@@ -1147,6 +1148,30 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
     CF_CHECK(*click_count(&session) == 2u, "a walk off the end of the page returns to its start");
 
     end_session();
+}
+
+/* The last chapter's button is the page's own way out. This harness is not a shell -
+ * it runs the pipeline itself and never leaves on the ask - which is exactly why the
+ * ask is readable here: it belongs to the context, not to whoever owns the window. */
+static void the_page_can_ask_the_shell_to_leave(void) {
+    start_session(current_size());
+
+    /* Revealed by the line rather than the button: the line is under it, so a step
+     * that reaches the line has the button well inside what a pointer can hit. */
+    if (!reveal_to("nothing asked yet", REVEAL_MAX_STEPS)) {
+        end_sessions();
+        return;
+    }
+
+    CF_CHECK(!cf_quit_requested(&session), "the chapters above the last one ask for nothing");
+
+    if (tap("end the run")) {
+        CF_CHECK(cf_quit_requested(&session), "the press left the ask on the context");
+        CF_CHECK(page_reads("the page has asked to be done"),
+                 "and the chapter reads the ask back in its own line");
+    }
+
+    end_sessions();
 }
 
 static void a_narrow_window_reflows_without_spilling_geometry(void) {
@@ -1314,6 +1339,7 @@ int main(void) {
     CF_RUN(the_badge_switch_moves_it_and_the_logo_still_paints);
     CF_RUN(a_press_sends_the_puck_and_the_page_stops_asking_when_it_lands);
     CF_RUN(the_keyboard_walks_the_page_and_asks_where_it_stands);
+    CF_RUN(the_page_can_ask_the_shell_to_leave);
     CF_RUN(a_narrow_window_reflows_without_spilling_geometry);
     CF_RUN(a_bigger_output_still_bounds_every_box);
     CF_RUN(the_inspector_lays_its_numbers_over_the_page);

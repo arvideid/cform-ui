@@ -126,6 +126,37 @@ static void a_frame_carries_its_seconds_and_may_ask_for_another(void) {
     cf_ctx_free(&ctx);
 }
 
+/* The other ask a build makes is not one frame's business: wanting out does not
+ * wear off, so a host that reads the answer when it feels like it cannot miss the
+ * frame that asked. */
+static cf_node leaving(cf_ctx *ctx) {
+    cf_request_quit(ctx);
+
+    return one_box(ctx);
+}
+
+static void an_ask_to_leave_stands_across_the_frames_after_it(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_command_list list = {0};
+    CF_CHECK(!cf_quit_requested(&ctx), "a context that never asked has asked for nothing");
+
+    cf_frame_run(&ctx, leaving, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(cf_quit_requested(&ctx), "the ask is readable once the frame is run");
+    CF_CHECK(list.count == 1u, "and the frame that asked still painted its page");
+
+    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(cf_quit_requested(&ctx), "a later frame did not wipe the ask out");
+
+    CF_CHECK(!cf_quit_requested(NULL), "no context asked for nothing");
+
+    cf_ctx_free(&ctx);
+}
+
 /* cf_frame_run replaces the stream rather than adding to it: one list handed
  * to two identical frames must answer with a single fill each time, and an
  * empty frame after a full one must leave nothing standing. bench_memory
@@ -439,6 +470,7 @@ int main(void) {
     CF_RUN(a_build_that_answers_nothing_paints_nothing);
     CF_RUN(a_run_without_a_build_or_a_list_is_a_no_op);
     CF_RUN(a_frame_carries_its_seconds_and_may_ask_for_another);
+    CF_RUN(an_ask_to_leave_stands_across_the_frames_after_it);
     CF_RUN(a_reused_list_is_replaced_not_appended);
     CF_RUN(a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind);
     CF_RUN(a_negative_or_nan_interval_clamps_to_zero);

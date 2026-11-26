@@ -188,6 +188,10 @@ so the engine drains the queue every frame and nothing piles up while a window
 sits idle. Map your device's input onto `cf_event_type` and nothing else:
 
 - `CF_EVENT_QUIT` closes the loop; it never reaches the tree.
+- The other way a run ends comes from inside the page rather than from your device: a
+  control asks through its context (`cf_request_quit`) and `cf_app_run` leaves after the
+  frame that answered the press. Nothing about your backend changes - a host that runs
+  the pipeline itself reads `cf_quit_requested` and decides what the ask is worth.
 - The engine uses **F12** — `CF_KEY_F12` — for its own inspector, before your page
   sees it.
 - A key event carries one of the `cf_key` numbers, not your platform's. Map

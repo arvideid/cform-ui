@@ -111,6 +111,11 @@ typedef struct cf_ctx {
      * one frame: the begin of the next clears them. */
     float frame_seconds;
     bool frame_requested;
+    /* Asked for by a build that wants the run over. Unlike the frame ask, which
+     * the next begin wipes, this one stands: a page that has asked to close has
+     * not un-asked by the frame after, and a host that reads it late must not
+     * miss it. Only freeing the context puts it back. */
+    bool quit_requested;
     /* The reason the last boundary refused since this frame began, or NULL.
      * Every message is a literal the library owns, so the answer outlives the
      * call that recorded it. */
@@ -253,6 +258,21 @@ void cf_request_frame(cf_ctx *ctx);
 
 /* Whether this frame's build asked for the one after it. */
 bool cf_frame_requested(const cf_ctx *ctx);
+
+/*
+ * Asks the shell running this context to stop: the button that means "quit" has
+ * nowhere else to send the word, and a page should not have to reach past its own
+ * context into a window it does not own. Nothing closes on the spot - the frame
+ * the ask lands in is finished, submitted and shown first, because the press that
+ * asked is the press the user should see answered. cf_app_run leaves after that
+ * frame; a host that runs cf_frame_run itself reads cf_quit_requested and does the
+ * same, which is also how it stays open when the ask means "close this dialog"
+ * rather than "exit" - the shell's owner decides what the ask is worth.
+ */
+void cf_request_quit(cf_ctx *ctx);
+
+/* Whether the page has asked to be done. Sticky: no frame clears it. */
+bool cf_quit_requested(const cf_ctx *ctx);
 
 /*
  * Whether this frame changed the node - a fresh slot, or a declaration

@@ -165,6 +165,15 @@ accepted and ignored — there is no field that pretends to take these things.
   I-beam over a field, the arrow elsewhere. Nothing declares a shape — there is no
   cursor on `cf_style`, no wait or not-allowed shape and no custom image — so a
   backend that has one shape is only missing the ones the framework never asks for.
+- **A run ends two ways, and one of them is the page's.** A window's close button
+  reaches the shell as `CF_EVENT_QUIT`, which never arrives at the tree. A control
+  inside the page has no event to send, so it asks through its context —
+  `cf_request_quit` — and `cf_app_run` leaves after the frame that answered the press,
+  so the click the user made is the one they see land. The ask stands until the
+  context is freed, and nothing in the framework destroys a window: whether the ask
+  means "exit" or "dismiss this dialog" is the host's call, which is why the gallery's
+  last chapter ends the program and a harness driving the pipeline itself just reads
+  the ask.
 - **Missing CSS, in full:** `calc()`, container queries,
   grid named lines and areas, and every transition and animation but the
   ones you write in C against the frame's elapsed seconds.

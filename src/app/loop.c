@@ -180,5 +180,13 @@ void cf_app_run(const cf_app_config *config) {
 
         config->backend.submit(config->backend.user_data, list.commands, list.count);
         config->backend.present(config->backend.user_data);
+
+        /* The other way a run ends: the window's close button reports an event, and
+         * a control inside the page has no event to send, so it asks here. After the
+         * present, so the press that asked is drawn before the loop is gone. */
+        if (cf_quit_requested(&ctx)) {
+            cf_ctx_free(&ctx);
+            return;
+        }
     }
 }

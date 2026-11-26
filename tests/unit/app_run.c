@@ -59,6 +59,25 @@ static cf_node clickable_box(cf_ctx *ctx) {
     return root;
 }
 
+/* The page's own way out: a press inside the box asks the shell to stop, and the
+ * counter says how many presses the dispatch ever got. */
+static uint32_t presses;
+
+static void press_leaves(cf_event *event, void *user_data) {
+    if (event->type == CF_EVENT_POINTER_DOWN) {
+        presses++;
+        cf_request_quit((cf_ctx *)user_data);
+    }
+}
+
+static cf_node leaving_box(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    root.handlers.pointer = press_leaves;
+    root.handlers.pointer_data = ctx;
+
+    return root;
+}
+
 /* A page mid-motion asks for the frame after this one, the only way a build
  * can keep running once the device stops handing events. */
 static cf_node animating_box(cf_ctx *ctx) {
@@ -218,6 +237,7 @@ static void reset(const fake_hand *hands, uint32_t count) {
     presents = 0u;
     boards_seen = 0u;
     cursor_asks = 0u;
+    presses = 0u;
 
     for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_shapes / sizeof asked_shapes[0]); ++at) {
         asked_shapes[at] = CF_CURSOR_DEFAULT;
@@ -460,6 +480,37 @@ static void a_device_with_no_cursor_slot_still_runs(void) {
     CF_CHECK(recorder.cursor == CF_CURSOR_TEXT, "and the device was handed no shape at all");
 }
 
+/* The two ends of a run differ only in who names them: the window's close button
+ * arrives as an event, and a control inside the page has no event to send, so it
+ * asks through its context. The frame that answered the press is shown, and the
+ * events queued behind it are never read - the shell left, it did not pause.
+ *
+ * The first press is absorbed: dispatch walks the rects the last frame laid out, and
+ * before any frame there is none to hit, so the box gets its rect from that frame and
+ * the press after it is the one the handler sees. The third is what the check is for -
+ * a shell that only paused would dispatch it and count it. */
+static void a_page_that_asks_leaves_after_the_frame_that_answers_it(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 7u);
+
+    cf_app_run(&(cf_app_config){.build = leaving_box, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 2u, "the ask earned the frame that answered it, no more");
+    CF_CHECK(presents == 2u, "and that frame reached the screen before the loop went");
+    CF_CHECK(presses == 1u, "and the press queued behind it was never dispatched");
+    CF_CHECK(recorder.count == 1u, "the stream it left behind is the page's own fill");
+}
+
 int main(void) {
     printf("app run\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -472,6 +523,7 @@ int main(void) {
     CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);
     CF_RUN(the_shell_asks_for_the_shape_only_when_it_moves);
     CF_RUN(a_device_with_no_cursor_slot_still_runs);
+    CF_RUN(a_page_that_asks_leaves_after_the_frame_that_answers_it);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 
     cf_arena_free(&store);
