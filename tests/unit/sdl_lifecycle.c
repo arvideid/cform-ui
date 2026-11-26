@@ -5,9 +5,11 @@
  * The resource half of the backend contract, run against the one backend that
  * owns a device: an upload answers a number, a release takes the bytes back and
  * hands that number to the next upload, and a stream still naming a retired
- * number draws nothing instead of whatever the number came to mean. What the
- * backend takes for the window it also gives back, and only what it took - a
- * second window does not shut the platform the first one is standing on.
+ * number draws nothing instead of whatever the number came to mean. An ask the
+ * caller cannot describe - no pixels, no side, a side no device carries - is
+ * refused before it reaches the hardware. What the backend takes for the window it
+ * also gives back, and only what it took - a second window does not shut the
+ * platform the first one is standing on.
  *
  * The window is opened on SDL's dummy video driver, which the test property sets
  * in the environment: no display, no desktop automation, and the same four slots
@@ -69,6 +71,34 @@ static void a_released_upload_leaves_its_number_behind(cf_backend *backend) {
         backend->release_texture(backend->user_data, id);
     }
     CF_CHECK(peak == 1u, "a hundred cycles never needed more than one slot");
+}
+
+/* An upload is a promise about a buffer, and an ask that cannot be described is
+ * refused before it reaches the device: a width whose row stride wraps would have
+ * the copy read rows of bytes the caller never had. */
+static void an_upload_that_cannot_be_described_is_refused(const cf_backend *backend) {
+    const uint32_t live = upload(backend);
+    CF_CHECK(live != 0u, "a described upload is taken");
+
+    CF_CHECK(backend->create_texture(backend->user_data, 0u, 2u, pixels) == 0u,
+             "no width is no upload");
+    CF_CHECK(backend->create_texture(backend->user_data, 2u, 0u, pixels) == 0u,
+             "no height is no upload");
+    CF_CHECK(backend->create_texture(backend->user_data, 2u, 2u, NULL) == 0u,
+             "no pixels is no upload");
+    CF_CHECK(backend->create_texture(backend->user_data, 1u << 31, 1u, pixels) == 0u,
+             "a width whose stride would wrap is refused");
+    CF_CHECK(backend->create_texture(backend->user_data, 20000u, 1u, pixels) == 0u,
+             "a side past any display is refused");
+
+    /* The refusals took a number and gave it back, so the table is where it was:
+     * the live upload still draws, and retiring it frees the one slot rather than
+     * leaving a row of empties behind it. */
+    draw_texture(backend, live);
+    backend->release_texture(backend->user_data, live);
+    const uint32_t again = upload(backend);
+    CF_CHECK(again == live, "a refused upload leaves the table where it was");
+    backend->release_texture(backend->user_data, again);
 }
 
 /* Every ask that names nothing the backend holds: a host should not have to know
@@ -149,6 +179,7 @@ int main(void) {
     CF_CHECK(backend.abi_version == CF_BACKEND_ABI_VERSION, "the backend states the contract");
 
     a_released_upload_leaves_its_number_behind(&backend);
+    an_upload_that_cannot_be_described_is_refused(&backend);
     a_release_naming_nothing_changes_nothing(&backend);
 
     /* Last, because nothing may be submitted through a destroyed backend: what a

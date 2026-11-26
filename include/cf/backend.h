@@ -35,8 +35,11 @@ typedef struct cf_backend {
      * backend's. */
     void (*present)(void *user_data);
     /* Uploads RGBA8888 pixels, one byte per channel, row after row, as a
-     * texture the stream's image commands name. Zero names a texture the
-     * backend refused: nothing was uploaded, nothing will draw. */
+     * texture the stream's image commands name. The buffer has to hold
+     * width*height*4 bytes, and both sides have to be real: zero, absent pixels
+     * and a side no display can carry are refused rather than half-uploaded.
+     * Zero names a texture the backend refused: nothing was uploaded, nothing
+     * will draw. */
     uint32_t (*create_texture)(void *user_data, uint32_t width, uint32_t height,
                                const void *pixels);
     /* Moves one device event into `out` and answers whether it took one.

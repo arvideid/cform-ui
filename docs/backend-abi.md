@@ -91,6 +91,13 @@ the cursor will have; until then every service has a slot that can be asked dire
   past `submit` (a queue, a display list built for later) keeps the textures that
   stream named until it has drawn them, and only then lets a release destroy them.
   Nothing above this boundary can see that queue, so the duty is the backend's.
+- **An upload is a promise about a buffer.** The caller states a width, a height and
+  where the RGBA8888 bytes start, and the backend reads `width * height * 4` of them.
+  A side of zero, absent pixels and a size no device could carry are therefore refused
+  with 0 rather than half-uploaded: a width large enough to wrap the row stride turns
+  the copy into a read past whatever the caller had. `cf_backend_sdl` caps a side at
+  16384 and logs the ones it turns away, because the dimensions a decoded file states
+  are not a choice the host made.
 - `destroy` is the host's, not the shell's: `cf_app_run` borrows the backend and
   hands it back, so a window outlives the loop unless the host closes it.
 - A teardown gives back only what the backend took. If starting it found the

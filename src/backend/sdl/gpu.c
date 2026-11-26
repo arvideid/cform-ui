@@ -265,10 +265,28 @@ static bool grow_textures(sdl_state *state) {
  * promises. SDL's own RGBA8888 is that as a 32-bit value with red in the high
  * bits, which on a little-endian machine is a buffer whose first byte is
  * alpha: RGBA32 is the alias that follows the bytes the upload hands over. */
+
+/* The longest side an upload may claim. The row stride is handed to SDL as an int
+ * and the multiply that makes it is 32-bit, so a width past a quarter of that
+ * range wraps into a stride narrower than the row it describes - and the copy then
+ * walks out of the caller's buffer instead of refusing the ask. A device could not
+ * carry the texture either. 16384 is above any window this backend opens and above
+ * any image a page draws at its own size, so a real upload never meets the cap. */
+#define TEXTURE_MAX_SIDE 16384u
+
 uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, const void *pixels) {
     sdl_state *state = user_data;
 
     if (state == NULL || width == 0u || height == 0u || pixels == NULL) {
+        return 0u;
+    }
+
+    /* Logged, unlike the asks a caller can see it making: the size an image file
+     * carries is not something the page chose, and a silent refusal there reads as
+     * a broken decoder. */
+    if (width > TEXTURE_MAX_SIDE || height > TEXTURE_MAX_SIDE) {
+        cf_logf(CF_LOG_BACKEND, "backend: a %ux%u upload is past the %u side this device holds",
+                width, height, TEXTURE_MAX_SIDE);
         return 0u;
     }
 
