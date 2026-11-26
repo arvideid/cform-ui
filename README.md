@@ -160,11 +160,17 @@ accepted and ignored — there is no field that pretends to take these things.
   of the buffer with the caret and the selection where you left them, kept in the
   field's own state block at sixteen images inside four KiB, so a long value walks
   back through fewer steps and one too large to copy twice keeps none.
-- **Editing stops where the caret does.** Enter submits nothing, and there is no
-  selection by word and no caret blink. An input method's committed words arrive as
-  ordinary text, but the half-composed text is never drawn and the platform is never
-  told where the caret is, so a candidate window lands wherever the desk decides —
-  the composition row of `docs/backlog.md` is the one that closes it.
+- **A word is a step, and the whole value is a chord.** **Ctrl** or **Cmd** with the
+  arrows moves the caret over the run it stands in — letters and digits, anything
+  that is neither, or the blanks ahead and the run after them — and **Shift** along
+  with them selects that run instead. **Ctrl** or **Cmd** with **A** holds every byte
+  the buffer carries, for the next key to replace. The rule reads the bytes, so a
+  scalar above ASCII counts as a letter and an unspaced CJK run steps as one word.
+- **Editing stops where the caret does.** Enter submits nothing and there is no caret
+  blink. An input method's committed words arrive as ordinary text, but the
+  half-composed text is never drawn and the platform is never told where the caret
+  is, so a candidate window lands wherever the desk decides — the composition row of
+  `docs/backlog.md` is the one that closes it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

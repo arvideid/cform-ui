@@ -1112,7 +1112,10 @@ static cf_node build(cf_ctx *ctx) {
             "selection; "
             "the three ask the host for its clipboard, and where a host names none they do "
             "nothing at all. The same key with z hands back what the field's own keys took and "
-            "y takes it away again, caret and selection with them.",
+            "y takes it away again, caret and selection with them. Held with the arrows it steps "
+            "the word the caret stands in rather than the character, and shift along with them "
+            "selects the words it passes; held with a it reaches both ends of the value, so the "
+            "next key typed replaces all of it.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

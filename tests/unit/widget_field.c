@@ -84,11 +84,13 @@ static void type(cf_ctx *ctx, const char *run, uint32_t length) {
     cf_input(ctx, (cf_event){.type = CF_EVENT_TEXT, .text = {.chars = run, .length = length}});
 }
 
-/* One key that carries no text, with or without the shift held. */
+/* One key that carries no text, with whatever modifiers a desk would have put on it. */
+static void hold_with(cf_ctx *ctx, cf_key key, uint32_t mods) {
+    cf_input(ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)key, .mods = mods});
+}
+
 static void hold(cf_ctx *ctx, cf_key key, bool shift) {
-    cf_input(ctx, (cf_event){.type = CF_EVENT_KEY_DOWN,
-                             .key = (uint32_t)key,
-                             .mods = shift ? (uint32_t)CF_MOD_SHIFT : 0u});
+    hold_with(ctx, key, shift ? (uint32_t)CF_MOD_SHIFT : 0u);
 }
 
 static void press(cf_ctx *ctx, float x, float y) {
@@ -98,6 +100,14 @@ static void press(cf_ctx *ctx, float x, float y) {
 /* A move the pointer makes while its button is still held down. */
 static void drag(cf_ctx *ctx, float x, float y) {
     cf_input(ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = x, .y = y}});
+}
+
+/* The field focused with `run` in it and the caret at the start: where a reader
+ * begins before a word key has moved anything. */
+static void type_from_home(cf_ctx *ctx, const char *run) {
+    press(ctx, 10.0f, 10.0f);
+    type(ctx, run, (uint32_t)strlen(run));
+    hold(ctx, CF_KEY_HOME, false);
 }
 
 static void the_focused_field_takes_the_keys_it_is_given(void) {
@@ -1126,6 +1136,214 @@ static void bytes_a_cut_took_come_back_with_their_selection(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The word keys move over the runs the field already walks one scalar at a time.
+ * Three classes divide a buffer here - a blank, a letter or digit, anything else -
+ * and a key starting in a run finishes it, while a key starting in the gap crosses
+ * the gap and finishes the run beyond it, because the reader asking for the next
+ * word has no use for a caret parked between the two.
+ */
+static void a_word_key_steps_the_run_it_stands_in(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    const uint32_t word = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    type_from_home(&ctx, "let me in");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 3u && text.mark == 3u, "the first step spends the word it stands in");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 6u, "the next crosses the blank and finishes the word beyond it");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 9u, "and the last lands past the final letter");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 9u && text.mark == 9u, "past the end the key spends itself on nothing");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_word_key_comes_back_over_the_same_runs(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    const uint32_t word = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "let me in", 9u);
+
+    /* Typing leaves the caret at the end, so the first back key owns the scalar behind
+     * it - the last letter of the last word, not the gap after the buffer. */
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 7u, "a back word stops at the start of the run behind the caret");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 4u, "crossing the blank reaches the word before it");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 0u, "and the walk ends at the front of the buffer");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 0u, "where a further key keeps it rather than wrapping");
+
+    /* The two walks meet: forward from the front lands where back from the end does. */
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 3u, "and the same runs answer from the other side");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_word_key_crosses_the_punctuation_between_two_words(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    const uint32_t word = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    type_from_home(&ctx, "foo.bar");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 3u, "the run of letters ends where the dot begins");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 4u, "and the dot is a run of its own, not a thing to slide past");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 7u, "so the word after it is one key further");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 4u, "coming back stops before the word it left");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 3u, "then before the mark between the words");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 0u, "and at the front of what is left");
+
+    cf_ctx_free(&ctx);
+}
+
+static void shift_with_a_word_key_selects_the_run_it_ends_on(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    const uint32_t word = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    type_from_home(&ctx, "let me in");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word | (uint32_t)CF_MOD_SHIFT);
+    CF_CHECK(text.caret == 3u && text.mark == 0u, "the shift holds the mark and takes the run");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word | (uint32_t)CF_MOD_SHIFT);
+    CF_CHECK(text.caret == 6u && text.mark == 0u, "and every further word key widens the range");
+
+    hold_with(&ctx, CF_KEY_RIGHT, word);
+    CF_CHECK(text.caret == 6u && text.mark == 6u,
+             "an arrow without the shift collapses it to the end the word key reached");
+
+    hold_with(&ctx, CF_KEY_LEFT, word);
+    CF_CHECK(text.caret == 4u, "and only then does it step back over the run it was standing in");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_word_key_answers_either_primary_modifier_and_not_alt(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    type_from_home(&ctx, "let me in");
+
+    hold_with(&ctx, CF_KEY_RIGHT, (uint32_t)CF_MOD_META);
+    CF_CHECK(text.caret == 3u, "the command key moves a word where control does on another desk");
+
+    hold_with(&ctx, CF_KEY_RIGHT, (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_ALT);
+    CF_CHECK(text.caret == 4u, "and an alt in the chord leaves the arrow stepping one scalar");
+
+    hold_with(&ctx, CF_KEY_RIGHT, 0u);
+    CF_CHECK(text.caret == 5u, "with nothing held it steps the one after that");
+
+    cf_ctx_free(&ctx);
+}
+
+static void the_chord_holds_every_byte_the_buffer_carries(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    uint32_t seen = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_watched(&ctx, &text, false, count_keys, &seen);
+    press(&ctx, 10.0f, 10.0f);
+    chord(&ctx, 'a', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.caret == 0u && text.mark == 0u,
+             "an empty buffer is left holding its own nothing");
+    CF_CHECK(seen == 0u, "and the chord the field serves reaches no handler above");
+
+    type(&ctx, "let me in", 9u);
+    hold(&ctx, CF_KEY_HOME, false);
+    chord(&ctx, 'a', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.caret == 9u && text.mark == 0u,
+             "the whole value is selected, whichever end an arrow was last put at");
+
+    chord(&ctx, 'a', 0u);
+    CF_CHECK(seen == 1u, "a letter with no modifier is the host's text, not a chord to serve");
+
+    type(&ctx, "x", 1u);
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'x', "and the next run typed goes over all of it");
+    CF_CHECK(text.caret == 1u && text.mark == 1u, "with the caret after what landed");
+
+    chord(&ctx, 'a', (uint32_t)CF_MOD_META);
+    CF_CHECK(text.caret == 1u && text.mark == 0u, "and the command key carries it as control does");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -1158,6 +1376,12 @@ int main(void) {
     CF_RUN(a_buffer_too_large_to_copy_keeps_no_history);
     CF_RUN(the_ring_holds_the_last_few_runs_and_no_more);
     CF_RUN(bytes_a_cut_took_come_back_with_their_selection);
+    CF_RUN(a_word_key_steps_the_run_it_stands_in);
+    CF_RUN(a_word_key_comes_back_over_the_same_runs);
+    CF_RUN(a_word_key_crosses_the_punctuation_between_two_words);
+    CF_RUN(shift_with_a_word_key_selects_the_run_it_ends_on);
+    CF_RUN(a_word_key_answers_either_primary_modifier_and_not_alt);
+    CF_RUN(the_chord_holds_every_byte_the_buffer_carries);
 
     return CF_REPORT();
 }

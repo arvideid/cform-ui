@@ -24,7 +24,7 @@ and this file is the record.
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
 | Which shape arrives under the pointer is unqualified | the shell asks and the SDL port maps the three shapes onto SDL's own, but SDL's dummy driver makes no cursor at all: the headless case only proves that a refused ask leaves the window drawing. Reading the mapping needs a gallery window — the hand over a button, the I-beam in a field, the arrow elsewhere |
 | Whether a keyboard appears is unqualified | the shell's ask reaches SDL's `SDL_StartTextInput` and `SDL_StopTextInput`, and the dummy driver takes both because it keeps that state for the window rather than for the hardware — so what no tier can see is a screen keyboard rising on a device that has one to show, which is a touch platform's check |
-| Selection is by character | no double-click to select a word and no triple-click for the line, though a drag that strays past the box keeps selecting because the press holds the pointer |
+| Selection by word is the keyboard's | **Ctrl**/**Cmd** with the arrows moves and **Shift** selects over the runs the field reads, but a double-click still selects no word it landed in and a triple-click no line |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
 
 ## Text, the largest known gap
@@ -38,8 +38,10 @@ it. Each needs a design conversation before a line of code:
 - Shaping for Arabic, Devanagari and Thai — one codepoint is not one glyph there.
 - Justification, ligatures, `letter-spacing`, `line-height` as a style rather than
   the font's own metric, and variable fonts.
-- Grapheme clusters: backspace deletes one scalar, so a combining mark or an emoji
-  ZWJ sequence comes apart in more than one step.
+- Grapheme clusters: backspace deletes one scalar and a word key names its run by the
+  bytes it reads, so a combining mark or an emoji ZWJ sequence comes apart in more than
+  one step, and every scalar above ASCII counts as a letter — an unspaced CJK run is
+  one word to the arrow and a non-breaking space ends one.
 - Fonts from memory, and a font stack chosen per script rather than tried in order.
 
 ## Layout and performance

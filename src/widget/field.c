@@ -292,6 +292,118 @@ static uint32_t forward_one(const cf_text_edit *text, uint32_t at) {
     return at;
 }
 
+/*
+ * The classes a word key moves between, read off the byte the scalar walk above
+ * already lands on: a blank, an ASCII letter or digit, and anything else. The last
+ * class holds every scalar above ASCII, because naming a codepoint's category is the
+ * text layer's work and its decoder is private to it - the same limit that makes a
+ * combining mark two deletes instead of one, which docs/backlog.md keeps. So an
+ * unspaced CJK run is one jump rather than one glyph, and a pasted non-breaking
+ * space ends a word instead of being one.
+ */
+static bool blank_lead(const cf_text_edit *text, uint32_t at) {
+    if (at >= text->length) {
+        return false;
+    }
+
+    const unsigned char lead = (unsigned char)text->chars[at];
+
+    return lead == 0x20u || (lead >= 0x09u && lead <= 0x0Du);
+}
+
+static bool letter_lead(const cf_text_edit *text, uint32_t at) {
+    if (at >= text->length) {
+        return false;
+    }
+
+    const unsigned char lead = (unsigned char)text->chars[at];
+
+    return (lead >= (unsigned char)'a' && lead <= (unsigned char)'z') ||
+           (lead >= (unsigned char)'A' && lead <= (unsigned char)'Z') ||
+           (lead >= (unsigned char)'0' && lead <= (unsigned char)'9');
+}
+
+/* The rest of what a buffer can hold: a comma, an ideograph, a byte no sequence
+ * began. A word key owns it as a run of its own, so punctuation between two words
+ * costs one jump rather than being crossed in silence. */
+static bool other_lead(const cf_text_edit *text, uint32_t at) {
+    return at < text->length && !blank_lead(text, at) && !letter_lead(text, at);
+}
+
+/* As far as the run reaching forward from `at` goes. A caret standing where the run
+ * does not answer ends where it stands, which is what spends an arrow at the edge of
+ * the buffer instead of walking off it. */
+static uint32_t run_end(const cf_text_edit *text, uint32_t at,
+                        bool (*kind)(const cf_text_edit *, uint32_t)) {
+    while (kind(text, at)) {
+        at = forward_one(text, at);
+    }
+
+    return at;
+}
+
+/* The same walk backwards: a caret sits between two scalars, and the one a back
+ * arrow owns is the one behind it. */
+static uint32_t run_start(const cf_text_edit *text, uint32_t at,
+                          bool (*kind)(const cf_text_edit *, uint32_t)) {
+    while (at > 0u && kind(text, back_one(text, at))) {
+        at = back_one(text, at);
+    }
+
+    return at;
+}
+
+static uint32_t forward_word(const cf_text_edit *text, uint32_t at) {
+    if (letter_lead(text, at)) {
+        return run_end(text, at, letter_lead);
+    }
+
+    if (other_lead(text, at)) {
+        return run_end(text, at, other_lead);
+    }
+
+    if (!blank_lead(text, at)) {
+        return at;
+    }
+
+    /* Standing in the gap, the reader is asking for the word beyond it: the blanks
+     * are spent and the run after them finished, so one keypress crosses both. */
+    at = run_end(text, at, blank_lead);
+
+    return letter_lead(text, at) ? run_end(text, at, letter_lead) : run_end(text, at, other_lead);
+}
+
+static uint32_t back_word(const cf_text_edit *text, uint32_t at) {
+    if (at == 0u) {
+        return 0u;
+    }
+
+    const uint32_t before = back_one(text, at);
+
+    if (letter_lead(text, before)) {
+        return run_start(text, at, letter_lead);
+    }
+
+    if (other_lead(text, before)) {
+        return run_start(text, at, other_lead);
+    }
+
+    if (!blank_lead(text, before)) {
+        return at;
+    }
+
+    at = run_start(text, at, blank_lead);
+
+    if (at == 0u) {
+        return 0u;
+    }
+
+    const uint32_t prior = back_one(text, at);
+
+    return letter_lead(text, prior) ? run_start(text, at, letter_lead)
+                                    : run_start(text, at, other_lead);
+}
+
 /* A run carrying a line break is refused whole: the field shows one run of
  * bytes, and a break in the middle would put the caret on a row no key here
  * can reach back to. */
@@ -458,6 +570,13 @@ static bool serve_shortcut(field_data *field, cf_event *event) {
         carry_out(field, true);
     } else if (trades && letter == 'v') {
         bring_in(field);
+    } else if (letter == 'a') {
+        /* Both marks at the buffer's ends, and nothing else: the ask is to hold the
+         * value, not to change it, so the history is left out of it the way a caret
+         * move is. An empty buffer selects the empty run it holds, which is where the
+         * next key types. */
+        field->text->mark = 0u;
+        field->text->caret = field->text->length;
     } else if (letter == 'z' || letter == 'y') {
         undo_book book;
 
@@ -505,6 +624,12 @@ static void field_key(cf_event *event, void *user_data) {
      * the text it sent; whether it means "extend what is selected" is the
      * field's, and this is the only place it can read it. */
     const bool shift = (event->mods & (uint32_t)CF_MOD_SHIFT) != 0u;
+    /* Either of the two main modifiers, the same pair the chords read: which one a
+     * desk puts a word key on is its decision, and honouring both is right on each.
+     * An alt is left out the way the chords leave it, so a desk binding its own arrow
+     * chord still finds the arrow doing what it did before this key existed. */
+    const bool by_word = (event->mods & ((uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META)) != 0u &&
+                         (event->mods & (uint32_t)CF_MOD_ALT) == 0u;
 
     switch ((cf_key)event->key) {
     case CF_KEY_LEFT:
@@ -512,14 +637,20 @@ static void field_key(cf_event *event, void *user_data) {
         const bool back = event->key == (uint32_t)CF_KEY_LEFT;
 
         /* Nothing held, an arrow collapses a selection to the end it points at
-         * rather than stepping away from where the caret already stands. */
+         * rather than stepping away from where the caret already stands. The
+         * modifier decides how far a step reaches, not whether this one happens. */
         if (!shift && sel_from(text) != sel_to(text)) {
             text->caret = back ? sel_from(text) : sel_to(text);
             text->mark = text->caret;
             break;
         }
 
-        text->caret = back ? back_one(text, text->caret) : forward_one(text, text->caret);
+        if (back) {
+            text->caret = by_word ? back_word(text, text->caret) : back_one(text, text->caret);
+        } else {
+            text->caret =
+                by_word ? forward_word(text, text->caret) : forward_one(text, text->caret);
+        }
 
         if (!shift) {
             text->mark = text->caret;

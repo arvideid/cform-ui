@@ -85,22 +85,27 @@ typedef struct cf_text_edit {
  * home and end move the caret - holding shift extends the selection instead. A
  * press places the caret under the pointer and a drag from it selects to wherever
  * the pointer went; the value never wraps, so a field keeps its height whatever it
- * holds, and the box slides along the value to keep the caret in view.
+ * holds, and the box slides along the value to keep the caret in view. Left and
+ * right held on either Control or a command key move a word rather than a scalar:
+ * the run of letters and digits the caret stands in, the run of anything else, or
+ * the blanks ahead and the run after them. A word is read off the bytes, so a
+ * scalar above ASCII counts as a letter and an unspaced run of them is one step.
  *
  * The theme's focused variant hands out the caret and selection tones, so an
  * unfocused field shows its bytes and nothing else. A NULL context, name or
  * buffer answers a declaration that draws nothing and edits nothing; without
  * fonts it still edits and only draws nothing.
  *
- * Beyond the keys that move the caret and the bytes, the field answers two groups
+ * Beyond the keys that move the caret and the bytes, the field answers three groups
  * of chords on either Control or a command key. C, X and V trade the selection with
- * the host's clipboard, and a host that names none leaves the three to the page. Z
- * walks back over the field's own edits and Y, or shift with Z, walks them forward
- * again. That history is a ring of whole copies of the buffer with its marks, keyed
- * by the field's name and kept for as long as the field is declared. It holds sixteen
- * copies inside four KiB, so a field over a long value walks back through fewer steps
- * and one over a buffer past about two KiB keeps no history at all, leaving those two
- * keys where it leaves the others it cannot serve.
+ * the host's clipboard, and a host that names none leaves the three to the page. A
+ * puts both marks on the ends of the value, which is the state those three and the
+ * next key typed are after. Z walks back over the field's own edits, and Y, or shift
+ * with Z, walks them forward again. That history is a ring of whole copies of the
+ * buffer with its marks, keyed by the field's name and kept for as long as the field
+ * is declared. It holds sixteen copies inside four KiB, so a field over a long value
+ * walks back through fewer steps and one over a buffer past about two KiB keeps no
+ * history at all, leaving those two keys where it leaves the others it cannot serve.
  */
 cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
 
