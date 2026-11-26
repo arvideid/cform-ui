@@ -116,12 +116,13 @@ static void gallery_init_assets(void) {
     }
 }
 
-/* The two lines that report state, each into its own buffer: the frame that
- * writes the bytes is the frame that borrows them. */
+/* The lines that report state, each into its own buffer: the frame that writes
+ * the bytes is the frame that borrows them. */
 static char status_bytes[32];
 static char echo_bytes[96];
 static char list_bytes[64];
 static char motion_bytes[96];
+static char keyboard_bytes[96];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -171,6 +172,13 @@ static uint32_t *picked_plan(cf_ctx *ctx) {
 
 static uint32_t *picked_ease(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "ease"), sizeof(uint32_t));
+}
+
+/* Which chip the keyboard chapter's row last answered. The number is what the
+ * press carries, so the one handler behind the pointer and the key has nothing
+ * to look the name up in. */
+static uint32_t *answered_chip(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "answered"), sizeof(uint32_t));
 }
 
 /* The one tween the motion chapter runs, in the keyed block that outlives the
@@ -245,6 +253,15 @@ static void pick_plan(cf_ctx *ctx, uint32_t slot, void *user_data) {
 static void pick_ease(cf_ctx *ctx, uint32_t slot, void *user_data) {
     (void)slot;
     uint32_t *held = picked_ease(ctx);
+
+    if (held != NULL) {
+        *held = (uint32_t)(uintptr_t)user_data;
+    }
+}
+
+static void chip_answers(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot;
+    uint32_t *held = answered_chip(ctx);
 
     if (held != NULL) {
         *held = (uint32_t)(uintptr_t)user_data;
@@ -963,6 +980,43 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
     return demo_column(ctx, 12.0f, parts, (uint32_t)(sizeof parts / sizeof parts[0]));
 }
 
+/* The four chips of the keyboard chapter, in the order a walk meets them. The
+ * third is switched off, so it is in the row and not in that order. */
+static const char *keyboard_names[] = {"chip one", "chip two", "switched off", "chip three"};
+#define KEYBOARD_COUNT (uint32_t)(sizeof keyboard_names / sizeof keyboard_names[0])
+#define KEYBOARD_OFF 2u
+
+/* Chapter ten: which box the keyboard is standing on. The chips do one thing -
+ * say which of them last answered - because the rule here is the box a key is
+ * asked at rather than what the ask is made of. */
+static cf_node make_keyboard_demo(cf_ctx *ctx) {
+    const uint32_t *held = answered_chip(ctx);
+    cf_node chips[KEYBOARD_COUNT];
+
+    for (uint32_t i = 0u; i < KEYBOARD_COUNT; ++i) {
+        chips[i] = make_chip(ctx, keyboard_names[i], held != NULL && *held == i, chip_answers, i);
+
+        if (i == KEYBOARD_OFF) {
+            /* Switching a box off takes it out of both doors at once: the ring
+             * reads the same flag the press does, so the page cannot grow a box
+             * the keyboard stands on that no hand is allowed to click. */
+            chips[i].disabled = true;
+        }
+    }
+
+    const char *answer = held != NULL ? keyboard_names[*held] : "nothing yet";
+    const int length =
+        snprintf(keyboard_bytes, sizeof keyboard_bytes, "the keyboard last asked: %s", answer);
+
+    const cf_style row = wrap_row(8.0f);
+
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){cf_row(ctx, row, chips, KEYBOARD_COUNT),
+                                   cf_label(ctx, (cf_string){keyboard_bytes, (uint32_t)length},
+                                            &body, theme->muted)},
+                       2u);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
@@ -970,7 +1024,7 @@ static cf_node make_note(cf_ctx *ctx, const char *chars) {
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
     const cf_node note =
-        cf_label(ctx, cf_string_of("nine rules, each with something to try"), &body, theme->muted);
+        cf_label(ctx, cf_string_of("ten rules, each with something to try"), &body, theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
@@ -1098,6 +1152,20 @@ static cf_node build(cf_ctx *ctx) {
             "was. The puck is placed in points inside a lane of stated width; the bar under it is "
             "the same number as a share, so it keeps stretching when the window does.",
             make_motion_demo(ctx)),
+        make_chapter(
+            ctx, "10", "The box the keyboard stands on",
+            "A box says whether the keyboard can stand on it, because a role paints a control and "
+            "does not make it reachable: the button declares the focus for its caller and the "
+            "label "
+            "inside it never takes it. Tab and Shift-Tab walk the boxes that declare it, in the "
+            "order the build wrote them, wrapping at the ends - and a box that is switched off or "
+            "hidden is left out of that order, since a control nobody can click is one the "
+            "keyboard has no business standing on either. Enter and the space bar then ask the box "
+            "the keyboard stands on to do its job, which is the same ask as a release inside its "
+            "rect: the chip's handler is never told which door brought it. Press Tab and watch the "
+            "border darken on the box that took it; the line below names the last chip that "
+            "answered, and the switched-off one never appears in it.",
+            make_keyboard_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against and the "

@@ -292,6 +292,14 @@ static bool page_shows(const char *needle) {
     return found;
 }
 
+/* The same hunt for a line the page writes out of its state: the report line
+ * changes with what happened, so it is named by what it starts with. */
+static bool page_reads(const char *prefix) {
+    bool found = false;
+    (void)find_text_prefix(prefix, &found);
+    return found;
+}
+
 /* ---------- events ---------- */
 
 static cf_event move_to(float x, float y) {
@@ -318,6 +326,13 @@ static cf_event typed_text(const char *chars) {
 
 static cf_event key_down(cf_key k) {
     return (cf_event){.type = CF_EVENT_KEY_DOWN, .key = k};
+}
+
+/* Tab, forward or with shift held: the two directions one key carries. */
+static cf_event tab_key(bool backward) {
+    return (cf_event){.type = CF_EVENT_KEY_DOWN,
+                      .key = CF_KEY_TAB,
+                      .mods = backward ? (uint32_t)CF_MOD_SHIFT : 0u};
 }
 
 /* A scripted schedule: an array of events, the last one a QUIT so the loop
@@ -847,6 +862,51 @@ static void a_press_sends_the_puck_and_the_page_stops_asking_when_it_lands(void)
     CF_CHECK(page_shows("bring it back"), "the button now offers the way home");
 }
 
+/* Chapter ten, and the ring the whole page is in: from a cold start the first
+ * Tab stands the keyboard on the page's first control, the walk steps past the
+ * chip that is switched off, reverse Tab walks back, and both the keys that ask
+ * reach the chip the walk stopped on. One pointer press starts the chapter - the
+ * rest of the session never touches the mouse. */
+static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    step(tab_key(false));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(*click_count(&session) == 1u,
+             "a Tab from no focus stands on the first control the build wrote");
+
+    if (!reveal_to("chip one", 40u)) {
+        return;
+    }
+
+    tap("chip two");
+    CF_CHECK(page_reads("the keyboard last asked: chip two"), "the click answered through the row");
+
+    step(tab_key(false));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(page_reads("the keyboard last asked: chip three"),
+             "the walk stepped past the switched-off chip and the key asked where it landed");
+
+    step(tab_key(true));
+    step(key_down(CF_KEY_SPACE));
+
+    CF_CHECK(page_reads("the keyboard last asked: chip two"),
+             "reverse Tab walks back and the space bar asks the same way Enter does");
+
+    /* Two more steps forward from the second chip: the third, then past the end
+     * of the page and round to its first control - the only box whose ask moves
+     * the count the first chapter keeps. */
+    step(tab_key(false));
+    step(tab_key(false));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(*click_count(&session) == 2u, "a walk off the end of the page returns to its start");
+
+    end_session();
+}
+
 static void a_narrow_window_reflows_without_spilling_geometry(void) {
     const cf_event hands[] = {
         (cf_event){.type = CF_EVENT_QUIT},
@@ -1009,6 +1069,7 @@ int main(void) {
     CF_RUN(the_chips_leave_their_number_in_the_state_the_build_reads);
     CF_RUN(the_badge_switch_moves_it_and_the_logo_still_paints);
     CF_RUN(a_press_sends_the_puck_and_the_page_stops_asking_when_it_lands);
+    CF_RUN(the_keyboard_walks_the_page_and_asks_where_it_stands);
     CF_RUN(a_narrow_window_reflows_without_spilling_geometry);
     CF_RUN(a_bigger_output_still_bounds_every_box);
     CF_RUN(the_inspector_lays_its_numbers_over_the_page);
