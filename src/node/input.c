@@ -425,8 +425,12 @@ void cf_input(cf_ctx *ctx, cf_event event) {
          * A node that answered the key is not asked again, so a box that keeps a key
          * for itself - a dialog that stops Tab to hold the keyboard inside, a field
          * that stops an arrow to move its caret - hears no second ask out of the same
-         * press. */
-        if (!event.stopped && focused != CF_NO_LINK &&
+         * press. A shift does not change what a key asks, so it is read straight
+         * through; the modifiers that name a binding are the page's own to handle, and
+         * running the plain ask beside them would do the thing twice. */
+        const bool plain = (event.mods & ~(uint32_t)CF_MOD_SHIFT) == 0u;
+
+        if (!event.stopped && plain && focused != CF_NO_LINK &&
             (event.key == CF_KEY_ENTER || event.key == CF_KEY_SPACE)) {
             const node_record *record = record_of(ctx, focused);
 

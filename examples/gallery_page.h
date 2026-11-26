@@ -120,6 +120,7 @@ static void gallery_init_assets(void) {
  * the bytes is the frame that borrows them. */
 static char status_bytes[32];
 static char echo_bytes[96];
+static char submit_bytes[96];
 static char list_bytes[64];
 static char motion_bytes[96];
 static char keyboard_bytes[96];
@@ -200,12 +201,32 @@ static uint32_t *rows_built(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "built"), sizeof(uint32_t));
 }
 
+/* What the field held the last time Enter asked that it be done with. The bytes go
+ * into the keyed block rather than into the frame: the ask happens in a dispatch and
+ * the line that says so is written by whichever build comes after it. */
+static char *submitted(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "submitted"), sizeof typed_bytes);
+}
+
 static void count_click(cf_ctx *ctx, uint32_t slot, void *user_data) {
     (void)slot, (void)user_data;
     uint32_t *clicks = click_count(ctx);
 
     if (clicks != NULL) {
         *clicks += 1u;
+    }
+}
+
+/* The field's submit: Enter on the box that holds the keyboard is asked of the node's
+ * own handler, and the value is copied out of the buffer the field edits in place. */
+static void submit_entry(cf_event *event, void *user_data) {
+    cf_ctx *ctx = user_data;
+    char *saved = submitted(ctx);
+
+    (void)event;
+
+    if (saved != NULL) {
+        snprintf(saved, sizeof typed_bytes, "%.*s", (int)typed.length, typed.chars);
     }
 }
 
@@ -485,6 +506,10 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
 /* Chapter two: the field, and the same buffer read straight back. */
 static cf_node make_field_demo(cf_ctx *ctx) {
     cf_node entry = cf_field(ctx, "entry", &typed, &body);
+    /* The door cf_field leaves its caller: the keys a field cannot serve for itself are
+     * asked of the node, which is where a page puts what to do with the value. */
+    entry.handlers.activate = submit_entry;
+    entry.handlers.activate_data = ctx;
     entry.style.width = CF_PERCENT(100.0f);
     /* Stated rather than measured: a field with nothing in it would otherwise
      * be a hairline, and the reader cannot click a hairline. */
@@ -495,13 +520,19 @@ static cf_node make_field_demo(cf_ctx *ctx) {
         snprintf(echo_bytes, sizeof echo_bytes, "the buffer holds %u bytes (%u refused): %.*s",
                  typed.length, typed.refusals, (int)typed.length, typed_bytes);
 
+    const char *saved = submitted(ctx);
+    const int saved_length =
+        snprintf(submit_bytes, sizeof submit_bytes, "asked to save: %s",
+                 saved != NULL && saved[0] != '\0' ? saved : "nothing since the page opened");
+
     return demo_column(
         ctx, 8.0f,
         (cf_node[]){
             entry,
             cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted),
+            cf_label(ctx, (cf_string){submit_bytes, (uint32_t)saved_length}, &body, theme->muted),
         },
-        2u);
+        3u);
 }
 
 /* Chapter three: a paragraph that breaks itself, the same words capped, and the
@@ -1114,17 +1145,21 @@ static cf_node build(cf_ctx *ctx) {
             "moved: shift, caps lock, the layout and an input method are settled before the bytes "
             "arrive, so a capital lands as the capital that was typed. Backspace drops the last "
             "character, and a run too long for the buffer is refused whole rather than cut in "
-            "half - the line under it counts how often that happened, since a key that lands "
-            "nowhere is otherwise indistinguishable from a key nobody sent. The widget copies the "
-            "text nowhere, so the same line reads the buffer back. Hold ctrl (or the command key) "
-            "and press c to put a selection on the clipboard, x to put it there and drop it, v to "
-            "write what the clipboard holds over the selection; the three ask the host for its "
+            "half - the first of the two lines under it counts how often that happened, since a "
+            "key that lands nowhere is otherwise indistinguishable from a key nobody sent. The "
+            "widget copies the text nowhere, so the same line reads the buffer back. Hold ctrl "
+            "(or the command key) and press c to put a selection on the clipboard, x to put it "
+            "there and drop it, v to write what the clipboard holds over the selection; the three "
+            "ask the host for its "
             "clipboard, and where a host names none they do nothing at all. The same key with z "
             "hands back what the field's own keys took and y takes it away again, caret and "
             "selection with them. Held with the arrows it steps the word the caret stands in "
             "rather than the character, and shift along with them selects the words it passes; "
             "held with a it reaches both ends of the value, so the next key typed replaces all "
-            "of it.",
+            "of it. Enter is the ask that the value is done with, and it is the page's own "
+            "handler on the field that hears it - the line under the first says what was handed "
+            "over - while the space bar stays the character it is, so typing a word never reads "
+            "as a submission.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

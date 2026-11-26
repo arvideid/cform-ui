@@ -977,6 +977,41 @@ static void the_gallery_field_says_what_it_had_no_room_for(void) {
     end_session();
 }
 
+/*
+ * The two asks chapter two's field can be handed and answers the other way round: the
+ * space bar is the character the device sends beside it, so the box keeps it and the
+ * page hears nothing, while Enter runs the handler the page put on the field itself.
+ */
+static void the_gallery_field_saves_on_enter_and_types_a_space(void) {
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    CF_CHECK(page_reads("asked to save: nothing since the page opened"),
+             "the page says no value has been asked for");
+
+    step(typed_text("save me"));
+    step(key_down(CF_KEY_SPACE));
+
+    CF_CHECK(typed.length == 7u, "a key down with no text alongside it writes no byte");
+    CF_CHECK(page_reads("asked to save: nothing since the page opened"),
+             "and the space a person is typing asks the page to save nothing");
+
+    step(typed_text(" "));
+
+    CF_CHECK(typed.length == 8u, "the character itself comes from the device as text");
+
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(page_reads("asked to save: save me"),
+             "Enter hands the whole value to the door the page put on the field");
+
+    end_session();
+}
+
 static void the_narrow_button_pins_the_well_and_the_lines_follow(void) {
     /* The chip and the well live in chapter three; a walk puts it on screen. */
     if (!reveal_to("narrow it", 12u)) {
@@ -1493,6 +1528,7 @@ int main(void) {
     CF_RUN(the_gallery_field_walks_its_own_typing_back);
     CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
     CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
+    CF_RUN(the_gallery_field_saves_on_enter_and_types_a_space);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);

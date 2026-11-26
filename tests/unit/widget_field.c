@@ -39,13 +39,20 @@ static const cf_font mono = {.handle = NULL, .ops = &mono_ops};
  * `keys` is the root's own key handler, for the cases that need to know which
  * chords the field below it let through.
  */
-static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
-                          void *key_data) {
+/*
+ * A frame with both doors a page can put on a field: `keys` on the root, and `ask` on
+ * the field node itself - the door cf_field leaves its caller beside the keys it keeps
+ * for itself, which is where a page puts the handler for this value is done with.
+ */
+static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
+                        void *key_data, cf_event_fn ask, void *ask_data) {
     cf_frame_begin(ctx);
 
     const cf_text_stack stack = {.fonts = &mono, .count = 1u};
     cf_node field = cf_field(ctx, "entry", text, &stack);
     field.disabled = disabled;
+    field.handlers.activate = ask;
+    field.handlers.activate_data = ask_data;
     const cf_node roots[] = {field};
     cf_node root = {.style = cf_style_default()};
     /* A column, so the field stretches across the page: the width the box keeps
@@ -62,6 +69,11 @@ static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_eve
     cf_frame_resolve(ctx);
     cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
                     (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
+                          void *key_data) {
+    frame_doors(ctx, text, disabled, keys, key_data, NULL, NULL);
 }
 
 static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
@@ -1404,6 +1416,58 @@ static void a_run_that_will_not_fit_says_so_in_the_buffer(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * Two keys a focused field is handed and answers the other way round. The space bar is
+ * the character the device sends beside it, so the field keeps it and no ask to act
+ * comes out of the box a person is still typing into; Enter is the value being done
+ * with, and the page's own door on the field is how it hears that. A key with a
+ * modifier on it is a chord somebody bound elsewhere, so it is neither.
+ */
+static void a_space_in_a_field_is_a_character_and_enter_is_the_ask(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    uint32_t asks = 0u;
+    uint32_t through = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_doors(&ctx, &text, false, count_keys, &through, count_keys, &asks);
+    press(&ctx, 10.0f, 10.0f);
+
+    type(&ctx, "a b", 3u);
+
+    CF_CHECK(text.length == 3u && bytes[1] == ' ', "the space arrives as a byte from the device");
+
+    hold_with(&ctx, CF_KEY_SPACE, 0u);
+
+    CF_CHECK(asks == 0u, "the space bar the field types asks the field to do nothing");
+    CF_CHECK(through == 0u, "and the key stops at the box that kept it");
+    CF_CHECK(text.length == 3u, "a key down with no text writes no byte of its own");
+
+    hold_with(&ctx, CF_KEY_ENTER, 0u);
+
+    CF_CHECK(asks == 1u, "Enter is the ask the page hears through its own door");
+    CF_CHECK(through == 1u, "and the key still climbs, so a form above can bind it too");
+
+    hold_with(&ctx, CF_KEY_SPACE, (uint32_t)CF_MOD_SHIFT);
+
+    CF_CHECK(asks == 1u && through == 1u,
+             "a shift on the space bar changes the shift, not the key");
+
+    hold_with(&ctx, CF_KEY_SPACE, (uint32_t)CF_MOD_CONTROL);
+    hold_with(&ctx, CF_KEY_ENTER, (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(asks == 1u, "a chord is nobody's plain ask to act");
+    CF_CHECK(through == 3u, "and both are left to whoever above bound them");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -1443,6 +1507,7 @@ int main(void) {
     CF_RUN(a_word_key_answers_either_primary_modifier_and_not_alt);
     CF_RUN(the_chord_holds_every_byte_the_buffer_carries);
     CF_RUN(a_run_that_will_not_fit_says_so_in_the_buffer);
+    CF_RUN(a_space_in_a_field_is_a_character_and_enter_is_the_ask);
 
     return CF_REPORT();
 }

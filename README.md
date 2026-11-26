@@ -144,10 +144,11 @@ accepted and ignored — there is no field that pretends to take these things.
   draws glyphs, not an accessible name for the box beside it.
 - **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
   says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
-  callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk
-  the declared boxes in document order, and **Enter** or the space bar asks the
-  focused box to do its job. A dialog keeps the keyboard by answering **Tab**
-  itself; nothing puts the focus back where a closed dialog found it. The field
+  callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk the
+  declared boxes in document order, and **Enter** or the space bar asks the focused box
+  to do its job — with no chord held, since **Ctrl**+**Enter** is a binding the page made
+  rather than the plain ask. A dialog keeps the keyboard by answering **Tab** itself;
+  nothing puts the focus back where a closed dialog found it. The field
   holding the keyboard is also what asks the device for a way to type: the frame's
   `cf_frame_takes_text` answer reaches `set_text_input`, so a screen keyboard or an
   input method is offered while a box can take the words and not while it cannot.
@@ -170,11 +171,16 @@ accepted and ignored — there is no field that pretends to take these things.
   that will not fit whole is refused outright. `cf_text_edit.refusals` counts the runs
   it turned away and chapter two's line prints it, so a page can say "there is no room
   left" instead of watching a caret that stopped moving.
-- **Editing stops where the caret does.** Enter submits nothing and there is no caret
-  blink. An input method's committed words arrive as ordinary text, but the
-  half-composed text is never drawn and the platform is never told where the caret
-  is, so a candidate window lands wherever the desk decides — the composition row of
-  `docs/backlog.md` is the one that closes it.
+- **A field's Enter belongs to the page.** The ask a click is, the key can be: an
+  unmodified **Enter** runs the focused box's own `activate` handler, so a page puts its
+  save code on the field node and chapter two copies the buffer out and prints it. The
+  space bar a field holds the keyboard under is the character the device sends beside it,
+  so the box keeps that key — typing a word never reads as a submission.
+- **Editing stops where the caret does.** There is no caret blink, and no notice that
+  the buffer changed: a page reads the value in its own build. An input method's
+  committed words arrive as ordinary text, but the half-composed text is never drawn and
+  the platform is never told where the caret is, so a candidate window lands wherever the
+  desk decides — the composition row of `docs/backlog.md` is the one that closes it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

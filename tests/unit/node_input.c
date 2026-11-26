@@ -1368,7 +1368,8 @@ static void a_ring_that_empties_loses_the_focus(void) {
 /*
  * The keyboard asks the box that holds the focus to do its job, and the ask stops
  * there: a container is not asked because its child is the one standing on the
- * key, and a box that answered the key is not asked again.
+ * key, and a box that answered the key is not asked again. Only the plain key
+ * asks - a chord is a binding the page put somewhere else.
  */
 static void the_focused_box_is_the_one_the_key_asks(void) {
     cf_ctx ctx;
@@ -1427,9 +1428,24 @@ static void the_focused_box_is_the_one_the_key_asks(void) {
     CF_CHECK(first.keys == 4, "the box is handed the key it claims");
     CF_CHECK(first.activates == 2, "and a box that answered it is not asked again");
 
+    first.stop = false;
+
+    /* The modifiers that name a binding are the page's to handle, and running the box's
+     * job beside them would do the thing twice. A shift is read straight through, since
+     * it changes what the key looks like rather than what it asks. */
+    cf_input(&ctx,
+             (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER, .mods = CF_MOD_CONTROL});
+
+    CF_CHECK(first.keys == 5, "the chord is still handed to the box that holds the focus");
+    CF_CHECK(first.activates == 2, "and it asks nothing the page did not bind");
+
+    cf_input(&ctx,
+             (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER, .mods = CF_MOD_SHIFT});
+
+    CF_CHECK(first.activates == 3, "a shift still asks the plain ask");
+
     /* Switched off underneath the keyboard: the box still lives and still holds the
      * focus id, and a control that is off answers no key from anyone. */
-    first.stop = false;
     children[0].disabled = true;
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
@@ -1437,8 +1453,8 @@ static void the_focused_box_is_the_one_the_key_asks(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 
-    CF_CHECK(first.keys == 4, "a box switched off runs no handler for the key");
-    CF_CHECK(first.activates == 2, "and is not asked to do its job either");
+    CF_CHECK(first.keys == 6, "a box switched off runs no handler for the key");
+    CF_CHECK(first.activates == 3, "and is not asked to do its job either");
 
     cf_ctx_free(&ctx);
 }

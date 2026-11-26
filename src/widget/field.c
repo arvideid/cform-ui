@@ -686,6 +686,19 @@ static void field_key(cf_event *event, void *user_data) {
         }
         break;
 
+    /* The space bar a field holds the focus under is the character the device sends
+     * beside it, so the box keeps the key: an activation ask out of the space a person
+     * is typing would be the framework deciding mid-word that the value is done. Only
+     * the modifiers that make a key into a binding take it away - a shift leaves the
+     * space the same character - and a chord climbs the way every chord the field has
+     * no word for climbs. */
+    case CF_KEY_SPACE:
+        if ((event->mods &
+             ((uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META | (uint32_t)CF_MOD_ALT)) != 0u) {
+            return;
+        }
+        break;
+
     default:
         /* A key the field has no word for writes nothing and stops nothing:
          * the number a modifier carries is not a character, and an arrow the

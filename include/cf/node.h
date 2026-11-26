@@ -22,9 +22,13 @@ typedef struct cf_handlers {
     /*
      * "Do the thing this control is for", asked by the keyboard: Enter or the
      * space bar on the node that holds the focus runs it, and the event still
-     * names which key did. A widget whose action is the same whoever asked hands
-     * its press callback to both doors; a box with no ask of its own leaves it
-     * NULL, and a node that answered the key itself is not asked again.
+     * names which key did. Nothing else may be held with it - a control, a command
+     * or an alt turns the key into a binding the page put somewhere else, and
+     * running this ask beside it would do the thing twice. A shift is read through,
+     * since it changes what the key looks like rather than what it asks. A widget
+     * whose action is the same whoever asked hands its press callback to both doors;
+     * a box with no ask of its own leaves it NULL, and a node that answered the key
+     * itself is not asked again.
      */
     cf_event_fn activate;
     void *activate_data;

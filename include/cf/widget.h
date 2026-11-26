@@ -114,6 +114,12 @@ typedef struct cf_text_edit {
  * is declared. It holds sixteen copies inside four KiB, so a field over a long value
  * walks back through fewer steps and one over a buffer past about two KiB keeps no
  * history at all, leaving those two keys where it leaves the others it cannot serve.
+ *
+ * Two keys are left for whoever declared the box. The field keeps a bare space bar as
+ * the character the device sends beside it, so no ask to act comes out of the box a
+ * person is still typing into, and it leaves Enter unstopped: the shell asks the node's
+ * own `activate` handler, which is where a page puts what to do with a value that is
+ * done with. A space held with a chord modifier climbs with the chord.
  */
 cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
 
