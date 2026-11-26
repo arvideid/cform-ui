@@ -46,6 +46,19 @@ static cf_node counting_box(cf_ctx *ctx) {
     return root;
 }
 
+/* A box that acts on the pointer is the one the node layer answers a hand for, and
+ * the shell is what carries that answer to the device. */
+static void noting_pointer(cf_event *event, void *user_data) {
+    (void)event, (void)user_data;
+}
+
+static cf_node clickable_box(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    root.handlers.pointer = noting_pointer;
+
+    return root;
+}
+
 /* A page mid-motion asks for the frame after this one, the only way a build
  * can keep running once the device stops handing events. */
 static cf_node animating_box(cf_ctx *ctx) {
@@ -160,6 +173,35 @@ static const fake_hand build_then_quit[] = {
     {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
     {{.type = CF_EVENT_QUIT}, true}};
 
+/* A hand over a box that acts, a second frame with the hand still there, the pointer
+ * moved off it, then a drain that hands nothing: the shape, the memo, the change back
+ * and the idle turn that must cost the device no call at all. */
+static const fake_hand cursor_walk[] = {
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {10.0f, 10.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {16.0f, 6.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {200.0f, 120.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_QUIT}, true}};
+
+/* Every shape the shell asked this device to show, in the order it asked: a recorder
+ * keeps the last one, and the slot's whole agreement is that it is asked when the
+ * frame's answer moves rather than once per frame. */
+static uint32_t cursor_asks;
+static cf_cursor asked_shapes[4u];
+
+static void counted_cursor(void *user_data, cf_cursor cursor) {
+    (void)user_data;
+
+    if (cursor_asks < (uint32_t)(sizeof asked_shapes / sizeof asked_shapes[0])) {
+        asked_shapes[cursor_asks] = cursor;
+    }
+
+    cursor_asks++;
+}
+
 static cf_backend driven_backend(cf_recorder *recorder) {
     cf_backend backend = cf_backend_recorder(recorder);
     backend.poll_event = fake_poll;
@@ -175,6 +217,11 @@ static void reset(const fake_hand *hands, uint32_t count) {
     frames_built = 0u;
     presents = 0u;
     boards_seen = 0u;
+    cursor_asks = 0u;
+
+    for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_shapes / sizeof asked_shapes[0]); ++at) {
+        asked_shapes[at] = CF_CURSOR_DEFAULT;
+    }
 }
 
 static void the_shell_runs_until_the_device_quits(void) {
@@ -380,6 +427,39 @@ static void the_shell_hands_the_page_the_clipboard_the_host_named(void) {
     CF_CHECK(boards_seen == 0u, "and the page is handed no clipboard it did not ask for");
 }
 
+/* The shape the frame answers for the pointer is the shell's to hand over, and only
+ * when it moves: a page the hand is resting on costs the device no call per frame,
+ * which is the same invariant the idle shortcut keeps for layout and paint. */
+static void the_shell_asks_for_the_shape_only_when_it_moves(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_cursor = counted_cursor;
+
+    reset(cursor_walk, 8u);
+    cf_app_run(&(cf_app_config){.build = clickable_box, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 3u, "three drains earned three frames");
+    CF_CHECK(cursor_asks == 2u, "and the device was asked twice, not once per frame");
+    CF_CHECK(asked_shapes[0] == CF_CURSOR_POINTER, "the hand, over a box that acts");
+    CF_CHECK(asked_shapes[1] == CF_CURSOR_DEFAULT, "the arrow, once the pointer left it");
+}
+
+/* A device that has no shape to change is a legal device: the walk runs the same
+ * frames, and the recorder is left holding the shape it started with because nothing
+ * reached it. */
+static void a_device_with_no_cursor_slot_still_runs(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_cursor = NULL;
+    recorder.cursor = CF_CURSOR_TEXT;
+
+    reset(cursor_walk, 8u);
+    cf_app_run(&(cf_app_config){.build = clickable_box, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 3u, "the frames ran without anywhere to put the shape");
+    CF_CHECK(recorder.cursor == CF_CURSOR_TEXT, "and the device was handed no shape at all");
+}
+
 int main(void) {
     printf("app run\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -390,6 +470,8 @@ int main(void) {
     CF_RUN(the_inspector_toggles_on_f12);
     CF_RUN(the_shell_leaves_the_backend_to_its_host);
     CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);
+    CF_RUN(the_shell_asks_for_the_shape_only_when_it_moves);
+    CF_RUN(a_device_with_no_cursor_slot_still_runs);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 
     cf_arena_free(&store);

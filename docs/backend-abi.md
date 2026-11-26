@@ -67,10 +67,12 @@ pointer and a NULL means this backend does not offer that service. That is why o
 `submit`, `present` and `surface` have to be filled — the rest are optional by their
 own value. A separate table of bits saying the same thing would be a second answer
 to keep in agreement, so there isn't one yet. Bits earn their place when a single
-call has to speak for several services at once, which is the shape a cursor set might
-grow into — it has to say which shapes this backend draws. Until then every service is
-asked directly: the eight slots, or the host's own clipboard pair below, whose two
-functions answer for themselves by refusing.
+call has to speak for several services at once, which is what `set_cursor` came
+closest to — it cannot say *which* shapes this desk draws. It does not have to: a
+shape the platform will not make is refused by the platform, the pointer keeps the
+shape it had, and the caller has nothing to do differently. Until a service needs
+one call to mean several things, every one of the nine slots is asked directly, and
+the host's own clipboard pair below answers for itself by refusing.
 
 ## What you may keep, and what you must copy
 
@@ -263,6 +265,27 @@ leaves the pair out and the keys ask for nothing, which is better than pretendin
 over bytes SDL allocated, they are copied, and `SDL_free` returns them — the one call
 in the tree that gives memory back to the platform rather than to `src/base`.
 
+## The pointer shape
+
+`cf_frame_cursor` answers what the hand is over — the pointing hand over a box that
+acts, the I-beam over a field, the arrow elsewhere — and `cf_app_run` puts that answer
+on `set_cursor`. Three things a port can rely on:
+
+- **Only a moved answer arrives.** The shell remembers the shape it last handed over
+  and asks again when the frame disagrees, so a page the pointer is resting on costs
+  no platform call per frame. A backend may still keep its own copy of the last shape
+  if the underlying call is expensive; nothing requires the second call to be a
+  different one.
+- **NULL is a normal backend.** An offscreen target, a recorder and a device with no
+  pointer at all leave the slot out, and the page loses nothing but the shape.
+- **A refused shape is not an error.** Ask for what the frame named; if the desk will
+  not make it, keep showing the one you have and say nothing. This is the one slot
+  where logging the refusal would be a line per hover.
+
+The shapes are the three `cf_cursor` names. A number that is not one of them — a
+value appended after your backend was written — is yours to treat as the default, and
+reading it as an index into a table is how that becomes a crash.
+
 ## Porting, in order
 
 1. Fill the struct, set `abi_version` and `size`, keep your state in `user_data`.
@@ -291,10 +314,11 @@ in the tree that gives memory back to the platform rather than to `src/base`.
     `cf_paint cf_text` and your device library. Only `src/backend/*/` and
     `src/app/` may name a platform header.
 
-`src/backend/headless/record.c` does two of the eight and is a legal backend —
+`src/backend/headless/record.c` does three of the nine and is a legal backend —
 that is the minimum. It takes no uploads and keeps no device state, so its
 resource slots stay NULL; a host that releases through a backend has to ask the
-slot first either way.
+slot first either way. It does keep the cursor it was last asked for, which is how
+the app tests tell a shape the shell applied from a shape nobody looked at.
 
 ## Checking your work
 

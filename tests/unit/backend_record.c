@@ -151,6 +151,31 @@ static void a_backend_that_is_not_there_submits_nothing(void) {
     without_recorder.present(without_recorder.user_data);
 }
 
+/* A cursor is not part of a frame: the stream is the recorder's per submit and the
+ * shape is the device's until the shell names another. Keeping them apart is what lets
+ * a test read the shell's decision rather than the frame's. */
+static void the_recorder_keeps_the_shape_it_was_asked_for(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = cf_backend_recorder(&recorder);
+
+    CF_CHECK(backend.set_cursor != NULL, "the scripted device offers a cursor");
+    CF_CHECK(recorder.cursor == CF_CURSOR_DEFAULT, "and starts on the shape a window opens with");
+
+    backend.set_cursor(backend.user_data, CF_CURSOR_TEXT);
+    CF_CHECK(recorder.cursor == CF_CURSOR_TEXT, "the ask is kept, not drawn");
+
+    const cf_command stream[] = {fill_at(0.0f, 0.0f, 10.0f, 10.0f, 1u)};
+    backend.submit(backend.user_data, stream, 1u);
+    CF_CHECK(recorder.cursor == CF_CURSOR_TEXT, "a frame does not put the arrow back");
+
+    /* Still no uploads and no device state: the cursor is a shape, not a resource the
+     * host has to hand back. */
+    CF_CHECK(backend.release_texture == NULL && backend.destroy == NULL,
+             "and it still claims no resource it never took");
+
+    backend.set_cursor(NULL, CF_CURSOR_POINTER);
+}
+
 int main(void) {
     printf("backend record\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -161,6 +186,7 @@ int main(void) {
     CF_RUN(a_text_commands_bytes_move_into_the_recorders_arena);
     CF_RUN(a_stream_that_does_not_fit_is_truncated_and_said_so);
     CF_RUN(a_backend_that_is_not_there_submits_nothing);
+    CF_RUN(the_recorder_keeps_the_shape_it_was_asked_for);
 
     cf_arena_free(&store);
     return CF_REPORT();

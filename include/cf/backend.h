@@ -15,8 +15,11 @@
  * a caller checks both before the first submit, because data the backend misreads
  * draws wrong rather than failing. A number a porter can copy and a size only the
  * compiler knows catch different mistakes, which is why the struct carries both.
+ *
+ * 10 added the cursor: a shape to show, which an output that has no pointer can
+ * leave unanswered.
  */
-#define CF_BACKEND_ABI_VERSION 9u
+#define CF_BACKEND_ABI_VERSION 10u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -76,6 +79,16 @@ typedef struct cf_backend {
      * backend, and a backend built as a zero struct has nothing here to call.
      */
     void (*destroy)(void *user_data);
+    /*
+     * Shows the pointer shape the frame asks for: the hand over a box that acts,
+     * the I-beam over a field, the arrow elsewhere. The shell calls this only when
+     * the answer moves, so a page at rest costs no platform call per frame, and an
+     * output with no cursor to set - offscreen, a headless run, a desk that refuses
+     * the shape - leaves the slot NULL and is no worse for it. The ask is "show this
+     * if you can": a backend that has one shape and no more says nothing and keeps
+     * the one it has.
+     */
+    void (*set_cursor)(void *user_data, cf_cursor cursor);
 } cf_backend;
 
 /*
@@ -96,13 +109,17 @@ typedef struct cf_backend {
  * came out of. The zero state is an empty recorder. It takes no uploads and no
  * device state of its own, so the two resource slots stay NULL: a host that
  * releases through this backend has to ask the slot first, exactly as it does
- * for a third-party backend that reclaims nothing.
+ * for a third-party backend that reclaims nothing. It keeps the last cursor it
+ * was asked to show, which is how a test tells "the shell applied the frame's
+ * answer" from "someone read the frame's answer".
  */
 typedef struct cf_recorder {
     cf_arena *arena;
     cf_command *commands;
     uint32_t count;
     uint32_t capacity;
+    /* The shape the shell last asked this device to put under the pointer. */
+    cf_cursor cursor;
 } cf_recorder;
 
 /* A backend that records instead of draws. A NULL recorder submits nothing. */

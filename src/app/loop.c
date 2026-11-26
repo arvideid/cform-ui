@@ -90,6 +90,9 @@ void cf_app_run(const cf_app_config *config) {
     ctx.clipboard = config->clipboard;
     const cf_name inspector_key = cf_intern_text(&ctx.names, INSPECTOR_KEY);
     bool painted = false;
+    /* The shape the backend was last told to show. A window opens as an arrow, so
+     * that is what the shell believes it has until a frame says otherwise. */
+    cf_cursor applied_cursor = CF_CURSOR_DEFAULT;
     cf_size offer = {0.0f, 0.0f};
     struct timespec last;
     timespec_get(&last, TIME_UTC);
@@ -160,6 +163,19 @@ void cf_app_run(const cf_app_config *config) {
 
         if (shown != NULL && *shown) {
             app_inspector_append(&ctx, config->fonts, list.count, frame_us, &list);
+        }
+
+        /* What the hand is over is the frame's answer, and the shell is the one
+         * place that reads it every frame: a host rendering through cf_frame_run
+         * itself asks in its own loop. Only a moved answer is worth a call, so a
+         * page the pointer is resting on costs the backend nothing. */
+        if (config->backend.set_cursor != NULL) {
+            const cf_cursor asked = cf_frame_cursor(&ctx);
+
+            if (asked != applied_cursor) {
+                applied_cursor = asked;
+                config->backend.set_cursor(config->backend.user_data, asked);
+            }
         }
 
         config->backend.submit(config->backend.user_data, list.commands, list.count);

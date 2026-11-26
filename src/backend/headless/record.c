@@ -76,10 +76,28 @@ static void record_present(void *user_data) {
     (void)user_data;
 }
 
+/*
+ * The shape the shell wants under the pointer, kept rather than drawn. A cursor
+ * is not part of a frame's stream - an idle submit empties the commands and
+ * leaves the pointer showing what it was shown - so the ask rides until the next
+ * one, which is what lets a test read the shell's decision instead of the
+ * frame's.
+ */
+static void record_set_cursor(void *user_data, cf_cursor cursor) {
+    cf_recorder *recorder = user_data;
+
+    if (recorder == NULL) {
+        return;
+    }
+
+    recorder->cursor = cursor;
+}
+
 cf_backend cf_backend_recorder(cf_recorder *recorder) {
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .size = sizeof(cf_backend),
                         .user_data = recorder,
                         .submit = record_submit,
-                        .present = record_present};
+                        .present = record_present,
+                        .set_cursor = record_set_cursor};
 }

@@ -20,6 +20,16 @@
  */
 #define IDLE_WAIT_MS 16
 
+/*
+ * One entry per shape cf_cursor names. The count is written here rather than read
+ * off the enum because the array is what a stale shape would run past, and the
+ * bound in sdl_set_cursor is what keeps it inside; the assert below is what keeps
+ * the two from drifting apart silently when a shape is appended to the enum.
+ */
+#define CURSOR_SHAPES 3u
+_Static_assert((uint32_t)CF_CURSOR_TEXT + 1u == CURSOR_SHAPES,
+               "the cursor table and cf_cursor disagree");
+
 typedef struct sdl_state {
     SDL_Window *window;
     SDL_Renderer *renderer;
@@ -30,6 +40,11 @@ typedef struct sdl_state {
     SDL_Texture **textures;
     uint32_t texture_slots;
     uint32_t texture_capacity;
+    /* The pointer shapes this window has been asked to show, made the first time
+     * the desk is asked for one and kept until the teardown. A driver that makes no
+     * cursor answers NULL, and the next ask tries again rather than remembering a
+     * refusal forever. */
+    SDL_Cursor *cursors[CURSOR_SHAPES];
     /* A submit has drawn into the target and no swap has shown it yet. */
     bool damaged;
     /* Events have been handed to the shell that no drawn frame carries yet. */
@@ -375,6 +390,16 @@ static void sdl_destroy(void *user_data) {
     }
 
     cf_free_block(state->textures);
+
+    /* Before the window and the platform go: a cursor belongs to the mouse, and
+     * the mouse belongs to a video subsystem this teardown may be about to stop. */
+    for (uint32_t shape = 0u; shape < CURSOR_SHAPES; ++shape) {
+        if (state->cursors[shape] != NULL) {
+            SDL_DestroyCursor(state->cursors[shape]);
+            state->cursors[shape] = NULL;
+        }
+    }
+
     SDL_StopTextInput(state->window);
     SDL_DestroyRenderer(state->renderer);
     SDL_DestroyWindow(state->window);
@@ -603,6 +628,42 @@ static bool sdl_poll(void *user_data, cf_event *out) {
     }
 }
 
+/*
+ * The shape the frame asked for, put under the pointer. Both halves are
+ * answers the desk may refuse: a driver with no cursor makes none, and one that
+ * cannot show the shape keeps the one it has. Nothing logs either refusal, for
+ * the same reason a window that will not take a resize does not: the ask is a
+ * preference, the page stays legible, and a per-frame word about it would be
+ * noise the host cannot act on. A number the enum does not name arrives as the
+ * default, which is also what it becomes when a shape joins cf_cursor ahead of
+ * its row here.
+ */
+static void sdl_set_cursor(void *user_data, cf_cursor cursor) {
+    /* Named by cf_cursor's own numbers, so a row cannot be filed under the wrong
+     * shape when the enum grows. */
+    static const SDL_SystemCursor system[CURSOR_SHAPES] = {
+        [CF_CURSOR_DEFAULT] = SDL_SYSTEM_CURSOR_DEFAULT,
+        [CF_CURSOR_POINTER] = SDL_SYSTEM_CURSOR_POINTER,
+        [CF_CURSOR_TEXT] = SDL_SYSTEM_CURSOR_TEXT,
+    };
+
+    sdl_state *state = user_data;
+
+    if (state == NULL) {
+        return;
+    }
+
+    const uint32_t shape = (uint32_t)cursor < CURSOR_SHAPES ? (uint32_t)cursor : 0u;
+
+    if (state->cursors[shape] == NULL) {
+        state->cursors[shape] = SDL_CreateSystemCursor(system[shape]);
+    }
+
+    if (state->cursors[shape] != NULL) {
+        (void)SDL_SetCursor(state->cursors[shape]);
+    }
+}
+
 /* The window's own size, which is what logical points lay out against; the
  * pixel density between points and device pixels stays inside the draw. */
 static cf_size sdl_surface(void *user_data) {
@@ -750,5 +811,6 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .surface = sdl_surface,
                         .load_image = sdl_load_image,
                         .release_texture = sdl_release_texture,
+                        .set_cursor = sdl_set_cursor,
                         .destroy = sdl_destroy};
 }

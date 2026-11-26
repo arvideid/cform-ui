@@ -12,10 +12,19 @@
  * platform the first one is standing on.
  *
  * The window is opened on SDL's dummy video driver, which the test property sets
- * in the environment: no display, no desktop automation, and the same four slots
- * a host calls on a real device. Where even that cannot open a window the case
- * says so and leaves, the way the font case does.
+ * in the environment: no display, no desktop automation, and the same slots a host
+ * calls on a real device. The driver makes no pointer shape, so every cursor ask
+ * here is a refusal - which is the half of that contract a headless run can prove,
+ * that a desk with no cursor survives being asked. Which shape lands under the
+ * hand on a real desk is a person's call, in the gallery window.
+ *
+ * Where even that cannot open a window the case says so and leaves, the way the
+ * font case does.
  */
+
+/* A shape cf_cursor does not name: what a host built against a wider list would
+ * hand to a port that indexes a table by the number it was given. */
+#define UNNAMED_SHAPE 9u
 
 /* Two RGBA8888 pixels, the layout create_texture promises. */
 static const uint8_t pixels[4u * 2u * 2u] = {255u, 0u,   0u, 255u, 0u, 0u,
@@ -101,6 +110,35 @@ static void an_upload_that_cannot_be_described_is_refused(const cf_backend *back
     backend->release_texture(backend->user_data, again);
 }
 
+/*
+ * Asking for a pointer shape on a desk that has none. The slot must be there - a
+ * window is exactly the output that can answer - and every ask, repeated, out of
+ * range, or through a state the caller never opened, has to leave the device able
+ * to draw its next frame. What the driver refuses here is the case that matters:
+ * a port that treated a refused cursor as a lost window would stop painting over
+ * a cosmetic preference.
+ */
+static void asking_for_a_shape_survives_a_desk_that_has_none(const cf_backend *backend) {
+    CF_CHECK(backend->set_cursor != NULL, "a window offers the shape slot");
+
+    for (uint32_t round = 0u; round < 3u; ++round) {
+        backend->set_cursor(backend->user_data, CF_CURSOR_DEFAULT);
+        backend->set_cursor(backend->user_data, CF_CURSOR_POINTER);
+        backend->set_cursor(backend->user_data, CF_CURSOR_TEXT);
+        backend->set_cursor(backend->user_data, (cf_cursor)UNNAMED_SHAPE);
+    }
+
+    /* A refusal handed the ask back rather than acting on it, so a null state is
+     * the same case again from the other side: nothing to show the shape on.
+     */
+    backend->set_cursor(NULL, CF_CURSOR_POINTER);
+
+    const uint32_t live = upload(backend);
+    CF_CHECK(live != 0u, "the frame after the asks still uploads");
+    draw_texture(backend, live);
+    backend->release_texture(backend->user_data, live);
+}
+
 /* Every ask that names nothing the backend holds: a host should not have to know
  * which of these it is, and none of them may reach a texture to destroy. */
 static void a_release_naming_nothing_changes_nothing(cf_backend *backend) {
@@ -181,6 +219,7 @@ int main(void) {
     a_released_upload_leaves_its_number_behind(&backend);
     an_upload_that_cannot_be_described_is_refused(&backend);
     a_release_naming_nothing_changes_nothing(&backend);
+    asking_for_a_shape_survives_a_desk_that_has_none(&backend);
 
     /* Last, because nothing may be submitted through a destroyed backend: what a
      * teardown that skips this leaves behind is bytes the host has no way to reach

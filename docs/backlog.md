@@ -21,8 +21,8 @@ and this file is the record.
 | A full field ignores the keystroke | the buffer's capacity is the caller's and a run that will not fit whole is refused, so typing into a full field looks dead. Either truncate at a scalar boundary or show the refusal; today neither is stated |
 | A state block can move | growing a block hands back a new pointer and the old one dangles. The framework no longer reads through the freed pointer itself (the use-after-free in `cf_state_grow` is repaired), but a host that caches a `cf_state` pointer across a growth is still the hazard the API warns about |
 | A lost device is not recovered | a refused present now ends the drawing: the backend says so once, submits nothing and takes no further upload, and still answers a release and a teardown. Nothing re-creates the device or re-uploads what was in flight, and no headless tier can make SDL refuse a frame, so recovery stays a desktop case a human qualifies (or a Wasm context-restart fixture) with the host closing and opening a backend |
-| The cursor is dead API | `cf_frame_cursor` answers an I-beam over a field and no backend can act on it, because the surface contract has no slot for the ask |
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
+| Which shape arrives under the pointer is unqualified | the shell asks and the SDL port maps the three shapes onto SDL's own, but SDL's dummy driver makes no cursor at all: the headless case only proves that a refused ask leaves the window drawing. Reading the mapping needs a gallery window — the hand over a button, the I-beam in a field, the arrow elsewhere |
 | Selection is by character | no double-click to select a word and no triple-click for the line, though a drag that strays past the box keeps selecting because the press holds the pointer |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
 
@@ -58,16 +58,17 @@ it. Each needs a design conversation before a line of code:
 
 ## Before a 1.0 freezes the ABI
 
-`CF_BACKEND_ABI_VERSION` is 9 and every number after it has been broken on
+`CF_BACKEND_ABI_VERSION` is 10 and every number after it has been broken on
 purpose. A texture release and a backend teardown are what 8 added; 9 added
 `size`, a second number at the front of the struct, so a backend compiled against
-another revision of the header is refused rather than misread. A change that adds
-no slot — a font close is one, since the font is not part of the struct — needs no
-number of its own. One slot is still wanted by a row above — the cursor — and it is
-a reason to say *now* rather than after a release. The clipboard went the other way:
-it is a host pair on the context (`cf_clipboard`), not a backend slot, so serving it
-bumps no number. Enum values are append-only, so the same pressure does not apply to
-`cf_role`, `cf_key` or `cf_intrinsic`.
+another revision of the header is refused rather than misread; 10 added the cursor, the
+slot `cf_frame_cursor` had been answering into nowhere. A change that adds no slot needs no
+number of its own — a font close is one, since the font is not part of the struct, and
+so is the clipboard, which went onto the context as a host-owned pair (`cf_clipboard`)
+instead of into the backend. Text-input lifecycle and composition are the rows left
+that would want a slot, and they are the ones to decide about *now* rather than after a
+release. Enum values are append-only, so the same pressure does not apply to `cf_role`,
+`cf_key` or `cf_intrinsic`.
 
 Also worth deciding while the surface is still soft:
 
