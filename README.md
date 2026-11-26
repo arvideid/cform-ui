@@ -502,6 +502,16 @@ the layout headers into one droppable `cf_layout.h`
 Yoga test corpus from a checkout in `.vendor/yoga`, and is only needed to
 re-sync those tests.
 
+## Versioning
+
+[`include/cf/version.h`](include/cf/version.h) states the version once, and
+CMake reads it from there rather than carrying a second copy. The numbers mean
+what [docs/versioning.md](docs/versioning.md) says they mean — a source and
+rebuild promise inside a MAJOR, with the backend ABI as its own axis — and
+`tools/check_api.py` refuses a header change the version does not cover.
+Whoever cuts a release follows [docs/releases.md](docs/releases.md); whoever
+maintains it follows [docs/maintenance.md](docs/maintenance.md).
+
 ## Contributing
 
 Same rules CI checks: `clang-format --dry-run --Werror` clean on the files you
