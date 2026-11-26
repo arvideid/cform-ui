@@ -19,7 +19,17 @@ typedef enum cf_event_type {
     /* What the keyboard produced rather than which key moved: the shift, caps
      * lock, layout and input method that turn a key into a letter are the
      * device's business, and this is the answer they settled on. */
-    CF_EVENT_TEXT
+    CF_EVENT_TEXT,
+    /*
+     * The hand let go without letting go: the window lost the pointer to another
+     * one, a touch slid off the surface, a grab was taken elsewhere. The press and
+     * the capture it booked end here rather than at a release, and nothing is
+     * clicked - a pointer that vanished cannot have come up inside a rect. A box
+     * that kept its own state between the press and the release reads this the way
+     * it reads the release, because the difference between the two is not its to
+     * know.
+     */
+    CF_EVENT_POINTER_CANCEL = 8
 } cf_event_type;
 
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;
@@ -111,8 +121,8 @@ void cf_stop(cf_event *event);
 
 /*
  * Holds the pointer on the node whose handler calls this: moves and the
- * release keep arriving here until a release is dispatched, wherever the
- * pointer went.
+ * release keep arriving here until a release or a cancellation is dispatched,
+ * wherever the pointer went.
  */
 void cf_capture(cf_event *event);
 

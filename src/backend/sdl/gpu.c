@@ -523,6 +523,12 @@ static bool take_event(const SDL_Event *event, cf_event *out) {
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
         *out = (cf_event){.type = CF_EVENT_QUIT};
         return true;
+    case SDL_EVENT_WINDOW_FOCUS_LOST:
+        /* Whichever window takes the hand is the one that will be told about the
+         * release, so a drag this window was holding ends here rather than wait for
+         * an event that cannot arrive any more. */
+        *out = (cf_event){.type = CF_EVENT_POINTER_CANCEL};
+        return true;
     case SDL_EVENT_MOUSE_MOTION:
         *out = (cf_event){.type = CF_EVENT_POINTER_MOVE,
                           .position = {event->motion.x, event->motion.y}};

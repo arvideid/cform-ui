@@ -316,7 +316,10 @@ static void drag_thumb(cf_event *event, void *user_data) {
         return;
     }
 
-    if (event->type == CF_EVENT_POINTER_UP) {
+    if (event->type == CF_EVENT_POINTER_UP || event->type == CF_EVENT_POINTER_CANCEL) {
+        /* A hand the window lost ends the drag the same way one that let go does:
+         * the offset it was writing stays where the last move left it, and the
+         * thumb stops following a pointer that is no longer over this page. */
         drag->active = false;
         return;
     }

@@ -201,6 +201,12 @@ sits idle. Map your device's input onto `cf_event_type` and nothing else:
   capital". Report zero if you would rather not track it, and the widgets that
   read it see no modifier, which is honest.
 - Pointer positions must be in points.
+- A pointer that went away without letting go — the window lost it to another
+  one, a touch slid off the surface — is a `CF_EVENT_POINTER_CANCEL` rather than
+  an up. It ends the press and the capture that press booked, and clicks nothing:
+  a pointer that vanished cannot have come up inside a box. The SDL shell reports
+  one when its window loses focus; a port that reports nothing leaves the page
+  holding a press no hand is making.
 - `present` may collect your platform's events but must not empty the queue: a
   click landing during a frame has to survive to the next `poll_event`.
 

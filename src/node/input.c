@@ -353,6 +353,30 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         return;
     }
 
+    case CF_EVENT_POINTER_CANCEL: {
+        /* The device says the hand is gone: the interaction ends where a release
+         * would have ended it and nothing is clicked. The box that held the press
+         * hears it, so a drag it was running can stop, and the pointer's
+         * bookkeeping is cleared whether or not a handler was listening. Hover
+         * goes with the hand - a pointer the window lost is not resting on a
+         * control, and a box left wearing its hover tone would read as a stuck
+         * one. */
+        uint32_t target = captured;
+
+        if (target == CF_NO_LINK) {
+            target = live_slot(ctx, ctx->press_id);
+        }
+
+        if (target != CF_NO_LINK) {
+            deliver(ctx, &event, true, target);
+        }
+
+        ctx->capture_id = CF_NO_ID;
+        ctx->press_id = CF_NO_ID;
+        ctx->hover_id = CF_NO_ID;
+        return;
+    }
+
     case CF_EVENT_SCROLL: {
         if (captured != CF_NO_LINK) {
             deliver(ctx, &event, true, captured);

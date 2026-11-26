@@ -781,6 +781,106 @@ static void the_panel_keeps_its_own_wheel_and_reveals_its_rows(void) {
     CF_CHECK(row_shown, "the pane still paints a row after its wheel");
 }
 
+/* The pane's scrollbar track: the one painted box exactly as wide and as tall as
+ * the bar the thumb rides, which is what turns the thumb's own numbers into a
+ * point on the page. */
+static bool accept_track(const cf_command *command) {
+    return fabsf(command->rect.width - PANEL_TRACK) < 0.5f &&
+           fabsf(command->rect.height - PANEL_VIEWPORT) < 0.5f;
+}
+
+static float pane_offset(void) {
+    const cf_scroll *held = panel_scroll(&session);
+
+    return held != NULL ? held->offset : -1.0f;
+}
+
+/* The thumb as it stands this frame, in the page's coordinates: the bar's own
+ * numbers, laid on the track the stream shows. */
+static bool thumb_rect(cf_rect *out) {
+    bool found = false;
+    const cf_rect track = find_fill_rect(accept_track, &found);
+
+    if (!found) {
+        return false;
+    }
+
+    const cf_rect thumb = cf_scrollbar_thumb(panel_bar(), pane_offset());
+
+    *out = (cf_rect){track.x, track.y + thumb.y, thumb.width, thumb.height};
+    return true;
+}
+
+/* The point a press has to land on for the thumb to take it. */
+static cf_point thumb_grip(cf_rect thumb) {
+    return (cf_point){thumb.x + thumb.width / 2.0f, thumb.y + thumb.height / 2.0f};
+}
+
+/* The thumb is the one box on the page that keeps a drag of its own between the
+ * press and the release, so it is the box a cancellation has to reach: the pane
+ * stops following a pointer the window lost, and takes the next one it is given. */
+static void a_lost_pointer_ends_the_drag_the_thumb_held(void) {
+    /* A session of its own: the pane's offset is state the previous case walked,
+     * and a thumb dragged to the bottom of its track is not the one this case
+     * presses. */
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("box 0", 12u)) {
+        return;
+    }
+
+    cf_rect held;
+
+    if (!thumb_rect(&held)) {
+        CF_CHECK(false, "the pane's thumb is painted beside its rows");
+        end_session();
+        return;
+    }
+
+    const cf_point grip = thumb_grip(held);
+    const float start = pane_offset();
+
+    step(press_at(grip.x, grip.y));
+    step(move_to(grip.x, grip.y + 40.0f));
+
+    const float dragged = pane_offset();
+
+    CF_CHECK(dragged > start, "the drag walked the pane");
+
+    step((cf_event){.type = CF_EVENT_POINTER_CANCEL, .position = {grip.x, grip.y + 40.0f}});
+
+    /* The pointer travelling back over the thumb is not a hand still holding it.
+     * The drag ran from `grip`, so one that had outlived the cancellation would
+     * push the pane by the whole distance from that first point rather than by
+     * nothing. The thumb slid down with the offset, so its lower edge is one
+     * half-height below where the drag left its middle. */
+    step(move_to(grip.x, grip.y + 40.0f + held.height / 2.0f - 4.0f));
+
+    CF_CHECK(fabsf(pane_offset() - dragged) < 1.0f,
+             "a pointer the window lost leaves the pane where it was");
+
+    /* The widget is not wedged by the cancellation: a press that starts after it
+     * drags again. The thumb slid with the offset, so it is gripped afresh. */
+    if (!thumb_rect(&held)) {
+        CF_CHECK(false, "the thumb is still painted after the cancellation");
+        end_session();
+        return;
+    }
+
+    const cf_point again = thumb_grip(held);
+
+    step(press_at(again.x, again.y));
+    step(move_to(again.x, again.y + 40.0f));
+
+    CF_CHECK(pane_offset() > dragged, "and the thumb answers a drag that starts after it");
+
+    /* Letting go ends the second drag the ordinary way, so the session hands on no
+     * hold the next case would have to fight. */
+    step(release_at(again.x, again.y + 40.0f));
+
+    end_session();
+}
+
 static void the_list_builds_only_the_rows_the_viewport_shows(void) {
     /* The list is chapter six, well under the fold at the default height. */
     if (!reveal_to("row 0", 30u)) {
@@ -1065,6 +1165,7 @@ int main(void) {
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);
+    CF_RUN(a_lost_pointer_ends_the_drag_the_thumb_held);
     CF_RUN(the_list_builds_only_the_rows_the_viewport_shows);
     CF_RUN(the_chips_leave_their_number_in_the_state_the_build_reads);
     CF_RUN(the_badge_switch_moves_it_and_the_logo_still_paints);

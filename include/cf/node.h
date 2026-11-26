@@ -357,6 +357,11 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
  * parents until a handler stops it or the root ran. Dispatch before
  * cf_frame_layout hit tests nothing: moves, presses and the wheel drop.
  *
+ * A cancellation reaches the box holding the press or the capture and ends both
+ * without clicking anything: the pointer is gone, so no release followed it into a
+ * rect. The hover the pointer booked goes with it, since a box the hand left behind
+ * has no reason to keep wearing the tone of a pointer resting on it.
+ *
  * Tab and reverse Tab (the same key with shift held) move focus to the next and
  * previous box that takes it, in document order, wrapping at the ends - unless
  * the node holding focus answered the key first, which is how a dialog keeps the

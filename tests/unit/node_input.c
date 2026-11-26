@@ -10,6 +10,7 @@ typedef struct recorder {
     int moves;
     int downs;
     int ups;
+    int cancels;
     int scrolls;
     int keys;
     int activates;
@@ -30,6 +31,9 @@ static void on_pointer(cf_event *event, void *user_data) {
         break;
     case CF_EVENT_POINTER_UP:
         seen->ups++;
+        break;
+    case CF_EVENT_POINTER_CANCEL:
+        seen->cancels++;
         break;
     case CF_EVENT_SCROLL:
         seen->scrolls++;
@@ -498,6 +502,124 @@ static void a_captured_pointer_keeps_its_events_until_the_release(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
 
     CF_CHECK(cf_hovered(&ctx, child_slot(&ctx, 1u)), "hit testing resumes once the hold ends");
+
+    cf_ctx_free(&ctx);
+}
+
+/* The hold a device cancels instead of releases: the window lost the pointer, so
+ * the release the capture was waiting for will not arrive. Ending the hold is what
+ * keeps the next press from landing on a node nobody is touching any more. */
+static void a_cancellation_ends_the_hold_a_release_would_have_ended(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder first = {0};
+    recorder second = {0};
+    recorder root_log = {0};
+    cf_node children[] = {
+        box(50.0f, 50.0f, on_pointer, &first),
+        box(50.0f, 50.0f, on_pointer, &second),
+    };
+    cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t left = child_slot(&ctx, 0u);
+
+    first.capture = true;
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+    first.capture = false;
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
+
+    CF_CHECK(first.moves == 1 && second.moves == 0, "the hold is still on while the pointer moves");
+
+    cf_input(&ctx,
+             (cf_event){.type = CF_EVENT_POINTER_CANCEL, .position = {.x = 60.0f, .y = 10.0f}});
+
+    CF_CHECK(first.cancels == 1, "the node holding the press hears the cancellation");
+    CF_CHECK(root_log.cancels == 1, "and it climbs the tree the way a release does");
+    CF_CHECK(!cf_pressed(&ctx, left), "the press it booked ends with the hold");
+    CF_CHECK(!cf_hovered(&ctx, left), "and the hover goes with the pointer that left");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
+
+    CF_CHECK(second.moves == 1, "a move after the cancellation is hit tested again");
+
+    cf_ctx_free(&ctx);
+}
+
+/* A cancellation is not a release that happened to land inside a rect: the ask a
+ * release carries is the release itself, and a hand the window lost never let go
+ * anywhere. */
+static void a_cancellation_clicks_nothing_where_a_release_would(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder pressed = {0};
+    recorder root_log = {0};
+    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &pressed)};
+    cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t child = child_slot(&ctx, 0u);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(cf_pressed(&ctx, child), "the press is booked on the box under it");
+
+    cf_input(&ctx,
+             (cf_event){.type = CF_EVENT_POINTER_CANCEL, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(pressed.ups == 0, "the box is handed no release it did not get");
+    CF_CHECK(pressed.cancels == 1, "it is handed the cancellation, once");
+    CF_CHECK(!cf_pressed(&ctx, child), "and the press ends there");
+
+    cf_ctx_free(&ctx);
+}
+
+/* A cancellation belongs to whichever press is in flight. With none, there is
+ * nobody to tell, and the event does not become a pointer at its last position. */
+static void a_cancellation_with_nothing_held_reaches_no_handler(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder child_log = {0};
+    recorder root_log = {0};
+    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
+    cf_input(&ctx,
+             (cf_event){.type = CF_EVENT_POINTER_CANCEL, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(child_log.cancels == 0 && root_log.cancels == 0,
+             "a cancellation with no press in flight reaches no handler");
+    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "and the hover it ends is the one it took");
 
     cf_ctx_free(&ctx);
 }
@@ -1247,6 +1369,9 @@ int main(void) {
     CF_RUN(a_stopping_handler_keeps_the_event_off_the_ancestors);
     CF_RUN(a_wheel_finds_the_box_under_its_own_point);
     CF_RUN(a_captured_pointer_keeps_its_events_until_the_release);
+    CF_RUN(a_cancellation_ends_the_hold_a_release_would_have_ended);
+    CF_RUN(a_cancellation_clicks_nothing_where_a_release_would);
+    CF_RUN(a_cancellation_with_nothing_held_reaches_no_handler);
     CF_RUN(a_key_reaches_the_focused_node_and_bubbles);
     CF_RUN(what_the_keyboard_wrote_goes_to_whoever_holds_focus);
     CF_RUN(focus_set_by_hand_reaches_a_node_no_press_touched);
