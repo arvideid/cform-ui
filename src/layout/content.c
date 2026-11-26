@@ -48,6 +48,15 @@ static bool length_is_percent(cf_length length) {
     return length.kind == CF_LENGTH_PERCENT;
 }
 
+/* A stretch axis fills the room a pass hands it, so a subtree that declares one
+ * answers a different extent for every room it is offered. The basis counts
+ * even though no pass rule reads the keyword there yet: it is what the keyword
+ * is documented to mean on that field, and leaving the subtree in the memo
+ * answers a box that cannot be painted. */
+static bool length_names_stretch(cf_length length) {
+    return length.kind == CF_LENGTH_STRETCH;
+}
+
 static bool box_has_percent(cf_box box) {
     return length_is_percent(box.left) || length_is_percent(box.top) ||
            length_is_percent(box.right) || length_is_percent(box.bottom);
@@ -60,7 +69,8 @@ static bool style_offers_nothing(const cf_style *style) {
            !length_is_percent(style->width) && !length_is_percent(style->height) &&
            !length_is_percent(style->flex_basis) && !length_is_percent(style->min_width) &&
            !length_is_percent(style->max_width) && !length_is_percent(style->min_height) &&
-           !length_is_percent(style->max_height);
+           !length_is_percent(style->max_height) && !length_names_stretch(style->width) &&
+           !length_names_stretch(style->height) && !length_names_stretch(style->flex_basis);
 }
 
 /*
@@ -187,11 +197,12 @@ static void measure_store(const layout_ctx *ctx, uint32_t slot, uint32_t mode,
  * Whether the intrinsic extent of a subtree answers the same whatever room
  * it is offered. A wrapping container breaks its lines at the offer, a
  * measure callback wraps its content at the width it is handed, a grid
- * distributes the offer across its tracks, and a percentage on a size, a
- * bound, the frame, a margin or the gaps resolves against it - the dependence
- * `settled_length` defers in a measuring pass. A node free of all of those
- * measures to one extent, and so does every node below it that is free too.
- * The height returned is the longest run of edges down from the slot.
+ * distributes the offer across its tracks, a stretch axis fills it, and a
+ * percentage on a size, a bound, the frame, a margin or the gaps resolves
+ * against it - the dependence `settled_length` defers in a measuring pass. A
+ * node free of all of those measures to one extent, and so does every node
+ * below it that is free too. The height returned is the longest run of edges
+ * down from the slot.
  */
 static uint32_t measure_offers_nothing(layout_ctx *ctx, uint32_t slot) {
     const cf_style *style = &ctx->tree->styles[slot];

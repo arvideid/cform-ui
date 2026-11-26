@@ -1110,6 +1110,56 @@ static void a_stretched_axis_under_an_indefinite_offer_reads_as_auto(void) {
     CF_NEAR(f.rects[root].width, 100.0f);
 }
 
+/*
+ * The measure memo keeps one answer per slot for a subtree that measures the
+ * same whatever room it is offered. A stretch axis answers with the room, so a
+ * subtree declaring one is not such a subtree: shrinking the box it sits in
+ * moves the width the stretch fills and, through the ratio, the height. Handing
+ * the second measure the answer memoed at the first width is what lets a box
+ * keep a size it no longer has.
+ */
+static void a_stretched_axis_is_not_memoized_as_offered_nothing(void) {
+    fixture f;
+    cf_style row = cf_style_default();
+    /* Kept off the cross axis: a stretched cross would be as tall as the line
+     * and say nothing about what the item's own content measured. */
+    row.align_items = CF_ALIGN_START;
+    row.width = CF_PX(400.0f);
+    row.height = CF_PX(200.0f);
+    const uint32_t root = begin(&f, row);
+
+    /* The automatic minimum is the width the content cannot break, and the
+     * content here is the stretch, which fills whatever it is offered: with no
+     * floor of its own the item can be shrunk to the room the line leaves.
+     */
+    cf_style panel_style = cf_style_default();
+    panel_style.min_width = CF_PX(0.0f);
+    const uint32_t panel = append(&f, root, panel_style);
+
+    cf_style band_style = cf_style_default();
+    band_style.width = CF_STRETCH;
+    band_style.aspect_ratio = 2.0f;
+    const uint32_t band = append(&f, panel, band_style);
+
+    const uint32_t firm = append(&f, root, fixed_box(100.0f, 30.0f));
+
+    arrange_in(&f, 400.0f, 200.0f);
+
+    /* The 500 the two items base on is 100 over the line, and they give it back
+     * by their weighted bases: 80 off the panel, 20 off the firm box.
+     */
+    CF_NEAR(f.rects[panel].width, 320.0f);
+    CF_NEAR(f.rects[firm].width, 80.0f);
+
+    /* Measured again at the width it got, the band fills 320 and its ratio
+     * settles the height at 160 rather than the 200 the 400 offer first
+     * produced. */
+    CF_NEAR(f.rects[band].width, 320.0f);
+    CF_NEAR(f.rects[band].height, 160.0f);
+    CF_NEAR(f.rects[band].height, f.rects[band].width / 2.0f);
+    CF_NEAR(f.rects[panel].height, 160.0f);
+}
+
 int main(void) {
     printf("layout flex\n");
     CF_CHECK(cf_arena_init(&scratch, 4096u), "layout needs scratch");
@@ -1154,6 +1204,7 @@ int main(void) {
     CF_RUN(an_axis_that_states_max_content_ignores_the_shrink_to_fit_cap);
     CF_RUN(a_stretched_axis_fills_the_offer_it_is_given);
     CF_RUN(a_stretched_axis_under_an_indefinite_offer_reads_as_auto);
+    CF_RUN(a_stretched_axis_is_not_memoized_as_offered_nothing);
 
     cf_arena_free(&scratch);
     return CF_REPORT();
