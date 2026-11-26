@@ -117,6 +117,11 @@ typedef struct cf_ctx {
     cf_id press_id;
     cf_id capture_id;
     cf_id focus_id;
+    /* The box the keyboard moved away from to get where it stands. The diff hands
+     * the keyboard back to it when that box is retired, hidden or switched off, and
+     * one box is all it remembers: after a hand-back the remembered box is the one
+     * that just went, so a second death leaves the keyboard with nobody. */
+    cf_id prior_id;
     uint32_t root_slot;
     uint32_t frame_id;
     /* The interval cf_frame_run was handed for the frame being run, and
@@ -416,7 +421,10 @@ void cf_input(cf_ctx *ctx, cf_event event);
 /* Focus follows the press onto a box that takes it; this moves focus by hand. A
  * slot that is not live names no node, and a live box that declares no focus is
  * refused - the same rule Tab walks, so a host cannot land focus somewhere the
- * keyboard could not reach. */
+ * keyboard could not reach. The box the keyboard leaves is the one it comes back to
+ * when the newcomer goes away, which is what lets a dialog close without leaving the
+ * page holding a keyboard nobody can answer.
+ */
 void cf_focus(cf_ctx *ctx, uint32_t slot);
 
 /*

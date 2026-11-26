@@ -9,7 +9,6 @@ and this file is the record.
 
 | what is missing | what that means on screen | how it gets closed |
 |---|---|---|
-| **Focus put back** | a dialog that opens takes the keyboard and leaves it nowhere when it closes | the shell remembers the box that held focus when the dialog opened and restores it with `cf_focus` — the widget side wants a container that owns the ask |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
 | **IME composition** | the committed words reach the field, but the text still being composed is never drawn and the platform is never told where the caret is, so a candidate window lands wherever the desk decides | a composition event pair from the backend and a marked span the field paints differently, plus the text area the platform asks for. Opening the service is done — `set_text_input` — so what is left is the marked span, and it needs a real desktop to test, so it needs a plan before code |
 

@@ -281,6 +281,55 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
     }
 }
 
+/*
+ * One move of the keyboard, so every door that changes it leaves the same record
+ * behind: the box it came from. A move onto the box that already holds it records
+ * nothing, because the box would then become its own predecessor and the page
+ * would have nowhere to come back to.
+ */
+static void move_focus(cf_ctx *ctx, cf_id next) {
+    if (cf_id_equal(ctx->focus_id, next)) {
+        return;
+    }
+
+    ctx->prior_id = ctx->focus_id;
+    ctx->focus_id = next;
+}
+
+/*
+ * The keyboard after the tree changed: the box holding it may have been retired,
+ * hidden or switched off, which leaves the ask with nowhere to go. It goes back to
+ * the box the keyboard came from, so a dialog that opens and closes leaves the page
+ * where it found it rather than waiting for a Tab that starts at the top.
+ *
+ * One box is remembered, so the hand-back is one deep: after it the remembered box
+ * is the one that just went away, and a second death leaves the keyboard with
+ * nobody rather than resurrecting a box nobody pressed. A page recovers with one
+ * Tab, which enters the ring from its start.
+ */
+void cf_focus_repair(cf_ctx *ctx) {
+    if (cf_id_is_none(ctx->focus_id)) {
+        /* Nobody holds the keyboard, so there is nothing to hand back: a box that
+         * became reachable again did not ask for the keyboard and must not take it.
+         */
+        return;
+    }
+
+    const uint32_t focused = live_slot(ctx, ctx->focus_id);
+
+    if (focused != CF_NO_LINK && takes_focus(ctx, focused)) {
+        return;
+    }
+
+    const uint32_t prior = live_slot(ctx, ctx->prior_id);
+
+    if (prior != CF_NO_LINK && takes_focus(ctx, prior)) {
+        ctx->focus_id = ctx->prior_id;
+    } else {
+        ctx->focus_id = CF_NO_ID;
+    }
+}
+
 /* Runs the handlers from the target up through the parents, each with fresh
  * dispatch flags: stopping is this handler's decision about the ones above
  * it, and capturing binds the node whose handler ran. */
@@ -372,7 +421,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
          * different ask. A box that never said it takes the keyboard does not get
          * it because a mouse happened to be resting on it. */
         if (takes_focus(ctx, interactive)) {
-            ctx->focus_id = ctx->press_id;
+            move_focus(ctx, ctx->press_id);
         }
 
         deliver(ctx, &event, true, hit);
@@ -465,7 +514,9 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             const uint32_t from = focused != CF_NO_LINK ? focused : ctx->root_slot;
             const uint32_t next = focus_neighbor(ctx, from, (event.mods & CF_MOD_SHIFT) != 0u);
 
-            ctx->focus_id = next != CF_NO_LINK ? cf_store_id(&ctx->nodes, next) : CF_NO_ID;
+            /* The move is recorded through the one door, so the box the keyboard came
+             * from is kept whichever door the key walked out of. */
+            move_focus(ctx, next != CF_NO_LINK ? cf_store_id(&ctx->nodes, next) : CF_NO_ID);
 
             /* The new focus is only worth having if the eye can find it, so the
              * page that hides it moves out of the way. */
@@ -528,7 +579,7 @@ void cf_focus(cf_ctx *ctx, uint32_t slot) {
         return;
     }
 
-    ctx->focus_id = cf_store_id(&ctx->nodes, slot);
+    move_focus(ctx, cf_store_id(&ctx->nodes, slot));
     reveal_slot(ctx, slot);
 }
 

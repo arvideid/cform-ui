@@ -42,6 +42,7 @@ bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes) {
     ctx->press_id = CF_NO_ID;
     ctx->capture_id = CF_NO_ID;
     ctx->focus_id = CF_NO_ID;
+    ctx->prior_id = CF_NO_ID;
 
     return true;
 }

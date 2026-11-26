@@ -233,7 +233,10 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     }
 
     if (root == NULL) {
-        /* Nothing was declared: the retained tree empties. */
+        /* Nothing was declared: the retained tree empties, and every id the
+         * interaction holds names a retired slot from then on - the store bumps the
+         * generation as it frees one, so the keyboard cannot be left on whoever
+         * takes the slot next. */
         retire_untouched(ctx);
         ctx->root_slot = CF_NO_LINK;
         ctx->layout_ready = false;
@@ -376,6 +379,10 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     if (!tree_rebuild(ctx, flat, declared)) {
         return CF_NO_LINK;
     }
+
+    /* The view this frame declares is the one the keyboard's box has to be found
+     * in, so the hand-back waits until it exists. */
+    cf_focus_repair(ctx);
 
     return ctx->root_slot;
 }

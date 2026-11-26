@@ -147,9 +147,11 @@ accepted and ignored — there is no field that pretends to take these things.
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk the
   declared boxes in document order, and **Enter** or the space bar asks the focused box
   to do its job — with no chord held, since **Ctrl**+**Enter** is a binding the page made
-  rather than the plain ask. A dialog keeps the keyboard by answering **Tab** itself;
-  nothing puts the focus back where a closed dialog found it. The field
-  holding the keyboard is also what asks the device for a way to type: the frame's
+  rather than the plain ask. A dialog keeps the keyboard by answering **Tab** itself, and a
+  box that stops being reachable hands it back: when a diff retires, hides or switches off
+  the focused box, the keyboard goes back to the box it moved away from, and to nobody when
+  that one is gone too. The field holding the keyboard is also what asks the device for a
+  way to type: the frame's
   `cf_frame_takes_text` answer reaches `set_text_input`, so a screen keyboard or an
   input method is offered while a box can take the words and not while it cannot.
 - **Copy, cut and paste need a clipboard from the host.** The field answers

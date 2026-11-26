@@ -245,15 +245,17 @@ static void only_a_reachable_field_asks_for_written_text(void) {
 
     CF_CHECK(cf_frame_takes_text(&ctx), "the field's role is the ask");
 
-    /* Switched off where it stands: the node is still live, so only the keyboard's
-     * reach has changed - and with it the ask. */
+    /* Switched off where it stands: a box the keyboard can no longer reach by Tab
+     * does not hold the keyboard either, and the keyboard goes back to the box it
+     * came from - one that takes keys and asks for no keyboard to be drawn. */
     children[0].disabled = true;
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    CF_CHECK(cf_focused(&ctx, field), "a box switched off under the keyboard keeps the focus");
-    CF_CHECK(!cf_frame_takes_text(&ctx), "and loses the ask for a keyboard with the reach");
+    CF_CHECK(!cf_focused(&ctx, field), "a box switched off under the keyboard loses the focus");
+    CF_CHECK(cf_focused(&ctx, button), "and the keyboard goes back to where it came from");
+    CF_CHECK(!cf_frame_takes_text(&ctx), "so the ask goes with the reach");
 
     /* Back on and hidden instead: the other way the same gate refuses. */
     children[0].disabled = false;
@@ -268,8 +270,9 @@ static void only_a_reachable_field_asks_for_written_text(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
+    cf_focus(&ctx, field);
 
-    CF_CHECK(cf_frame_takes_text(&ctx), "and the ask comes back with the box");
+    CF_CHECK(cf_frame_takes_text(&ctx), "and the ask comes back once the box can be reached again");
 
     /* The field retires under the keyboard: the id the focus holds names no node,
      * and an answer read from the slot that took its place would be a keyboard for
@@ -1366,6 +1369,415 @@ static void a_ring_that_empties_loses_the_focus(void) {
 }
 
 /*
+ * The ending a dialog wants: the box the keyboard moved onto hands it back to the
+ * box the keyboard came from when it goes away, so the page resumes where the
+ * person left it instead of waiting for a walk that starts at the top of it.
+ */
+static void the_box_that_leaves_hands_the_keyboard_back(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder holder_log = {0};
+    recorder dialog_log = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &holder_log),
+        focus_box(50.0f, 50.0f, on_pointer, &dialog_log),
+    };
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &holder_log;
+    children[1].handlers.key = on_key;
+    children[1].handlers.key_data = &dialog_log;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t holder = child_slot(&ctx, 0u);
+    const uint32_t dialog = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, holder);
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, dialog), "the walk moved the keyboard onto the second box");
+
+    /* The dialog closes: the next declaration simply stops naming it, which is all
+     * a page has to do to end one. */
+    root.child_count = 1u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, holder), "a box that leaves the tree hands the keyboard back");
+    CF_CHECK(!cf_focused(&ctx, dialog), "and the box that went holds nothing on its way out");
+
+    /* Counted from here: the Tab that walked onto the dialog was itself asked of the
+     * box the keyboard stood on, and that key is not this case's claim. */
+    holder_log.keys = 0;
+    dialog_log.keys = 0;
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'x'});
+
+    CF_CHECK(holder_log.keys == 1 && dialog_log.keys == 0,
+             "the key after the closing is asked of the box that took the keyboard back");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A box that leaves without dying - hidden, or switched off - is as gone to the
+ * keyboard as one the diff retired, and the hand-back reads the same way.
+ */
+static void a_box_the_page_hides_hands_the_keyboard_back(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder holder_log = {0};
+    recorder other_log = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &holder_log),
+        focus_box(50.0f, 50.0f, on_pointer, &other_log),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t holder = child_slot(&ctx, 0u);
+    const uint32_t panel = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, holder);
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, panel), "the keyboard stands on the box the page will put away");
+
+    /* Out of sight: the slot lives and the record keeps its declaration, so only
+     * the view says the box is not there. */
+    children[1].style.display = CF_DISPLAY_NONE;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, holder), "a box hidden from the view hands the keyboard back");
+    CF_CHECK(!cf_focused(&ctx, panel), "and the hidden box answers no focus of its own");
+
+    /* Back in sight, switched off: the same flag the press reads. */
+    children[1].style.display = CF_DISPLAY_FLEX;
+    children[1].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_focus(&ctx, panel);
+
+    CF_CHECK(!cf_focused(&ctx, panel) && cf_focused(&ctx, holder),
+             "a box switched off refuses the keyboard and keeps what held it");
+
+    children[1].disabled = false;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+    cf_focus(&ctx, panel);
+
+    CF_CHECK(cf_focused(&ctx, panel), "switched back on, it takes the keyboard again");
+
+    children[1].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, holder),
+             "and a box switched off under the keyboard hands it back too");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The memory is one deep, and spent when it is used: a second death is a fresh
+ * start rather than the walk of a chain nobody declared. The keyboard landing
+ * nowhere is recoverable - the next Tab enters the ring from its top - while a
+ * focus the page resurrected two boxes back is a box nobody pressed.
+ */
+static void the_keyboard_is_handed_back_once(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, NULL, NULL),
+        focus_box(50.0f, 50.0f, NULL, NULL),
+        focus_box(50.0f, 50.0f, NULL, NULL),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 3u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t first = child_slot(&ctx, 0u);
+    const uint32_t second = child_slot(&ctx, 1u);
+    const uint32_t third = child_slot(&ctx, 2u);
+
+    cf_focus(&ctx, first);
+    tab(&ctx, false);
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, third), "the keyboard walked onto the last box");
+
+    root.child_count = 2u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, second), "its death hands the keyboard to the box before it");
+
+    root.child_count = 1u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_focused(&ctx, second) && !cf_focused(&ctx, first),
+             "a second death leaves the keyboard with nobody rather than walking back");
+
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, first), "and one Tab picks the ring up from its start");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A press on the box that already holds the keyboard moves nothing, so it records
+ * nothing: had it, the box would have become its own predecessor and the
+ * hand-back would have nowhere to go.
+ */
+static void a_press_that_moves_nothing_keeps_where_it_came_from(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder holder_log = {0};
+    recorder panel_log = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &holder_log),
+        focus_box(50.0f, 50.0f, on_pointer, &panel_log),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t holder = child_slot(&ctx, 0u);
+    const uint32_t panel = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, holder);
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, panel), "the keyboard is standing on the panel's box");
+
+    /* Pressed again where it already stands, and focused by hand on the same box:
+     * neither is a move, so neither spends the memory of the box before it. */
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 60.0f, .y = 10.0f}});
+    cf_focus(&ctx, panel);
+
+    CF_CHECK(cf_focused(&ctx, panel), "and the box keeps the keyboard it had");
+
+    root.child_count = 1u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, holder), "the hand-back still knows where it came from");
+    CF_CHECK(holder_log.downs == 0 && panel_log.downs == 1,
+             "and the presses it did not need to make stayed unmade");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * When both the box that held the keyboard and the one it came from are gone, the
+ * keyboard is dropped rather than left pointing at a slot the store no longer
+ * hands out: a stale id must read as nobody, whatever it once named.
+ */
+static void a_keyboard_with_nowhere_to_go_is_dropped(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder left = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &left),
+        focus_box(50.0f, 50.0f, NULL, NULL),
+    };
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &left;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t holder = child_slot(&ctx, 0u);
+    const uint32_t panel = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, holder);
+    tab(&ctx, false);
+
+    root.child_count = 0u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_focused(&ctx, panel) && !cf_focused(&ctx, holder),
+             "two deaths leave the keyboard with nobody");
+
+    left.keys = 0;
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'x'});
+
+    CF_CHECK(left.keys == 0, "and a key with no box standing on it reaches no handler");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The box the keyboard came from may have gone the same way as the one that took
+ * it: a hand-back onto a box that refuses the keyboard is no hand-back, and the
+ * page keeps the key at the door rather than in a box no press would answer.
+ */
+static void a_box_that_cannot_be_returned_to_hands_the_keyboard_to_no_one(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder left = {0};
+    recorder gone = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &left),
+        focus_box(50.0f, 50.0f, on_pointer, &gone),
+    };
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &left;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t first = child_slot(&ctx, 0u);
+    const uint32_t second = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, first);
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, second), "the keyboard stands on the second box");
+
+    /* The box it came from is switched off while the keyboard is away on the other
+     * one: the standing box is untouched, so nothing moves yet. */
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_focused(&ctx, second), "a box switched off behind the keyboard moves nothing");
+
+    children[1].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_focused(&ctx, second) && !cf_focused(&ctx, first),
+             "and the keyboard with nowhere to go back to is dropped");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A box that becomes reachable again did not ask for the keyboard, and the page
+ * that lost one to two closings does not get it back because a switch moved: focus
+ * moves on a press, on a key, or on a host's word, and on nothing else.
+ */
+static void nothing_becomes_focused_by_itself(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, NULL, NULL),
+        focus_box(50.0f, 50.0f, NULL, NULL),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t first = child_slot(&ctx, 0u);
+    const uint32_t second = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, first);
+    tab(&ctx, false);
+
+    /* Both boxes go away under the keyboard, the remembered one first: the drop has
+     * nowhere to hand back to, which is the state the next frame must not undo. */
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+    children[1].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_focused(&ctx, first) && !cf_focused(&ctx, second),
+             "two closings leave the keyboard with nobody");
+
+    children[0].disabled = false;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(!cf_focused(&ctx, first),
+             "a box that becomes reachable again takes no keyboard it was not given");
+
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, first), "and one Tab picks the ring up from its start");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
  * The keyboard asks the box that holds the focus to do its job, and the ask stops
  * there: a container is not asked because its child is the one standing on the
  * key, and a box that answered the key is not asked again. Only the plain key
@@ -1600,6 +2012,13 @@ int main(void) {
     CF_RUN(a_press_on_a_box_that_takes_no_focus_leaves_the_keyboard_alone);
     CF_RUN(a_box_that_answers_tab_keeps_the_move_to_itself);
     CF_RUN(a_ring_that_empties_loses_the_focus);
+    CF_RUN(the_box_that_leaves_hands_the_keyboard_back);
+    CF_RUN(a_box_the_page_hides_hands_the_keyboard_back);
+    CF_RUN(the_keyboard_is_handed_back_once);
+    CF_RUN(a_press_that_moves_nothing_keeps_where_it_came_from);
+    CF_RUN(a_keyboard_with_nowhere_to_go_is_dropped);
+    CF_RUN(a_box_that_cannot_be_returned_to_hands_the_keyboard_to_no_one);
+    CF_RUN(nothing_becomes_focused_by_itself);
     CF_RUN(the_focused_box_is_the_one_the_key_asks);
     CF_RUN(a_report_asks_the_door_the_node_declared);
 

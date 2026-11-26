@@ -184,6 +184,13 @@ static uint32_t *answered_chip(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "answered"), sizeof(uint32_t));
 }
 
+/* Whether the keyboard chapter has a second control in its row. One press adds it
+ * and one press takes it away, which is the whole of a dialog as far as the
+ * keyboard is concerned: the box that held the focus stops being declared. */
+static bool *dialog_box(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "dialog"), sizeof(bool));
+}
+
 /* The one tween the motion chapter runs, in the keyed block that outlives the
  * frame it was aimed in. */
 static cf_tween *slide_tween(cf_ctx *ctx) {
@@ -267,6 +274,18 @@ static void flip(cf_ctx *ctx, uint32_t slot, void *user_data) {
 
     if (held != NULL) {
         *held = !*held;
+    }
+}
+
+/* The keyboard chapter's way in. It writes the flag instead of turning it because a
+ * button's name is its key in the diff, and a box that renames itself is a box
+ * retired: the opener has to keep standing there while the keyboard comes back to it. */
+static void open_box(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)ctx, (void)slot;
+    bool *held = user_data;
+
+    if (held != NULL) {
+        *held = true;
     }
 }
 
@@ -1053,10 +1072,23 @@ static const char *keyboard_names[] = {"chip one", "chip two", "switched off", "
 
 /* Chapter ten: which box the keyboard is standing on. The chips do one thing -
  * say which of them last answered - because the rule here is the box a key is
- * asked at rather than what the ask is made of. */
+ * asked at rather than what the ask is made of. The row above them holds the other
+ * half of the rule: a control the keyboard walks onto and the page then loses,
+ * leaving the keyboard standing where it was found. */
 static cf_node make_keyboard_demo(cf_ctx *ctx) {
     const uint32_t *held = answered_chip(ctx);
+    bool *shown = dialog_box(ctx);
+    const bool open = shown != NULL && *shown;
     cf_node chips[KEYBOARD_COUNT];
+    cf_node dialog[2];
+
+    /* Two names that never change, so the button that opened the row is the same box
+     * after it as before: only the second control comes and goes with the flag. */
+    dialog[0] = make_button(ctx, "open the box", open_box, shown);
+
+    if (open) {
+        dialog[1] = make_button(ctx, "close the box", flip, shown);
+    }
 
     for (uint32_t i = 0u; i < KEYBOARD_COUNT; ++i) {
         chips[i] = make_chip(ctx, keyboard_names[i], held != NULL && *held == i, chip_answers, i);
@@ -1076,10 +1108,11 @@ static cf_node make_keyboard_demo(cf_ctx *ctx) {
     const cf_style row = wrap_row(8.0f);
 
     return demo_column(ctx, 8.0f,
-                       (cf_node[]){cf_row(ctx, row, chips, KEYBOARD_COUNT),
+                       (cf_node[]){cf_row(ctx, row, dialog, open ? 2u : 1u),
+                                   cf_row(ctx, row, chips, KEYBOARD_COUNT),
                                    cf_label(ctx, (cf_string){keyboard_bytes, (uint32_t)length},
                                             &body, theme->muted)},
-                       2u);
+                       3u);
 }
 
 /* The press the page's own ending rides on. It is handed the context, which is the
@@ -1266,9 +1299,17 @@ static cf_node build(cf_ctx *ctx) {
             "hidden is left out of that order, since a control nobody can click is one the "
             "keyboard has no business standing on either. Enter and the space bar then ask the box "
             "the keyboard stands on to do its job, which is the same ask as a release inside its "
-            "rect: the chip's handler is never told which door brought it. Press Tab and watch the "
-            "border darken on the box that took it; the line below names the last chip that "
-            "answered, and the switched-off one never appears in it.",
+            "rect: the chip's handler is never told which door brought it. Press Tab and "
+            "watch the border darken on the box that took it; the line below names the last chip "
+            "that answered, and the switched-off one never appears in it. The first button in the "
+            "row stands a second one beside it, and Tab walks from the opener onto that one, being "
+            "the next box the build wrote. Ask it - the plain Enter - and it goes away, and the "
+            "keyboard is standing on the opener again rather than on nothing: ask once more with "
+            "no "
+            "hand on the mouse and the control is back. Where the keyboard came from is remembered "
+            "one box deep, so a second control lost the same way leaves the page waiting for a "
+            "Tab, "
+            "which enters the ring from its start.",
             make_keyboard_demo(ctx)),
         make_chapter(
             ctx, "11", "The end the page asks for",

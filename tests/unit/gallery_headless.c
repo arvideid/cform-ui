@@ -1381,6 +1381,39 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
     end_session();
 }
 
+/* The other half of chapter ten: the box the keyboard stands on can stop being
+ * declared, and the keyboard has to come back from that rather than be left holding a
+ * slot no build answers. Only the first press is made by hand; after it the state can
+ * move again solely because a key reached a box that takes it. */
+static void the_box_that_closes_hands_the_keyboard_back(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("open the box", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    tap("open the box");
+    CF_CHECK(*dialog_box(&session), "the press declared the second control");
+    CF_CHECK(page_shows("close the box"), "and the row reads it back");
+
+    step(tab_key(false));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(!*dialog_box(&session),
+             "Tab walked from the opener onto the new control and the plain Enter asked it to go");
+    CF_CHECK(!page_shows("close the box"), "the build stops declaring the box that answered");
+
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(*dialog_box(&session),
+             "with no hand on the mouse the control comes back, so the keyboard is standing on the "
+             "box it left");
+    CF_CHECK(page_shows("close the box"), "and the row paints the control again");
+
+    end_session();
+}
+
 /* The last chapter's button is the page's own way out. This harness is not a shell -
  * it runs the pipeline itself and never leaves on the ask - which is exactly why the
  * ask is readable here: it belongs to the context, not to whoever owns the window. */
@@ -1575,6 +1608,7 @@ int main(void) {
     CF_RUN(the_badge_switch_moves_it_and_the_logo_still_paints);
     CF_RUN(a_press_sends_the_puck_and_the_page_stops_asking_when_it_lands);
     CF_RUN(the_keyboard_walks_the_page_and_asks_where_it_stands);
+    CF_RUN(the_box_that_closes_hands_the_keyboard_back);
     CF_RUN(the_page_can_ask_the_shell_to_leave);
     CF_RUN(a_narrow_window_reflows_without_spilling_geometry);
     CF_RUN(a_bigger_output_still_bounds_every_box);

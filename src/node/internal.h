@@ -117,6 +117,14 @@ typedef struct claim_entry {
 bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared);
 
 /*
+ * Puts the keyboard back where it came from when the box holding it left the view -
+ * retired, hidden or switched off - so a diff that ends a dialog does not end the
+ * page's ability to answer a key. Called once the new view exists, because the
+ * box's reachability is read from it.
+ */
+void cf_focus_repair(cf_ctx *ctx);
+
+/*
  * One state block, addressed by store slot. The block's bytes are the heap's and
  * the entry owns them: retiring the record hands the bytes back, and the store
  * gives the slot to the next request.
