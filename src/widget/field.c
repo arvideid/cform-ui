@@ -438,6 +438,9 @@ static void replace(field_data *field, cf_string run) {
     const uint32_t kept = text->length - (to - from);
 
     if (kept + run.length > text->capacity) {
+        /* Said so in the buffer the page reads, because a key that lands nowhere is
+         * otherwise indistinguishable from a key that was never sent. */
+        text->refusals++;
         return;
     }
 

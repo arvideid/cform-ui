@@ -205,6 +205,8 @@ static void the_field_stops_at_the_capacity_its_buffer_stated(void) {
     type(&ctx, over, 3u);
 
     CF_CHECK(text.length == 4u && bytes[3] == 'a', "a run that does not fit does not half land");
+    CF_CHECK(text.refusals == 5u,
+             "and every run turned away is counted where the page can read it");
 
     cf_ctx_free(&ctx);
 }
@@ -1344,6 +1346,64 @@ static void the_chord_holds_every_byte_the_buffer_carries(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The refusal a page can see. A full buffer takes nothing, which is the right rule for
+ * bytes the build owns - half a UTF-8 sequence is bytes nothing reads back - but a key
+ * that landed nowhere looks exactly like a key that was never sent unless the field
+ * says otherwise. `refusals` is that statement, and it names only the runs turned away
+ * for want of room.
+ */
+static void a_run_that_will_not_fit_says_so_in_the_buffer(void) {
+    char bytes[8] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 8u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abcdefg", 7u);
+    type(&ctx, "h", 1u);
+
+    CF_CHECK(text.length == 8u && text.refusals == 0u,
+             "filling the buffer to its last byte refuses nothing");
+
+    type(&ctx, "i", 1u);
+
+    CF_CHECK(text.length == 8u && text.refusals == 1u,
+             "the byte past the end is turned away and said");
+
+    /* The whole value selected and one run typed: the range the keys hold is room the
+     * run is given, so nothing was refused. */
+    chord(&ctx, 'a', (uint32_t)CF_MOD_CONTROL);
+    type(&ctx, "z", 1u);
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'z' && text.refusals == 1u,
+             "a run the selection made room for lands and costs no refusal");
+
+    host_holds(&board, "eleven bytes");
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 1u && text.refusals == 2u,
+             "and a pasted run too long for the buffer is refused whole, counted once");
+
+    /* A run carrying a break is refused by the row rule rather than the room: two
+     * different asks, and the page is told about the one it can act on. */
+    type(&ctx, "a\nb", 3u);
+
+    CF_CHECK(text.length == 1u && text.refusals == 2u,
+             "a run refused for its break is no room refusal");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -1382,6 +1442,7 @@ int main(void) {
     CF_RUN(shift_with_a_word_key_selects_the_run_it_ends_on);
     CF_RUN(a_word_key_answers_either_primary_modifier_and_not_alt);
     CF_RUN(the_chord_holds_every_byte_the_buffer_carries);
+    CF_RUN(a_run_that_will_not_fit_says_so_in_the_buffer);
 
     return CF_REPORT();
 }

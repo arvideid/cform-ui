@@ -166,6 +166,10 @@ accepted and ignored — there is no field that pretends to take these things.
   with them selects that run instead. **Ctrl** or **Cmd** with **A** holds every byte
   the buffer carries, for the next key to replace. The rule reads the bytes, so a
   scalar above ASCII counts as a letter and an unspaced CJK run steps as one word.
+- **A full buffer says so.** The field never inserts half of a UTF-8 sequence, so a run
+  that will not fit whole is refused outright. `cf_text_edit.refusals` counts the runs
+  it turned away and chapter two's line prints it, so a page can say "there is no room
+  left" instead of watching a caret that stopped moving.
 - **Editing stops where the caret does.** Enter submits nothing and there is no caret
   blink. An input method's committed words arrive as ordinary text, but the
   half-composed text is never drawn and the platform is never told where the caret

@@ -753,6 +753,9 @@ static bool focus_the_field(void) {
     }
 
     typed.length = 0u;
+    /* The refusal count is the buffer's own statement about the keys it turned away, so
+     * a case that means to read it starts from none. */
+    typed.refusals = 0u;
     field_press = (cf_point){.x = field.x + 30.0f, .y = field.y + field.height / 2.0f};
     step(press_at(field_press.x, field_press.y));
     step(release_at(field_press.x, field_press.y));
@@ -936,6 +939,40 @@ static void the_gallery_field_steps_a_word_and_holds_the_value(void) {
 
     CF_CHECK(typed.length == 1u && typed_bytes[0] == 'x',
              "so the next run typed goes over all of it");
+
+    end_session();
+}
+
+/*
+ * The page's field over a sixty-four byte buffer: the run that would not fit whole
+ * lands nowhere and is counted, which is the difference the reader sees between a field
+ * that is full and a field that stopped answering.
+ */
+static void the_gallery_field_says_what_it_had_no_room_for(void) {
+    static const char wide[] = "abcdefghijklmnopqrstuvwxyz0123456789ABCDE";
+    static const char short_run[] = "twenty-five bytes here!!!";
+
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text(wide));
+
+    CF_CHECK(typed.length == 41u && typed.refusals == 0u, "the first run fits the page's buffer");
+
+    step(typed_text(wide));
+
+    CF_CHECK(typed.length == 41u && typed.refusals == 1u,
+             "the one that would overflow it lands nowhere and is said");
+
+    step(chord('a', (uint32_t)CF_MOD_CONTROL));
+    step(typed_text(short_run));
+
+    CF_CHECK(typed.length == 25u && typed.refusals == 1u,
+             "and a run the selection freed is no refusal at all");
 
     end_session();
 }
@@ -1455,6 +1492,7 @@ int main(void) {
     CF_RUN(the_gallery_field_trades_bytes_with_the_host_it_names);
     CF_RUN(the_gallery_field_walks_its_own_typing_back);
     CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
+    CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);

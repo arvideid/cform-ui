@@ -491,8 +491,9 @@ static cf_node make_field_demo(cf_ctx *ctx) {
     entry.style.height = CF_PX(FIELD_HEIGHT);
     entry.style.align_items = CF_ALIGN_CENTER;
 
-    const int length = snprintf(echo_bytes, sizeof echo_bytes, "the buffer holds %u bytes: %.*s",
-                                typed.length, (int)typed.length, typed_bytes);
+    const int length =
+        snprintf(echo_bytes, sizeof echo_bytes, "the buffer holds %u bytes (%u refused): %.*s",
+                 typed.length, typed.refusals, (int)typed.length, typed_bytes);
 
     return demo_column(
         ctx, 8.0f,
@@ -1106,16 +1107,17 @@ static cf_node build(cf_ctx *ctx) {
             "moved: shift, caps lock, the layout and an input method are settled before the bytes "
             "arrive, so a capital lands as the capital that was typed. Backspace drops the last "
             "character, and a run too long for the buffer is refused whole rather than cut in "
-            "half. The widget copies the text nowhere, so the line under it reads the same bytes "
-            "back. Hold ctrl (or the command key) and press c to put a selection on the clipboard, "
-            "x to put it there and drop it, v to write what the clipboard holds over the "
-            "selection; "
-            "the three ask the host for its clipboard, and where a host names none they do "
-            "nothing at all. The same key with z hands back what the field's own keys took and "
-            "y takes it away again, caret and selection with them. Held with the arrows it steps "
-            "the word the caret stands in rather than the character, and shift along with them "
-            "selects the words it passes; held with a it reaches both ends of the value, so the "
-            "next key typed replaces all of it.",
+            "half - the line under it counts how often that happened, since a key that lands "
+            "nowhere is otherwise indistinguishable from a key nobody sent. The widget copies the "
+            "text nowhere, so the same line reads the buffer back. Hold ctrl (or the command key) "
+            "and press c to put a selection on the clipboard, x to put it there and drop it, v to "
+            "write what the clipboard holds over the selection; the three ask the host for its "
+            "clipboard, and where a host names none they do nothing at all. The same key with z "
+            "hands back what the field's own keys took and y takes it away again, caret and "
+            "selection with them. Held with the arrows it steps the word the caret stands in "
+            "rather than the character, and shift along with them selects the words it passes; "
+            "held with a it reaches both ends of the value, so the next key typed replaces all "
+            "of it.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

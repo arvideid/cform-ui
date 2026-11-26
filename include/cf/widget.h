@@ -67,6 +67,13 @@ cf_node cf_image(cf_ctx *ctx, const char *name, const cf_image_content *content)
  * `mark` equal to `caret` selects nothing. The field writes through the whole
  * struct for as long as the build keeps declaring the field - the memory and
  * its lifetime stay the build's.
+ *
+ * `refusals` counts the runs the field would not take because the buffer had no
+ * room for them whole: a typed run, a cut that did not free enough, a pasted one.
+ * The field never inserts half a sequence, so a page that means to say "there is no
+ * room left" watches this number instead of a caret that stopped moving. A build
+ * that writes the bytes itself leaves it alone - it is the field's refusals, not the
+ * buffer's history.
  */
 typedef struct cf_text_edit {
     char *chars;
@@ -74,6 +81,7 @@ typedef struct cf_text_edit {
     uint32_t capacity;
     uint32_t caret;
     uint32_t mark;
+    uint32_t refusals;
 } cf_text_edit;
 
 /*
