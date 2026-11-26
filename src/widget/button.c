@@ -64,6 +64,10 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_BUTTON].base : cf_style_default();
     node.key = cf_intern_text(&ctx->names, name);
     node.role = CF_ROLE_BUTTON;
+    /* A button is pressable by keyboard as well as by pointer, so it takes the
+     * focus that makes the key reach it. The declaration is the widget's, not the
+     * caller's: a box themed as a button without this is a picture of one. */
+    node.focusable = true;
     node.handlers.pointer = button_pointer;
     node.handlers.pointer_data = data;
     node.children = cf_children(ctx, children, child_count);

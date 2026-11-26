@@ -153,6 +153,9 @@ static void a_focused_node_resolves_its_focused_variant(void) {
     field.style = cf_theme_default()->variants[CF_ROLE_FIELD].base;
     field.style.width = CF_PX(100.0f);
     field.style.height = CF_PX(40.0f);
+    /* A real cf_field declares this for its caller: the role paints the focus
+     * variant, it does not say the keyboard may land here. */
+    field.focusable = true;
 
     const cf_node children[] = {field};
     root.children = children;
@@ -320,10 +323,19 @@ static void a_state_change_between_frames_changes_the_variant(void) {
     field.style = cf_theme_default()->variants[CF_ROLE_FIELD].base;
     field.style.width = CF_PX(100.0f);
     field.style.height = CF_PX(40.0f);
+    /* A real cf_field declares this for its caller: the role paints the focus
+     * variant, it does not say the keyboard may land here. */
+    field.focusable = true;
 
-    const cf_node children[] = {field};
+    cf_node second = styled_of(CF_NO_NAME, CF_ROLE_FIELD);
+    second.style = cf_theme_default()->variants[CF_ROLE_FIELD].base;
+    second.style.width = CF_PX(100.0f);
+    second.style.height = CF_PX(40.0f);
+    second.focusable = true;
+
+    const cf_node children[] = {field, second};
     root.children = children;
-    root.child_count = 1u;
+    root.child_count = 2u;
 
     cf_frame_begin(&ctx);
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
@@ -331,12 +343,16 @@ static void a_state_change_between_frames_changes_the_variant(void) {
     cf_frame_resolve(&ctx);
     CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 10), "the focused field reads ink");
 
+    /* The focus goes to the other field rather than nowhere: a box holds it until
+     * a control takes it, which is how a dialog hands it back. */
     cf_frame_begin(&ctx);
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the rebuild keeps the slot");
-    cf_focus(&ctx, 0u);
+    cf_focus(&ctx, 2u);
     cf_frame_resolve(&ctx);
     CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 212),
              "the blurred field reads the hairline again");
+    CF_CHECK(color_is(ctx.layout.styles[2u].border_color, 10),
+             "and the field that took it reads ink");
 
     cf_ctx_free(&ctx);
 }

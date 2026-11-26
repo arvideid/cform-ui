@@ -71,6 +71,15 @@ static cf_node box(float width, float height, cf_event_fn pointer, void *pointer
     return node;
 }
 
+/* A box that declares it takes the keyboard, the way cf_button and cf_field do.
+ * The cases that read focus ask for one: a plain box is a picture of a control,
+ * and the tests that press one prove the pointer alone cannot focus it. */
+static cf_node focus_box(float width, float height, cf_event_fn pointer, void *pointer_data) {
+    cf_node node = box(width, height, pointer, pointer_data);
+    node.focusable = true;
+    return node;
+}
+
 static bool context_of(cf_ctx *ctx) {
     if (!cf_ctx_init(ctx, 64u * 1024u)) {
         CF_CHECK(false, "the context starts");
@@ -179,7 +188,7 @@ static void a_press_marks_and_focuses_the_node_it_hit(void) {
 
     recorder child_log = {0};
     recorder root_log = {0};
-    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    cf_node children[] = {focus_box(50.0f, 50.0f, on_pointer, &child_log)};
     cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
     root.children = children;
     root.child_count = 1u;
@@ -490,7 +499,7 @@ static void a_key_reaches_the_focused_node_and_bubbles(void) {
 
     recorder child_log = {0};
     recorder root_log = {0};
-    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    cf_node children[] = {focus_box(50.0f, 50.0f, on_pointer, &child_log)};
     children[0].handlers.key = on_key;
     children[0].handlers.key_data = &child_log;
     cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
@@ -530,7 +539,7 @@ static void what_the_keyboard_wrote_goes_to_whoever_holds_focus(void) {
 
     recorder child_log = {0};
     recorder root_log = {0};
-    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    cf_node children[] = {focus_box(50.0f, 50.0f, on_pointer, &child_log)};
     children[0].handlers.key = on_key;
     children[0].handlers.key_data = &child_log;
     cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
@@ -565,8 +574,8 @@ static void focus_set_by_hand_reaches_a_node_no_press_touched(void) {
     recorder first = {0};
     recorder second = {0};
     cf_node children[] = {
-        box(50.0f, 50.0f, NULL, NULL),
-        box(50.0f, 50.0f, NULL, NULL),
+        focus_box(50.0f, 50.0f, NULL, NULL),
+        focus_box(50.0f, 50.0f, NULL, NULL),
     };
     children[0].handlers.key = on_key;
     children[0].handlers.key_data = &first;
@@ -608,7 +617,7 @@ static void a_recycled_slot_reads_as_nothing(void) {
 
     recorder child_log = {0};
     recorder root_log = {0};
-    cf_node children[] = {box(50.0f, 50.0f, on_pointer, &child_log)};
+    cf_node children[] = {focus_box(50.0f, 50.0f, on_pointer, &child_log)};
     cf_node root = box(200.0f, 200.0f, on_pointer, &root_log);
     root.children = children;
     root.child_count = 1u;
@@ -858,6 +867,283 @@ static void a_hidden_box_takes_no_input_and_yields_its_place(void) {
     cf_ctx_free(&ctx);
 }
 
+/* Hands the tree the key the device sent: Tab, with shift for the reverse. */
+static void tab(cf_ctx *ctx, bool backward) {
+    cf_input(ctx, (cf_event){.type = CF_EVENT_KEY_DOWN,
+                             .key = CF_KEY_TAB,
+                             .mods = backward ? (uint32_t)CF_MOD_SHIFT : 0u});
+}
+
+/*
+ * Tab is the tree's move rather than the box's. One walk in document order
+ * answers both directions, so a control reaches the keyboard by being declared
+ * where a person reads it, and the ring wraps at the ends instead of stopping at
+ * a margin the keyboard cannot leave.
+ */
+static void tab_walks_the_boxes_that_take_focus_in_document_order(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    /* Two boxes inside a container and one after it: the order the walk answers
+     * is a, b, c, which is not the order of the root's own children. */
+    cf_node inside[] = {focus_box(50.0f, 50.0f, NULL, NULL), focus_box(50.0f, 50.0f, NULL, NULL)};
+    cf_node group = box(100.0f, 100.0f, NULL, NULL);
+    group.children = inside;
+    group.child_count = 2u;
+    cf_node after = focus_box(50.0f, 50.0f, NULL, NULL);
+    const cf_node top[] = {group, after};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = top;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t group_slot = child_slot(&ctx, 0u);
+    const uint32_t a = child_of(&ctx, group_slot, 0u);
+    const uint32_t b = child_of(&ctx, group_slot, 1u);
+    const uint32_t c = child_slot(&ctx, 1u);
+
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, a), "the first Tab enters at the first box in the tree");
+    CF_CHECK(!cf_focused(&ctx, group_slot), "a container that took no focus is passed over");
+
+    tab(&ctx, false);
+    CF_CHECK(cf_focused(&ctx, b), "Tab goes on to the box declared inside the same container");
+
+    tab(&ctx, false);
+    CF_CHECK(cf_focused(&ctx, c), "and then to the one declared after the container");
+
+    tab(&ctx, false);
+    CF_CHECK(cf_focused(&ctx, a), "past the last box the ring comes round to the first");
+
+    tab(&ctx, true);
+    CF_CHECK(cf_focused(&ctx, c), "shift walks back out of the first box to the last");
+
+    tab(&ctx, true);
+    CF_CHECK(cf_focused(&ctx, b), "and reverse follows the declaration backwards");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A box the keyboard cannot act on is not on the ring: one that never declared a
+ * focus, one switched off, and one the page hid all drop out with their subtrees,
+ * exactly as they drop out of the paint and the hit test.
+ */
+static void tab_skips_the_boxes_the_keyboard_cannot_use(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder log = {0};
+    cf_node plain = box(50.0f, 50.0f, on_pointer, &log);
+    /* A switched-off container switches off what sits inside it for the keyboard
+     * as well as for the pointer, so the ring has to climb before it answers. */
+    cf_node shut = box(50.0f, 50.0f, NULL, NULL);
+    shut.disabled = true;
+    cf_node inside = focus_box(40.0f, 40.0f, NULL, NULL);
+    const cf_node within[] = {inside};
+    shut.children = within;
+    shut.child_count = 1u;
+    cf_node off = focus_box(50.0f, 50.0f, on_pointer, &log);
+    off.disabled = true;
+    /* The hidden box declares a focus and loses it to display:none, which takes
+     * its children with it - the child inside would otherwise be reachable. */
+    cf_node hidden = focus_box(50.0f, 50.0f, NULL, NULL);
+    hidden.style.display = CF_DISPLAY_NONE;
+    cf_node buried = focus_box(50.0f, 50.0f, NULL, NULL);
+    const cf_node under[] = {buried};
+    hidden.children = under;
+    hidden.child_count = 1u;
+    cf_node live = focus_box(50.0f, 50.0f, on_pointer, &log);
+    const cf_node top[] = {plain, shut, off, hidden, live};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = top;
+    root.child_count = 5u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t reachable = child_slot(&ctx, 4u);
+
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, reachable), "the ring holds the one box the keyboard can use");
+
+    /* One box on the ring: every Tab comes back to it from itself, forward and
+     * back, so a single-control page never loses the key mid-walk. */
+    tab(&ctx, false);
+    CF_CHECK(cf_focused(&ctx, reachable), "Tab on the only box in the ring stays there");
+
+    tab(&ctx, true);
+    CF_CHECK(cf_focused(&ctx, reachable), "and reverse from it stays there too");
+
+    cf_focus(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u));
+
+    CF_CHECK(!cf_focused(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u)),
+             "a box inside a switched-off container is refused by hand as well");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A press books focus only where the keyboard could already have arrived: the
+ * pointer picking a plain box up leaves the caret where the person put it.
+ */
+static void a_press_on_a_box_that_takes_no_focus_leaves_the_keyboard_alone(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder control_log = {0};
+    recorder plain_log = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &control_log),
+        box(50.0f, 50.0f, on_pointer, &plain_log),
+    };
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t control = child_slot(&ctx, 0u);
+    const uint32_t plain = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, plain);
+
+    CF_CHECK(!cf_focused(&ctx, plain), "focus by hand refuses a box that takes no focus");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
+
+    CF_CHECK(cf_focused(&ctx, control), "a box that declared one takes the press's focus");
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 10.0f, .y = 10.0f}});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 60.0f, .y = 10.0f}});
+
+    CF_CHECK(cf_pressed(&ctx, plain), "the plain box takes the press");
+    CF_CHECK(plain_log.downs == 1, "and its handler ran");
+    CF_CHECK(cf_focused(&ctx, control), "but the keyboard stays where it was");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The exception that keeps the ring honest: a box that answers Tab first is how a
+ * dialog holds the keyboard inside itself, so the tree's move runs only when
+ * nobody claimed the key.
+ */
+static void a_box_that_answers_tab_keeps_the_move_to_itself(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder trapped = {0};
+    recorder other = {0};
+    cf_node children[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &trapped),
+        focus_box(50.0f, 50.0f, on_pointer, &other),
+    };
+    children[0].handlers.key = on_key;
+    children[0].handlers.key_data = &trapped;
+    children[1].handlers.key = on_key;
+    children[1].handlers.key_data = &other;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t first = child_slot(&ctx, 0u);
+    const uint32_t second = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, first);
+
+    tab(&ctx, false);
+
+    CF_CHECK(trapped.keys == 1, "the focused box is handed the key");
+    CF_CHECK(other.keys == 0, "the box ahead of it is not");
+    CF_CHECK(cf_focused(&ctx, second), "a Tab nobody answered moves the focus on");
+
+    /* Asked again with the key claimed, the walk does not run at all. */
+    cf_focus(&ctx, first);
+    trapped.stop = true;
+    tab(&ctx, false);
+
+    CF_CHECK(trapped.keys == 2, "the trapped box is asked again");
+    CF_CHECK(cf_focused(&ctx, first), "a box that answered Tab keeps the focus");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * When nothing on the page can take the keyboard - the only control switched off,
+ * hidden, or retired - focus is dropped rather than kept somewhere the walk can
+ * no longer return to.
+ */
+static void a_ring_that_empties_loses_the_focus(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder log = {0};
+    cf_node children[] = {focus_box(50.0f, 50.0f, on_pointer, &log)};
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t only = child_slot(&ctx, 0u);
+
+    cf_focus(&ctx, only);
+
+    CF_CHECK(cf_focused(&ctx, only), "the page's one control holds the focus");
+
+    /* The same box, switched off: it is still on the tree and still lives, so the
+     * only thing that changed is whether the keyboard may land on it. */
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    tab(&ctx, false);
+
+    CF_CHECK(!cf_focused(&ctx, only), "a Tab off an empty ring drops the focus");
+
+    children[0].disabled = false;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    tab(&ctx, false);
+
+    CF_CHECK(cf_focused(&ctx, only), "and the control takes it back once it is switched on");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -879,6 +1165,11 @@ int main(void) {
     CF_RUN(a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out);
     CF_RUN(a_point_past_an_overflow_axis_uses_the_same_rule);
     CF_RUN(a_hidden_box_takes_no_input_and_yields_its_place);
+    CF_RUN(tab_walks_the_boxes_that_take_focus_in_document_order);
+    CF_RUN(tab_skips_the_boxes_the_keyboard_cannot_use);
+    CF_RUN(a_press_on_a_box_that_takes_no_focus_leaves_the_keyboard_alone);
+    CF_RUN(a_box_that_answers_tab_keeps_the_move_to_itself);
+    CF_RUN(a_ring_that_empties_loses_the_focus);
 
     return CF_REPORT();
 }

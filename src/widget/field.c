@@ -312,6 +312,10 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
     clamp_marks(text);
     node.key = cf_intern_text(&ctx->names, name);
     node.role = CF_ROLE_FIELD;
+    /* A field is the control a keyboard exists for, so it has to be reachable by
+     * one: the handler answers the keys, and taking the focus is what gets them
+     * here in the first place. */
+    node.focusable = true;
     node.handlers.pointer = field_pointer;
     node.handlers.pointer_data = data;
     node.handlers.key = field_key;

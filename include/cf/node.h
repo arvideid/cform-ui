@@ -44,6 +44,13 @@ typedef struct cf_node {
     cf_role role;
     bool disabled;
 
+    /* Whether this box takes keyboard focus. A role is not the answer: a box
+     * themed as a button can be a picture of one, and a box with no role at all
+     * can be the field a person types into. The widgets declare it for their
+     * callers; Tab walks the boxes that say yes, a press lands on one only if it
+     * does, and `cf_focus` refuses the ones that do not. */
+    bool focusable;
+
     const struct cf_node *children;
     uint32_t child_count;
 } cf_node;
@@ -340,11 +347,18 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
  * focused node. Handlers run target-first and the walk climbs through the
  * parents until a handler stops it or the root ran. Dispatch before
  * cf_frame_layout hit tests nothing: moves, presses and the wheel drop.
+ *
+ * Tab and reverse Tab (the same key with shift held) move focus to the next and
+ * previous box that takes it, in document order, wrapping at the ends - unless
+ * the node holding focus answered the key first, which is how a dialog keeps the
+ * keyboard inside itself. A page with nothing focusable loses focus.
  */
 void cf_input(cf_ctx *ctx, cf_event event);
 
-/* Focus follows the press on the node a press landed on; this sets it by
- * hand. A slot that is not live names no node and is refused. */
+/* Focus follows the press onto a box that takes it; this moves focus by hand. A
+ * slot that is not live names no node, and a live box that declares no focus is
+ * refused - the same rule Tab walks, so a host cannot land focus somewhere the
+ * keyboard could not reach. */
 void cf_focus(cf_ctx *ctx, uint32_t slot);
 
 /*

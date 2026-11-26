@@ -9,7 +9,8 @@ and this file is the record.
 
 | what is missing | what that means on screen | how it gets closed |
 |---|---|---|
-| **Tab order** | focus follows the pointer. A keyboard-only user cannot reach a field at all | a focus walk over the declared tree in order, shift reversing it, skipping boxes that take no focus and retired nodes. Cases in `node_input`; a golden of the focused box's paint |
+| **A key that activates nothing** | Tab reaches a button and Enter does not press it, so a keyboard user can stand on a control and do nothing | the focused box is handed a press when Enter or Space lands on it, with the same release-inside-the-rect rule a pointer follows. Cases in `node_input` and `widget_button` |
+| **Focus put back** | a dialog that opens takes the keyboard and leaves it nowhere when it closes | the shell remembers the box that held focus when the dialog opened and restores it with `cf_focus` — the widget side wants a container that owns the ask |
 | **The clipboard** | a field cannot copy, cut or paste | one backend slot for reading and writing UTF-8 text, an answer from the headless recorder, and `CF_MOD_CONTROL`/`CF_MOD_META` paths in the field |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
 | **Undo** | a mistyped run is gone for good | a ring of (bytes, caret, mark) in the field's own state block. Unit cases: type, undo, redo, and an undo that stops at the buffer's edge |

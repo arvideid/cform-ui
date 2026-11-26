@@ -47,6 +47,9 @@ typedef struct node_record {
     cf_handlers handlers;
     cf_role role;
     bool disabled;
+    /* Booked from the declaration: the keyboard reaches the boxes that say so,
+     * and neither the role nor a handler is the question. */
+    bool focusable;
 } node_record;
 
 /* The record a store slot holds. Slots below the store's extent always

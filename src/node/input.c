@@ -114,6 +114,123 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
     return hit_walk(ctx, ctx->root_slot, position, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f}, false);
 }
 
+/* Whether the box is hidden from every system that reads the view: the same
+ * display:none that drops it from the stream and from the paint. Before the
+ * layout has run there is no view to read, so nothing is hidden. */
+static bool hidden_box(const cf_ctx *ctx, uint32_t slot) {
+    return ctx->layout.styles != NULL && ctx->layout.styles[slot].display == CF_DISPLAY_NONE;
+}
+
+/*
+ * Whether the keyboard may land here: the box says it takes focus, it is
+ * switched on, and it is reachable. Being switched off or hidden is inherited by
+ * the whole subtree, so the climb up has to be clean as well; declaring focus
+ * is not inherited, because a focusable panel full of buttons is exactly the
+ * page where both have to answer.
+ */
+static bool takes_focus(const cf_ctx *ctx, uint32_t slot) {
+    const node_record *record = record_of(ctx, slot);
+
+    if (!record->focusable || record->disabled || hidden_box(ctx, slot)) {
+        return false;
+    }
+
+    for (uint32_t at = record->parent; at != CF_NO_LINK; at = record_of(ctx, at)->parent) {
+        const node_record *ancestor = record_of(ctx, at);
+
+        if (ancestor->disabled || hidden_box(ctx, at)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+typedef struct focus_ring {
+    const cf_ctx *ctx;
+    /* Where focus is now, or the root when nothing holds it - a slot that never
+     * answers as focusable, so the pass reads as having not passed it. */
+    uint32_t from;
+    uint32_t first;
+    uint32_t last;
+    /* The nearest focusable ahead of and behind `from` in document order. */
+    uint32_t after;
+    uint32_t before;
+    bool past;
+} focus_ring;
+
+/* One visit in the document-order walk: the focusable boxes are met in the order
+ * a person tabbing through them wants them, so a single pass over the tree
+ * answers both directions without building a ring to keep. */
+static void ring_visit(focus_ring *ring, uint32_t slot) {
+    if (!takes_focus(ring->ctx, slot)) {
+        return;
+    }
+
+    if (ring->first == CF_NO_LINK) {
+        ring->first = slot;
+    }
+
+    ring->last = slot;
+
+    if (slot == ring->from) {
+        ring->past = true;
+        return;
+    }
+
+    if (ring->past) {
+        if (ring->after == CF_NO_LINK) {
+            ring->after = slot;
+        }
+    } else {
+        ring->before = slot;
+    }
+}
+
+static void ring_walk(focus_ring *ring, uint32_t slot) {
+    ring_visit(ring, slot);
+
+    for (uint32_t child = record_of(ring->ctx, slot)->child_first; child != CF_NO_LINK;
+         child = record_of(ring->ctx, child)->next_sibling) {
+        /* A hidden box takes nothing with it: the paint walk and the hit test
+         * drop its subtree, and a keyboard ring that kept it would tab to a box
+         * no one can see. */
+        if (!hidden_box(ring->ctx, child)) {
+            ring_walk(ring, child);
+        }
+    }
+}
+
+/*
+ * The box Tab lands on. `from` is the focused slot, or the root when nothing is
+ * focused - which makes the first pass answer the first focusable box going
+ * forward and the last one going back. When the ring holds nothing the answer is
+ * CF_NO_LINK, so a page whose only focusable box was switched off loses focus
+ * rather than keeping it somewhere the keyboard cannot return to.
+ */
+static uint32_t focus_neighbor(const cf_ctx *ctx, uint32_t from, bool backward) {
+    focus_ring ring = {.ctx = ctx,
+                       .from = from,
+                       .first = CF_NO_LINK,
+                       .last = CF_NO_LINK,
+                       .after = CF_NO_LINK,
+                       .before = CF_NO_LINK};
+
+    ring_walk(&ring, ctx->root_slot);
+
+    if (ring.first == CF_NO_LINK) {
+        return CF_NO_LINK;
+    }
+
+    /* Wrapping at the ends: past the last box comes the first, and before the
+     * first comes the last, so the keyboard never gets stuck at a margin. */
+    if (backward) {
+        return ring.before != CF_NO_LINK ? ring.before : ring.last;
+    }
+
+    return ring.after != CF_NO_LINK ? ring.after : ring.first;
+}
+
 /* Runs the handlers from the target up through the parents, each with fresh
  * dispatch flags: stopping is this handler's decision about the ones above
  * it, and capturing binds the node whose handler ran. */
@@ -200,7 +317,14 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         }
 
         ctx->press_id = cf_store_id(&ctx->nodes, interactive);
-        ctx->focus_id = ctx->press_id;
+
+        /* The press books its paint on whatever took the pointer; focus is a
+         * different ask. A box that never said it takes the keyboard does not get
+         * it because a mouse happened to be resting on it. */
+        if (takes_focus(ctx, interactive)) {
+            ctx->focus_id = ctx->press_id;
+        }
+
         deliver(ctx, &event, true, hit);
         return;
     }
@@ -250,7 +374,29 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         return;
     }
 
-    case CF_EVENT_KEY_DOWN:
+    case CF_EVENT_KEY_DOWN: {
+        const uint32_t focused = live_slot(ctx, ctx->focus_id);
+
+        if (focused != CF_NO_LINK) {
+            deliver(ctx, &event, false, focused);
+        }
+
+        /* Tab is the tree's move rather than the box's: every page with two
+         * controls needs the same one, and the exception - a dialog that keeps the
+         * keyboard inside itself - is a handler that answers the key. So the key
+         * goes to the focused node first and the shell picks it up only when
+         * nobody answered. Reverse is the same key with shift, because there is no
+         * second key on the device to ask with. */
+        if (event.key == CF_KEY_TAB && !event.stopped) {
+            const uint32_t from = focused != CF_NO_LINK ? focused : ctx->root_slot;
+            const uint32_t next = focus_neighbor(ctx, from, (event.mods & CF_MOD_SHIFT) != 0u);
+
+            ctx->focus_id = next != CF_NO_LINK ? cf_store_id(&ctx->nodes, next) : CF_NO_ID;
+        }
+
+        return;
+    }
+
     case CF_EVENT_KEY_UP:
     case CF_EVENT_TEXT: {
         /* What the keyboard wrote goes to whoever holds focus, the same way
@@ -273,7 +419,8 @@ void cf_input(cf_ctx *ctx, cf_event event) {
 }
 
 void cf_focus(cf_ctx *ctx, uint32_t slot) {
-    if (ctx == NULL || !holds_slot(ctx, cf_store_id(&ctx->nodes, slot), slot)) {
+    if (ctx == NULL || !holds_slot(ctx, cf_store_id(&ctx->nodes, slot), slot) ||
+        !takes_focus(ctx, slot)) {
         return;
     }
 

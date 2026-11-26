@@ -139,12 +139,15 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Accessibility is a tree, not a feature.** `cf_semantic_export` writes the
   role, the text and the disabled state of every box — the data a screen reader
   reads — and that is where it stops. Nothing reaches Narrator, VoiceOver or
-  AT-SPI, there is no focus order announced, no live region, no ARIA and no
+  AT-SPI, no focus change is announced, there is no live region, no ARIA and no
   hit-target or contrast checking. A `cf_label` in this project is a box that
   draws glyphs, not an accessible name for the box beside it.
-- **Keyboard focus follows the pointer.** Clicking a box focuses it and
-  `cf_focus` moves it by hand; nothing implements **Tab**, and a field cannot be
-  reached without the mouse.
+- **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
+  says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
+  callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk
+  the declared boxes in document order, and `cf_focus` moves it by hand. What is
+  missing is the key that activates: a focused button is handed **Enter** and
+  presses nothing.
 - **An editing field has no clipboard.** Cut, copy and paste are not wired to
   the platform. Enter submits nothing. There is no undo, no selection by word,
   no caret blink and no IME, so composing Japanese types nothing.
