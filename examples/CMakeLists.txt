@@ -20,21 +20,26 @@ if(CFORM_WITH_SDL_BACKEND)
     target_link_libraries(gallery PRIVATE cf_backend_sdl cf_app cf_theme)
 
     if(EMSCRIPTEN)
-        # The playground: the same page in a tab. The font is preloaded into
-        # the data filesystem because a browser has no path to open, and
-        # ASYNCIFY lets cf_app_run's loop yield at each present instead of
-        # freezing the tab.
+        # The playground: the same page in a tab. The font is embedded in the
+        # emitted JS rather than preloaded because a browser has no path to
+        # open and a `file://` tab will not fetch a sibling .data either; the
+        # preload sidecar would put us back where we started. ASYNCIFY lets
+        # cf_app_run's loop yield at each present instead of freezing the tab,
+        # and SINGLE_FILE base64-embeds the wasm so the shell-file HTML is one
+        # self-contained document a double-click opens.
         target_compile_definitions(gallery PRIVATE CFORM_GALLERY_FONT="/Lato-Regular.ttf")
 
         target_link_options(gallery PRIVATE
             "-sASYNCIFY=1"
             "-sALLOW_MEMORY_GROWTH=1"
             "-sUSE_WEBGL2=1"
-            "--preload-file=${CFORM_FONT_FILE}@/Lato-Regular.ttf"
+            "-sSINGLE_FILE=1"
+            "--embed-file=${CFORM_FONT_FILE}@/Lato-Regular.ttf"
             "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
         )
 
-        # A shell file needs a .html output; the .js and .wasm land beside it.
+        # A shell file needs a .html output; with SINGLE_FILE and --embed-file
+        # the JS, the wasm and the font all end up inside that one file.
         set_target_properties(gallery PROPERTIES SUFFIX ".html")
     else()
         target_compile_definitions(gallery PRIVATE CFORM_GALLERY_FONT="${CFORM_FONT_FILE}")

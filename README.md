@@ -202,11 +202,15 @@ The same page runs in a browser tab, through
 ```sh
 cmake --preset web                                # needs EMSDK in the environment
 cmake --build --preset web
-python -m http.server 8033 --directory build/wasm/bin
 ```
 
-and then open <http://localhost:8033/gallery.html>. It has to be served rather
-than opened, because a browser will not fetch a `.wasm` over `file://`.
+The build emits one self-contained `build/wasm/bin/gallery.html` - the JS, the
+wasm and the preloaded font are base64-embedded - so a double-click opens it.
+Serving the directory over HTTP still works and is what CI does:
+
+```sh
+python -m http.server 8033 --directory build/wasm/bin
+```
 
 ## What using it looks like
 
@@ -382,13 +386,16 @@ temporary directory rather than the environment the preset reads `EMSDK` from:
 ```sh
 emcmake cmake -S . -B build-wasm -G Ninja -DCMAKE_BUILD_TYPE=Release -DCFORM_WITH_SDL_BACKEND=ON -DCFORM_BUILD_EXAMPLES=ON
 cmake --build build-wasm
-python -m http.server 8080 --directory build-wasm/bin   # then open http://localhost:8080/gallery.html
 ```
 
-Serving it is required — a tab won't load a `.wasm` from a `file://` path. The
-page draws into the canvas `examples/web/shell.html` states (960×600): resizing
-the browser window scales that picture rather than re-flowing it, so the
-drag-the-edge story belongs to the desktop gallery.
+The page fills the browser viewport. `examples/web/shell.html` sizes the
+canvas' CSS box to `100vw`/`100vh`, and SDL's Emscripten video driver reads
+that box on every window resize and matches the drawing buffer to it, so the
+layout re-flows against whatever the tab is rather than scaling a fixed
+picture. The build passes `-sSINGLE_FILE=1`, which base64-embeds the wasm and
+the preloaded font into the emitted JS, so a `file://` tab can open the page
+directly - without it, the Same-Origin Policy refuses to fetch the sibling
+`.wasm` and `.data` and the page never boots.
 
 ### The three scripts
 
