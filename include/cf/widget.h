@@ -91,6 +91,16 @@ typedef struct cf_text_edit {
  * unfocused field shows its bytes and nothing else. A NULL context, name or
  * buffer answers a declaration that draws nothing and edits nothing; without
  * fonts it still edits and only draws nothing.
+ *
+ * Beyond the keys that move the caret and the bytes, the field answers two groups
+ * of chords on either Control or a command key. C, X and V trade the selection with
+ * the host's clipboard, and a host that names none leaves the three to the page. Z
+ * walks back over the field's own edits and Y, or shift with Z, walks them forward
+ * again. That history is a ring of whole copies of the buffer with its marks, keyed
+ * by the field's name and kept for as long as the field is declared. It holds sixteen
+ * copies inside four KiB, so a field over a long value walks back through fewer steps
+ * and one over a buffer past about two KiB keeps no history at all, leaving those two
+ * keys where it leaves the others it cannot serve.
  */
 cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
 

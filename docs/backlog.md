@@ -11,7 +11,6 @@ and this file is the record.
 |---|---|---|
 | **Focus put back** | a dialog that opens takes the keyboard and leaves it nowhere when it closes | the shell remembers the box that held focus when the dialog opened and restores it with `cf_focus` — the widget side wants a container that owns the ask |
 | **A multiline field** | a value is one row: Enter types nothing and Up/Down do nothing | the field drops `nowrap` when its box is taller than one row, keeps a vertical slide beside the horizontal one, and names the rows its arrows move between. A golden of a caret below the fold |
-| **Undo** | a mistyped run is gone for good | a ring of (bytes, caret, mark) in the field's own state block. Unit cases: type, undo, redo, and an undo that stops at the buffer's edge |
 | **IME composition** | the committed words reach the field, but the text still being composed is never drawn and the platform is never told where the caret is, so a candidate window lands wherever the desk decides | a composition event pair from the backend and a marked span the field paints differently, plus the text area the platform asks for. Opening the service is done — `set_text_input` — so what is left is the marked span, and it needs a real desktop to test, so it needs a plan before code |
 
 ## Rough edges that will bite a user
@@ -19,6 +18,7 @@ and this file is the record.
 | item | detail |
 |---|---|
 | A full field ignores the keystroke | the buffer's capacity is the caller's and a run that will not fit whole is refused, so typing into a full field looks dead. Either truncate at a scalar boundary or show the refusal; today neither is stated |
+| Undo is bounded by copying | the ring holds whole images of the buffer, sixteen of them inside four KiB, so a long value walks back through fewer steps and one past about two KiB keeps none — `widget_field` proves both edges. Closing it wants images of the edits rather than the bytes, which needs an offset that stays meaningful across them |
 | A state block can move | growing a block hands back a new pointer and the old one dangles. The framework no longer reads through the freed pointer itself (the use-after-free in `cf_state_grow` is repaired), but a host that caches a `cf_state` pointer across a growth is still the hazard the API warns about |
 | A lost device is not recovered | a refused present now ends the drawing: the backend says so once, submits nothing and takes no further upload, and still answers a release and a teardown. Nothing re-creates the device or re-uploads what was in flight, and no headless tier can make SDL refuse a frame, so recovery stays a desktop case a human qualifies (or a Wasm context-restart fixture) with the host closing and opening a backend |
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |

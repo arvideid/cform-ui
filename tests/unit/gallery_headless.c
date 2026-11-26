@@ -321,7 +321,16 @@ static bool page_reveals(const char *needle) {
     bool found = false;
     const cf_rect rect = find_text_rect(needle, &found);
 
-    return found && reaches_pointer(rect);
+    if (found) {
+        return reaches_pointer(rect);
+    }
+
+    /* A line whose text is written from the page's own state - the field's echo, say -
+     * is named by what it always starts with rather than by a string that changes with
+     * every keystroke. */
+    const cf_rect prefix = find_text_prefix(needle, &found);
+
+    return found && reaches_pointer(prefix);
 }
 
 /* ---------- events ---------- */
@@ -589,6 +598,27 @@ static bool tap(const char *name) {
 #define REVEAL_STEP_PX 192.0f
 #define REVEAL_MAX_STEPS 40u
 
+/* Move the page to a stated offset and repaint. Offsets past the document's
+ * height clamp back to its end: the helper does not know the content height, so
+ * it states the number and lets the next build put it through the scroller's own
+ * inset. */
+static bool page_scroll_to(float offset) {
+    cf_scroll *held = cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+
+    if (held == NULL) {
+        printf("    FAIL %s:%d: the page has no scroller to walk\n", __FILE__, __LINE__);
+        cf_failures++;
+        return false;
+    }
+
+    held->offset = offset;
+
+    cf_command_list list = {0};
+    cf_frame_run(&session, build, current_size(), 1.0f / 60.0f, &list);
+    record_frame(&list);
+    return true;
+}
+
 static bool reveal_to(const char *needle, uint32_t max_steps) {
     if (max_steps > REVEAL_MAX_STEPS) {
         max_steps = REVEAL_MAX_STEPS;
@@ -605,27 +635,10 @@ static bool reveal_to(const char *needle, uint32_t max_steps) {
         return true;
     }
 
-    cf_name page_key = cf_intern_text(&session.names, "page");
-
     for (uint32_t n = 1u; n <= max_steps; ++n) {
-        cf_scroll *held = cf_scroll_of(&session, page_key);
-
-        if (held == NULL) {
-            printf("    FAIL %s:%d: the page has no scroller to walk\n", __FILE__, __LINE__);
-            cf_failures++;
+        if (!page_scroll_to((float)n * REVEAL_STEP_PX)) {
             return false;
         }
-
-        /* Offsets past the document's height clamp back to its end; the
-         * helper does not know the content height, so it hands the number
-         * to cf_scroll_clamp through the same widget path the wheel takes.
-         * Simpler: state the offset directly and let the next build clamp
-         * it into its layout by way of the scroller's own inset. */
-        held->offset = (float)n * REVEAL_STEP_PX;
-
-        cf_command_list list = {0};
-        cf_frame_run(&session, build, current_size(), 1.0f / 60.0f, &list);
-        record_frame(&list);
 
         if (page_reveals(needle)) {
             return true;
@@ -700,10 +713,15 @@ static void a_switched_off_button_takes_no_click(void) {
 }
 
 static void a_focused_field_takes_what_the_keyboard_wrote(void) {
-    const cf_event probe[] = {
-        (cf_event){.type = CF_EVENT_QUIT},
-    };
-    run_session(current_size(), probe, 1u);
+    /* One session for the whole case: the reveal moves what the page shows, so the box
+     * hunted and the point pressed have to come from the same scrolled frame. */
+    start_session(current_size());
+
+    if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "the field's echo line can be reached on the page");
+        end_session();
+        return;
+    }
 
     /* The caption carries the buffer's bytes, so it is hunted by prefix; the
      * field states its height rather than measuring an empty buffer, so its
@@ -714,6 +732,7 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     CF_CHECK(found, "the field's echo line is on the page");
 
     if (!found) {
+        end_session();
         return;
     }
 
@@ -723,6 +742,7 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     CF_CHECK(found, "the entry box is painted above its own echo");
 
     if (!found) {
+        end_session();
         return;
     }
 
@@ -731,18 +751,16 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
     const float x = field.x + 30.0f;
     const float y = field.y + field.height / 2.0f;
 
-    cf_event hands[8];
-    uint32_t at = 0u;
+    step(press_at(x, y));
+    step(release_at(x, y));
+    step(typed_text("hello"));
+    step(typed_text(" world"));
+    step(key_down(CF_KEY_BACKSPACE));
+    step(move_to(x, y));
 
-    hands[at++] = press_at(x, y);
-    hands[at++] = release_at(x, y);
-    hands[at++] = typed_text("hello");
-    hands[at++] = typed_text(" world");
-    hands[at++] = key_down(CF_KEY_BACKSPACE);
-    hands[at++] = move_to(x, y);
-    hands[at++] = (cf_event){.type = CF_EVENT_QUIT};
-
-    run_session(current_size(), hands, at);
+    /* The shell's two answers are read as the session closes, so the close comes first:
+     * what the last frame asked for is what the case then checks. */
+    end_session();
 
     CF_CHECK(typed.length == 10u, "five plus six minus the deleted scalar is ten bytes");
     CF_CHECK(memcmp(typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
@@ -804,6 +822,12 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
     start_session(current_size());
     session.clipboard = &clipboard;
 
+    if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "the field's echo line can be reached on the page");
+        end_session();
+        return;
+    }
+
     bool found = false;
     const cf_rect echo = find_text_prefix("the buffer holds", &found);
 
@@ -849,6 +873,68 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
 
     CF_CHECK(typed.length == 9u && memcmp(typed_bytes, "hel world", 9) == 0,
              "and paste writes what the host holds over what the field had");
+
+    end_session();
+}
+
+/*
+ * The same field walked back. Every step is its own frame, so this is the case that
+ * says the history rides the keyed block rather than the arena a frame ends in: a page
+ * that rebuilt the field and lost the ring would type fine and undo nothing.
+ */
+static void the_gallery_field_walks_its_own_typing_back(void) {
+    start_session(current_size());
+
+    if (!reveal_to("the buffer holds", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "the field's echo line can be reached on the page");
+        end_session();
+        return;
+    }
+
+    bool found = false;
+    const cf_rect echo = find_text_prefix("the buffer holds", &found);
+
+    CF_CHECK(found, "the field's echo line is on the page");
+
+    if (!found) {
+        end_session();
+        return;
+    }
+
+    field_echo_y = echo.y;
+    const cf_rect field = find_fill_rect(accept_field_box, &found);
+
+    CF_CHECK(found, "the entry box is painted above its own echo");
+
+    if (!found) {
+        end_session();
+        return;
+    }
+
+    typed.length = 0u;
+
+    const float x = field.x + 30.0f;
+    const float y = field.y + field.height / 2.0f;
+
+    step(press_at(x, y));
+    step(release_at(x, y));
+    step(typed_text("hello"));
+    step(typed_text(" world"));
+
+    CF_CHECK(typed.length == 11u, "the page holds what the two runs typed");
+
+    step(chord('z', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.length == 5u && memcmp(typed_bytes, "hello", 5) == 0,
+             "a chord in a later frame walks the earlier run back out");
+
+    step(chord('z', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.length == 0u, "and one more reaches where the typing started");
+
+    step(chord('y', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(typed.length == 5u, "and the key beside it comes forward to where the walk stood");
 
     end_session();
 }
@@ -942,13 +1028,24 @@ static float pane_offset(void) {
     return held != NULL ? held->offset : -1.0f;
 }
 
-/* The thumb as it stands this frame, in the page's coordinates: the bar's own
- * numbers, laid on the track the stream shows. */
-static bool thumb_rect(cf_rect *out) {
+/* The bar's track as the stream paints it. */
+static bool track_rect(cf_rect *out) {
     bool found = false;
     const cf_rect track = find_fill_rect(accept_track, &found);
 
-    if (!found) {
+    if (found) {
+        *out = track;
+    }
+
+    return found;
+}
+
+/* The thumb as it stands this frame, in the page's coordinates: the bar's own
+ * numbers, laid on the track the stream shows. */
+static bool thumb_rect(cf_rect *out) {
+    cf_rect track;
+
+    if (!track_rect(&track)) {
         return false;
     }
 
@@ -963,6 +1060,27 @@ static cf_point thumb_grip(cf_rect thumb) {
     return (cf_point){thumb.x + thumb.width / 2.0f, thumb.y + thumb.height / 2.0f};
 }
 
+/* Walk the page until the whole bar lies inside the window, and hand back the
+ * thumb as that frame paints it. A row being reachable is not enough: the thumb
+ * rides below it and slides as the pane moves, and cf_hit_test honours the page's
+ * clip, so a press on the part the fold cuts off lands on nothing. */
+static bool reveal_thumb(cf_rect *out) {
+    for (uint32_t n = 0u; n <= REVEAL_MAX_STEPS; ++n) {
+        cf_rect track;
+
+        if (track_rect(&track) && reaches_pointer(track) && thumb_rect(out)) {
+            return true;
+        }
+
+        if (!page_scroll_to((float)(n + 1u) * REVEAL_STEP_PX)) {
+            return false;
+        }
+    }
+
+    CF_CHECK(false, "no step brings the whole bar inside the window");
+    return false;
+}
+
 /* The thumb is the one box on the page that keeps a drag of its own between the
  * press and the release, so it is the box a cancellation has to reach: the pane
  * stops following a pointer the window lost, and takes the next one it is given. */
@@ -972,19 +1090,16 @@ static void a_lost_pointer_ends_the_drag_the_thumb_held(void) {
      * presses. */
     start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
 
-    if (!reveal_to("box 0", 12u)) {
-        return;
-    }
+    /* The walk stops on the bar rather than on a row, so that both drags this case
+     * runs press a thumb the window still shows. */
+    cf_rect thumb;
 
-    cf_rect held;
-
-    if (!thumb_rect(&held)) {
-        CF_CHECK(false, "the pane's thumb is painted beside its rows");
+    if (!reveal_thumb(&thumb)) {
         end_session();
         return;
     }
 
-    const cf_point grip = thumb_grip(held);
+    const cf_point grip = thumb_grip(thumb);
     const float start = pane_offset();
 
     step(press_at(grip.x, grip.y));
@@ -1001,20 +1116,20 @@ static void a_lost_pointer_ends_the_drag_the_thumb_held(void) {
      * push the pane by the whole distance from that first point rather than by
      * nothing. The thumb slid down with the offset, so its lower edge is one
      * half-height below where the drag left its middle. */
-    step(move_to(grip.x, grip.y + 40.0f + held.height / 2.0f - 4.0f));
+    step(move_to(grip.x, grip.y + 40.0f + thumb.height / 2.0f - 4.0f));
 
     CF_CHECK(fabsf(pane_offset() - dragged) < 1.0f,
              "a pointer the window lost leaves the pane where it was");
 
     /* The widget is not wedged by the cancellation: a press that starts after it
      * drags again. The thumb slid with the offset, so it is gripped afresh. */
-    if (!thumb_rect(&held)) {
+    if (!thumb_rect(&thumb)) {
         CF_CHECK(false, "the thumb is still painted after the cancellation");
         end_session();
         return;
     }
 
-    const cf_point again = thumb_grip(held);
+    const cf_point again = thumb_grip(thumb);
 
     step(press_at(again.x, again.y));
     step(move_to(again.x, again.y + 40.0f));
@@ -1337,6 +1452,7 @@ int main(void) {
     CF_RUN(a_switched_off_button_takes_no_click);
     CF_RUN(a_focused_field_takes_what_the_keyboard_wrote);
     CF_RUN(the_gallery_field_trades_bytes_with_the_host_it_names);
+    CF_RUN(the_gallery_field_walks_its_own_typing_back);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);

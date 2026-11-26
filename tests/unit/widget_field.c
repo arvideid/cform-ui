@@ -763,7 +763,7 @@ static void either_primary_modifier_carries_the_chord_and_alt_does_not(void) {
     CF_CHECK(seen == 0u, "a chord the field serves stops there and reaches no handler above");
 
     chord(&ctx, 'c', (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_ALT);
-    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+    chord(&ctx, 'q', (uint32_t)CF_MOD_CONTROL);
 
     CF_CHECK(board.writes == 1u, "an alt chord is the host's, and a letter with no meaning here is "
                                  "nobody's to serve");
@@ -797,6 +797,335 @@ static void a_page_with_no_host_buffer_leaves_the_chord_unstopped(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The field's own history: what its keys did, kept well enough to walk back through.
+ * The cases are the ones the backlog names - type, undo, redo, and a step that stops at
+ * the edge of the ring - beside the two rules that make the ring worth its bytes: a
+ * caret move is not a step, and the states it holds are bounded by what an image of the
+ * buffer costs.
+ */
+static void stepping_back_returns_what_the_keys_took(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+    type(&ctx, "de", 2u);
+
+    CF_CHECK(text.length == 5u, "two runs, one value");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 3u && memcmp(bytes, "abc", 3) == 0, "one step back drops the last run");
+    CF_CHECK(text.caret == 3u && text.mark == 3u, "and the caret stands where that run left it");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 0u, "the next step reaches where the typing started");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 0u, "and the one after has nothing older to return");
+
+    chord(&ctx, 'z', ctrl | (uint32_t)CF_MOD_SHIFT);
+
+    CF_CHECK(text.length == 3u && bytes[0] == 'a', "holding shift turns the walk around");
+
+    chord(&ctx, 'y', ctrl);
+
+    CF_CHECK(text.length == 5u && memcmp(bytes, "abcde", 5) == 0,
+             "and the key beside it walks to the newest state");
+
+    cf_ctx_free(&ctx);
+}
+
+static void an_edit_after_a_step_back_ends_the_forward_walk(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "a", 1u);
+    type(&ctx, "b", 1u);
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'a', "back over the second run");
+
+    type(&ctx, "c", 1u);
+
+    CF_CHECK(text.length == 2u && bytes[1] == 'c', "and a new run continues from the step");
+
+    chord(&ctx, 'z', ctrl | (uint32_t)CF_MOD_SHIFT);
+
+    CF_CHECK(text.length == 2u && bytes[1] == 'c', "the run the step cancelled is gone for good");
+
+    chord(&ctx, 'z', ctrl);
+
+    /* Without the branch being cut, the newest image lands past the stale redo tail and
+     * this step walks back onto the run the user cancelled instead of the one before
+     * their own typing. */
+    CF_CHECK(text.length == 1u && bytes[0] == 'a',
+             "and the walk back steps over what survived, not what the branch replaced");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_step_forward_returns_to_where_the_marks_stood(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+    hold(&ctx, CF_KEY_LEFT, false);
+    hold(&ctx, CF_KEY_LEFT, true);
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 0u, "the run is stepped over");
+
+    chord(&ctx, 'z', ctrl | (uint32_t)CF_MOD_SHIFT);
+
+    /* Moving the caret wrote no image, so coming forward lands the user back where they
+     * were working rather than where the typed run left them. */
+    CF_CHECK(text.length == 3u && text.caret == 1u && text.mark == 2u,
+             "and coming forward again brings the value back with the selection on it");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_field_rebuilt_over_a_smaller_buffer_forgets_the_old_layout(void) {
+    static const char seed[] = "abcdefghij";
+    char wide[32] = {0};
+    memcpy(wide, seed, sizeof(seed) - 1u);
+    cf_text_edit big = {.chars = wide, .length = 10u, .caret = 10u, .mark = 10u, .capacity = 32u};
+    char tight[8] = {0};
+    cf_text_edit small = {.chars = tight, .length = 0u, .capacity = 8u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &big, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "x", 1u);
+
+    /* The same field, declared over a buffer with a different capacity. The images the
+     * block holds are laid out a stride the new buffer cannot read, and the byte count
+     * each header reports belongs to that layout - read under the new one it asks the
+     * field to put more bytes back than its buffer holds. */
+    frame_of(&ctx, &small, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "y", 1u);
+    type(&ctx, "z", 1u);
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(small.length == 1u && tight[0] == 'y',
+             "only the runs the smaller buffer typed are walked back over");
+
+    /* A step past the edge reaches the slot where the wide layout's bytes sit. Read as a
+     * header, the text it copied spells a count far past the end of this buffer, and
+     * putting that many bytes back would hand the field's stack to whoever owns the
+     * memory beside it; the walk refuses, because after the reset this layout holds no
+     * image there at all. */
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(small.length == 0u, "and the walk stops at the buffer the field was given");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(small.length == 0u, "and a step past the edge invents no image of the old layout");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_caret_move_costs_no_step(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+    hold(&ctx, CF_KEY_HOME, false);
+    type(&ctx, "c", 1u);
+
+    CF_CHECK(text.length == 3u && bytes[0] == 'c', "the run landed where the caret was moved");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 2u && memcmp(bytes, "ab", 2) == 0, "one step back returns the run");
+    CF_CHECK(text.caret == 0u && text.mark == 0u,
+             "and leaves the caret where the user last put it, not where the run left it");
+
+    chord(&ctx, 'z', ctrl);
+
+    CF_CHECK(text.length == 0u, "two steps back is the empty buffer: moving the caret was no step");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_history_outlives_the_frame_that_wrote_it(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+
+    /* Two frames the arena emptied and the build declared the same field in, with no key
+     * between them: keyed state is kept for the frame that last asked for it, so a field
+     * that wants a history has to ask for it every time it is declared. */
+    frame_of(&ctx, &text, false);
+    frame_of(&ctx, &text, false);
+
+    CF_CHECK(text.length == 3u, "the rebuild carries the value it was given");
+
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 0u, "and the step back works three frames after the typing");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_buffer_too_large_to_copy_keeps_no_history(void) {
+    static char bytes[8192];
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 8192u};
+    uint32_t seen = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_watched(&ctx, &text, false, count_keys, &seen);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u, "a field with no history still edits what it holds");
+    CF_CHECK(seen == 1u, "and leaves a chord it cannot serve to whoever is above");
+    CF_CHECK(cf_state_bytes(&ctx) == 0u, "asking for no ring means the heap holds no block");
+
+    cf_ctx_free(&ctx);
+}
+
+static void the_ring_holds_the_last_few_runs_and_no_more(void) {
+    char bytes[64] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 64u};
+    const uint32_t ctrl = (uint32_t)CF_MOD_CONTROL;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+
+    for (uint32_t run = 0u; run < 40u; ++run) {
+        type(&ctx, "q", 1u);
+    }
+
+    CF_CHECK(text.length == 40u, "the value is the buffer's own, not the ring's");
+
+    uint32_t steps = 0u;
+    uint32_t held = text.length;
+
+    while (steps < 40u) {
+        chord(&ctx, 'z', ctrl);
+
+        if (text.length == held) {
+            break;
+        }
+
+        held = text.length;
+        steps++;
+    }
+
+    CF_CHECK(steps == 15u, "sixteen images hold fifteen steps back");
+    CF_CHECK(held == 25u, "and the runs older than that fell out as the ring filled");
+    CF_CHECK(cf_state_bytes(&ctx) <= 4096u, "the whole history stayed inside its budget");
+
+    cf_ctx_free(&ctx);
+}
+
+static void bytes_a_cut_took_come_back_with_their_selection(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 1u, "the cut took the selected run");
+
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.length == 3u && memcmp(bytes, "abc", 3) == 0, "and one step puts the bytes back");
+    CF_CHECK(text.caret == 1u && text.mark == 3u, "with the range they were cut from selected");
+    CF_CHECK(board.length == 2u, "while what the host was handed stays where it was left");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -820,6 +1149,15 @@ int main(void) {
     CF_RUN(a_host_with_no_text_leaves_the_page_alone);
     CF_RUN(either_primary_modifier_carries_the_chord_and_alt_does_not);
     CF_RUN(a_page_with_no_host_buffer_leaves_the_chord_unstopped);
+    CF_RUN(stepping_back_returns_what_the_keys_took);
+    CF_RUN(an_edit_after_a_step_back_ends_the_forward_walk);
+    CF_RUN(a_step_forward_returns_to_where_the_marks_stood);
+    CF_RUN(a_field_rebuilt_over_a_smaller_buffer_forgets_the_old_layout);
+    CF_RUN(a_caret_move_costs_no_step);
+    CF_RUN(a_history_outlives_the_frame_that_wrote_it);
+    CF_RUN(a_buffer_too_large_to_copy_keeps_no_history);
+    CF_RUN(the_ring_holds_the_last_few_runs_and_no_more);
+    CF_RUN(bytes_a_cut_took_come_back_with_their_selection);
 
     return CF_REPORT();
 }

@@ -154,12 +154,17 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Copy, cut and paste need a clipboard from the host.** The field answers
   **Ctrl** or **Cmd** with **C**, **X** and **V** through `cf_clipboard`, a read/write
   pair the shell names in its `cf_app_config`; `cf_clipboard_sdl()` is the desktop's,
-  and a host that names none leaves those keys asking for nothing. Enter submits
-  nothing. There is no undo, no selection by word and no caret blink. An input
-  method's committed words arrive as ordinary text, but the half-composed text is
-  never drawn and the platform is never told where the caret is, so a candidate
-  window lands wherever the desk decides — the composition row of
-  `docs/backlog.md` is the one that closes it.
+  and a host that names none leaves those keys asking for nothing.
+- **Undo is a ring of copies, not a diff.** The same modifier with **Z** walks back
+  over what the field's own keys took and **Y** puts it forward again — whole copies
+  of the buffer with the caret and the selection where you left them, kept in the
+  field's own state block at sixteen images inside four KiB, so a long value walks
+  back through fewer steps and one too large to copy twice keeps none.
+- **Editing stops where the caret does.** Enter submits nothing, and there is no
+  selection by word and no caret blink. An input method's committed words arrive as
+  ordinary text, but the half-composed text is never drawn and the platform is never
+  told where the caret is, so a candidate window lands wherever the desk decides —
+  the composition row of `docs/backlog.md` is the one that closes it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

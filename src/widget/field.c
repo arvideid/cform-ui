@@ -12,13 +12,15 @@
 
 /*
  * What a handler needs and the declaration does not carry: the context to read
- * the box's rect and the interaction off, the buffer to edit, and the fonts to
- * lay the bytes in - the stack the build handed the field, borrowed for as long
- * as the field is declared, which is the rule a label's stack already follows.
+ * the box's rect and the interaction off, the buffer to edit, the name the
+ * history is keyed under, and the fonts to lay the bytes in - the stack the build
+ * handed the field, borrowed for as long as the field is declared, which is the
+ * rule a label's stack already follows.
  */
 typedef struct field_data {
     cf_ctx *ctx;
     cf_text_edit *text;
+    cf_name key;
     cf_text_stack stack;
 } field_data;
 
@@ -40,6 +42,213 @@ static void clamp_marks(cf_text_edit *text) {
     if (text->mark > text->length) {
         text->mark = text->length;
     }
+}
+
+/*
+ * The history a field keeps of its own buffer: whole images of the bytes and of the
+ * two marks, in a ring the field's name keys and cf_state keeps across rebuilds.
+ * Images rather than the edits, because what one keystroke moved here is nobody's
+ * guess - a paste over a selection, a backspace off the lead byte of a four-byte
+ * rune - and an undo that has to know what the edit did is an undo that can get it
+ * wrong.
+ *
+ * The cost is bounded twice over: FIELD_UNDO_IMAGES images at most, and
+ * FIELD_UNDO_BYTES for the block however big the buffer is. A field over a long value
+ * keeps fewer steps; one over a buffer too large to copy twice keeps none, and its
+ * chord falls through to whoever is above - the rule a field handed no clipboard
+ * already keeps for the keys it cannot serve.
+ */
+#define FIELD_UNDO_IMAGES 16u
+#define FIELD_UNDO_BYTES 4096u
+
+/* One image: what the buffer held and where the marks stood. Its bytes follow the
+ * header, so the room an image takes is a property of the buffer, not of the struct. */
+typedef struct undo_image {
+    uint32_t length;
+    uint32_t caret;
+    uint32_t mark;
+} undo_image;
+
+/* The ring's front, at the head of the keyed block. Only `capacity` is a fact the
+ * images depend on: the depth and the stride come out of it. */
+typedef struct undo_ring {
+    uint32_t capacity; /* buffer bytes one image copies */
+    uint32_t head;     /* ring slot of the oldest image */
+    uint32_t count;    /* images held */
+    uint32_t pos;      /* steps from head to the image the buffer matches */
+} undo_ring;
+
+/* One walk of a field's ring: the block, the buffer it copies, and the layout the
+ * block was paid for, so no helper recomputes them and none can disagree with the
+ * size cf_state was asked for. */
+typedef struct undo_book {
+    cf_text_edit *text;
+    undo_ring *ring;
+    uint32_t capacity;
+    uint32_t depth;
+} undo_book;
+
+/* The bytes an image copies, padded to whole words: the ring's headers follow one
+ * another through the block, and an unaligned uint32_t traps on the targets this
+ * library is built for. */
+static size_t undo_data(uint32_t capacity) {
+    return ((size_t)capacity + 3u) & ~(size_t)3u;
+}
+
+static size_t undo_stride(uint32_t capacity) {
+    return sizeof(undo_image) + undo_data(capacity);
+}
+
+/*
+ * Two images is the fewest worth asking the heap for: one holds where the typing
+ * started and the next where it got to, and a ring of one can only ever answer that
+ * there is nothing to undo.
+ */
+static uint32_t undo_depth(uint32_t capacity) {
+    const uint32_t steps =
+        (uint32_t)(((size_t)FIELD_UNDO_BYTES - sizeof(undo_ring)) / undo_stride(capacity));
+
+    if (steps < 2u) {
+        return 0u;
+    }
+
+    return steps < FIELD_UNDO_IMAGES ? steps : FIELD_UNDO_IMAGES;
+}
+
+static size_t undo_bytes(uint32_t depth, uint32_t capacity) {
+    return sizeof(undo_ring) + (size_t)depth * undo_stride(capacity);
+}
+
+/*
+ * The block under the field's own name, laid out for the buffer it rides beside. False
+ * is the answer for a field with no name to key it under, no budget that pays for two
+ * images, or a heap that said no - and a field with no history serves no undo.
+ */
+static bool undo_open(field_data *field, undo_book *book) {
+    const uint32_t capacity = field->text->capacity;
+    const uint32_t depth = undo_depth(capacity);
+
+    *book = (undo_book){.text = field->text, .ring = NULL, .capacity = capacity, .depth = depth};
+
+    if (field->key == CF_NO_NAME || depth == 0u) {
+        return false;
+    }
+
+    undo_ring *ring = cf_state(field->ctx, field->key, undo_bytes(depth, capacity));
+
+    if (ring == NULL) {
+        return false;
+    }
+
+    if (ring->capacity != capacity) {
+        /* The buffer the field edits is a different size than it was: the images the
+         * block holds were laid out in another stride, and their lengths belong to that
+         * layout rather than to the buffer now asking to be filled from them. */
+        *ring = (undo_ring){.capacity = capacity, .head = 0u, .count = 0u, .pos = 0u};
+    }
+
+    book->ring = ring;
+    return true;
+}
+
+static char *undo_slot(const undo_book *book, uint32_t index) {
+    const uint32_t slot = (book->ring->head + index) % book->depth;
+
+    return (char *)book->ring + sizeof(undo_ring) + (size_t)slot * undo_stride(book->capacity);
+}
+
+static void undo_store(const undo_book *book, uint32_t index) {
+    char *slot = undo_slot(book, index);
+    const cf_text_edit *text = book->text;
+
+    *(undo_image *)slot =
+        (undo_image){.length = text->length, .caret = text->caret, .mark = text->mark};
+    memcpy(slot + sizeof(undo_image), text->chars, text->length);
+}
+
+static void undo_load(const undo_book *book, uint32_t index) {
+    const char *slot = undo_slot(book, index);
+    const undo_image *image = (const undo_image *)slot;
+    cf_text_edit *text = book->text;
+
+    memcpy(text->chars, slot + sizeof *image, image->length);
+    text->length = image->length;
+    text->caret = image->caret;
+    text->mark = image->mark;
+}
+
+/*
+ * Makes the newest image the buffer's own state. Anything the ring held past it goes:
+ * a keystroke after a step back is a new branch, and the redo it cancels is not
+ * reachable again. A change that moved no bytes writes the marks into the image the
+ * buffer already matches instead of costing a step, so nobody has to undo their way
+ * back through the caret - which is why a caret move needs no note of its own: the next
+ * note, wherever it is taken, folds the marks into the state a step forward returns to.
+ */
+static void undo_note(const undo_book *book) {
+    undo_ring *ring = book->ring;
+    const cf_text_edit *text = book->text;
+
+    if (ring->count == 0u) {
+        ring->count = 1u;
+        ring->pos = 0u;
+        undo_store(book, 0u);
+        return;
+    }
+
+    /* A buffer whose bytes are still the ones the image at `pos` put back has not gone
+     * anywhere new, whatever its caret is doing: the walk forward from here is intact,
+     * because only an edit can end it. */
+    char *top = undo_slot(book, ring->pos);
+
+    if (((undo_image *)top)->length == text->length &&
+        memcmp(top + sizeof(undo_image), text->chars, text->length) == 0) {
+        ((undo_image *)top)->caret = text->caret;
+        ((undo_image *)top)->mark = text->mark;
+        return;
+    }
+
+    if (ring->pos + 1u < ring->count) {
+        ring->count = ring->pos + 1u;
+    }
+
+    if (ring->count < book->depth) {
+        ring->count++;
+    } else {
+        ring->head = (ring->head + 1u) % book->depth;
+    }
+
+    ring->pos = ring->count - 1u;
+    undo_store(book, ring->pos);
+}
+
+/*
+ * One step back, or forward through a step just taken. False leaves the buffer alone:
+ * the ring holds the states this field's keys produced and invents none, so a key at
+ * either edge is simply spent, the way an arrow at the end of the value is.
+ */
+static bool undo_step(const undo_book *book, bool back) {
+    if (!back) {
+        if (book->ring->pos + 1u >= book->ring->count) {
+            return false;
+        }
+
+        book->ring->pos++;
+        undo_load(book, book->ring->pos);
+        return true;
+    }
+
+    /* Where the build has written the bytes itself, the state the user stands in is not
+     * in the ring yet: note it, so the step back has somewhere to come forward to. */
+    undo_note(book);
+
+    if (book->ring->pos == 0u) {
+        return false;
+    }
+
+    book->ring->pos--;
+    undo_load(book, book->ring->pos);
+    return true;
 }
 
 /*
@@ -101,8 +310,13 @@ static bool holds_break(cf_string run) {
  * and the caret lands after them with nothing left selected. A run longer than
  * the room the buffer has left is refused whole rather than cut, because half a
  * UTF-8 sequence is bytes nothing can read back.
+ *
+ * Both sides of the change are noted, so the state before it is a step the user can
+ * come back from and the state after it is where a step back returns to.
  */
-static void replace(cf_text_edit *text, cf_string run) {
+static void replace(field_data *field, cf_string run) {
+    cf_text_edit *text = field->text;
+
     if (run.chars == NULL || run.length == 0u || holds_break(run)) {
         return;
     }
@@ -115,19 +329,42 @@ static void replace(cf_text_edit *text, cf_string run) {
         return;
     }
 
+    undo_book book;
+    const bool held = undo_open(field, &book);
+
+    if (held) {
+        undo_note(&book);
+    }
+
     memmove(text->chars + from + run.length, text->chars + to, text->length - to);
     memcpy(text->chars + from, run.chars, run.length);
     text->length = kept + run.length;
     text->caret = from + run.length;
     text->mark = text->caret;
+
+    if (held) {
+        undo_note(&book);
+    }
 }
 
 /* The bytes between two offsets go, and the caret where they were. */
-static void cut(cf_text_edit *text, uint32_t from, uint32_t to) {
+static void cut(field_data *field, uint32_t from, uint32_t to) {
+    cf_text_edit *text = field->text;
+    undo_book book;
+    const bool held = undo_open(field, &book);
+
+    if (held) {
+        undo_note(&book);
+    }
+
     memmove(text->chars + from, text->chars + to, text->length - to);
     text->length -= to - from;
     text->caret = from;
     text->mark = from;
+
+    if (held) {
+        undo_note(&book);
+    }
 }
 
 /* The bytes between the marks, or none where the field has selected nothing. */
@@ -167,7 +404,7 @@ static void carry_out(field_data *field, bool remove) {
     }
 
     if (remove) {
-        cut(text, sel_from(text), sel_to(text));
+        cut(field, sel_from(text), sel_to(text));
     }
 }
 
@@ -192,32 +429,47 @@ static void bring_in(field_data *field) {
         return;
     }
 
-    replace(field->text, board->read(board->user_data, scratch, wanted));
+    replace(field, board->read(board->user_data, scratch, wanted));
 }
 
 /*
- * The three asks a selection answers with, on either of the two bits a platform
- * puts its main modifier on: which of Control and a command key carries a shortcut
- * is the platform's decision, and a field that reads either is right on each rather
- * than wrong on one. Alt stays out of them - a chord with Alt in it is the desk or
- * the host's to keep - and a field handed no clipboard leaves the chord to whoever
- * above it, because the keys it cannot serve are not its to swallow.
+ * The chords a field serves itself, on either of the two bits a platform puts its main
+ * modifier on: which of Control and a command key carries a shortcut is the platform's
+ * decision, and a field that reads either is right on each rather than wrong on one.
+ * Alt stays out of them - a chord with Alt in it is the desk or the host's to keep -
+ * and a chord the field cannot serve is left to whoever is above it, because the keys
+ * it cannot serve are not its to swallow. That is why the trio that trades bytes needs a
+ * clipboard and the pair that walks the history needs only the field's own ring: a field
+ * with no name to key it under, or a buffer too large to copy, has no history to serve.
  */
 static bool serve_shortcut(field_data *field, cf_event *event) {
     const char letter = letter_of(event->key);
     const uint32_t primary = (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META;
+    const bool trades = field->ctx->clipboard != NULL;
 
-    if (field->ctx->clipboard == NULL || letter == '\0' ||
-        (event->mods & (uint32_t)CF_MOD_ALT) != 0u || (event->mods & primary) == 0u) {
+    if (letter == '\0' || (event->mods & (uint32_t)CF_MOD_ALT) != 0u ||
+        (event->mods & primary) == 0u) {
         return false;
     }
 
-    if (letter == 'c') {
+    if (trades && letter == 'c') {
         carry_out(field, false);
-    } else if (letter == 'x') {
+    } else if (trades && letter == 'x') {
         carry_out(field, true);
-    } else if (letter == 'v') {
+    } else if (trades && letter == 'v') {
         bring_in(field);
+    } else if (letter == 'z' || letter == 'y') {
+        undo_book book;
+
+        if (!undo_open(field, &book)) {
+            return false;
+        }
+
+        /* Shift turns the ask around, and the Windows spelling of redo rides the key
+         * beside it rather than a modifier this field reads. */
+        const bool back = letter == 'z' && (event->mods & (uint32_t)CF_MOD_SHIFT) == 0u;
+
+        undo_step(&book, back);
     } else {
         return false;
     }
@@ -232,7 +484,7 @@ static void field_key(cf_event *event, void *user_data) {
     clamp_marks(text);
 
     if (event->type == CF_EVENT_TEXT) {
-        replace(text, event->text);
+        replace(field, event->text);
         cf_stop(event);
         return;
     }
@@ -241,8 +493,9 @@ static void field_key(cf_event *event, void *user_data) {
         return;
     }
 
-    /* Copy, cut and paste come before the keys that move the caret: they are the
-     * ones the user asks the selection to do something about. */
+    /* The chords the field serves itself come before the keys that move the caret:
+     * they are the ones the user asks the selection or the history to do something
+     * about. */
     if (serve_shortcut(field, event)) {
         cf_stop(event);
         return;
@@ -285,17 +538,17 @@ static void field_key(cf_event *event, void *user_data) {
 
     case CF_KEY_BACKSPACE:
         if (sel_from(text) != sel_to(text)) {
-            cut(text, sel_from(text), sel_to(text));
+            cut(field, sel_from(text), sel_to(text));
         } else if (text->caret > 0u) {
-            cut(text, back_one(text, text->caret), text->caret);
+            cut(field, back_one(text, text->caret), text->caret);
         }
         break;
 
     case CF_KEY_DELETE:
         if (sel_from(text) != sel_to(text)) {
-            cut(text, sel_from(text), sel_to(text));
+            cut(field, sel_from(text), sel_to(text));
         } else if (text->caret < text->length) {
-            cut(text, text->caret, forward_one(text, text->caret));
+            cut(field, text->caret, forward_one(text, text->caret));
         }
         break;
 
@@ -409,11 +662,22 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
         return node;
     }
 
-    *data = (field_data){
-        .ctx = ctx, .text = text, .stack = stack != NULL ? *stack : (cf_text_stack){0}};
+    node.key = cf_intern_text(&ctx->names, name);
+
+    *data = (field_data){.ctx = ctx,
+                         .text = text,
+                         .key = node.key,
+                         .stack = stack != NULL ? *stack : (cf_text_stack){0}};
 
     clamp_marks(text);
-    node.key = cf_intern_text(&ctx->names, name);
+
+    /* Asking for the block is the whole point of the call: a name the builds stop
+     * requesting loses its state the frame after, so declaring the field is what keeps
+     * its history alive. Nothing is noted here - the states the ring holds are the ones
+     * the field's own keys produced, not the ones a build wrote behind them. */
+    undo_book history;
+    (void)undo_open(data, &history);
+
     node.role = CF_ROLE_FIELD;
     /* A field is the control a keyboard exists for, so it has to be reachable by
      * one: the handler answers the keys, and taking the focus is what gets them

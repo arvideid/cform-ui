@@ -1111,7 +1111,8 @@ static cf_node build(cf_ctx *ctx) {
             "x to put it there and drop it, v to write what the clipboard holds over the "
             "selection; "
             "the three ask the host for its clipboard, and where a host names none they do "
-            "nothing at all.",
+            "nothing at all. The same key with z hands back what the field's own keys took and "
+            "y takes it away again, caret and selection with them.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",
