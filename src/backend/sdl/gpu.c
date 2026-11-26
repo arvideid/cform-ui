@@ -446,9 +446,16 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
     state->damaged = true;
     state->pending = false;
 
-    /* The frame starts from black: what the stream does not cover is the
-     * window's own color, not the last frame's leftovers. */
+    /* The frame starts from black on a native window: what the stream does not
+     * cover is the window's own color, not the last frame's leftovers. In a
+     * browser the canvas carries an alpha channel and its own CSS backdrop, so
+     * the uncovered color is that backdrop and clearing to transparent is what
+     * lets it show through instead of a black hole around the page. */
+#ifdef __EMSCRIPTEN__
+    SDL_SetRenderDrawColorFloat(state->renderer, 0.0f, 0.0f, 0.0f, 0.0f);
+#else
     SDL_SetRenderDrawColorFloat(state->renderer, 0.0f, 0.0f, 0.0f, 1.0f);
+#endif
     SDL_RenderClear(state->renderer);
 
     /* A resize can hand the renderer a new target with the state that went
