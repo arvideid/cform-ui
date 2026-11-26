@@ -106,6 +106,26 @@ the cursor will have; until then every service has a slot that can be asked dire
   that window to shut the subsystem down on its way out.
 - `user_data` is never read by the engine. It's yours.
 
+## When the output goes away
+
+A reset driver, a removed adapter and a window the desktop closed under you all look
+the same from the draw path: the frame you made is not on screen, and the next one
+will not be either. The contract does not ask a backend to win the device back — the
+device belongs to the host — but it does ask three things of it:
+
+- Say it once on `CF_LOG_BACKEND`, not once per shape or per frame.
+- Draw nothing after it. A stream pushed at an output that refuses frames costs a
+  failing call per command and keeps showing the screen the last frame it took.
+- Keep answering `release_texture` and `destroy`. A host that cannot finish a
+  teardown is left holding bytes with no route to them.
+
+`cf_backend_sdl` takes a refused `SDL_RenderPresent` as the signal: it stops drawing,
+answers 0 to an upload, and lets the release and the teardown run as normal. A loss
+that shows up only as a failed draw, never a failed present, is not detected — no
+test in this repository can make SDL refuse a frame, so that half stays a desktop
+case for a person and a window. Recovery in every case is the host's: destroy the
+backend, open a new one, upload again.
+
 ## Everything is in points, not pixels
 
 `surface`, `cf_event.position` and `cf_command.rect` are all in **logical

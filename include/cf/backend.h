@@ -79,6 +79,17 @@ typedef struct cf_backend {
 } cf_backend;
 
 /*
+ * An output that stops taking frames - a reset driver, a window the desktop took
+ * away - leaves the backend with nothing to draw into. It then draws nothing, takes
+ * no further upload, and says so once instead of once per shape, because a page
+ * that keeps asking shows the screen an older frame and buries the reason. It still
+ * answers `release_texture` and `destroy`: a host that cannot finish a teardown has
+ * bytes it has no way to reach. Nothing across this boundary wins a device back -
+ * recovery is the host closing this backend and opening another, which is why a
+ * texture id never outlives the backend that made it.
+ */
+
+/*
  * The headless backend: it keeps the last submitted stream in its own arena
  * so a test reads what a device would have drawn. The store it hands back is
  * owned, so the stream survives the caller rewinding the arena the paint list

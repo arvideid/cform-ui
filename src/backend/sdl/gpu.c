@@ -43,6 +43,12 @@ typedef struct sdl_state {
      * there, so stopping it on the way out is this backend's duty and not a
      * host's surprise. */
     bool owns_platform;
+    /* A present that the output refused. The window is then showing a frame older
+     * than every one after it, and nothing here can put it right: drawing on costs
+     * a failing call per shape, so the backend stops drawing and stops taking
+     * uploads and leaves the recovery - close this backend, open another - to the
+     * host that owns the device. */
+    bool output_lost;
 } sdl_state;
 
 /*
@@ -281,6 +287,12 @@ uint32_t sdl_create_texture(void *user_data, uint32_t width, uint32_t height, co
         return 0u;
     }
 
+    /* Bytes behind a texture that can never be drawn are bytes the host has to
+     * chase later, and a refusal is an answer the image widget already handles. */
+    if (state->output_lost) {
+        return 0u;
+    }
+
     /* Logged, unlike the asks a caller can see it making: the size an image file
      * carries is not something the page chose, and a silent refusal there reads as
      * a broken decoder. */
@@ -393,6 +405,13 @@ static void draw_submit(void *user_data, const cf_command *commands, uint32_t co
     sdl_state *state = user_data;
 
     if (state == NULL) {
+        return;
+    }
+
+    /* The message is the failed present's to give, once. Here the ask is simply
+     * dropped: the stream would fail shape by shape against an output that took
+     * no frame, and the screen would keep being shown the last one it took. */
+    if (state->output_lost) {
         return;
     }
 
@@ -612,7 +631,15 @@ static void sdl_present(void *user_data) {
 
     state->damaged = false;
 
-    SDL_RenderPresent(state->renderer);
+    /* A refused frame is the device saying it cannot show anything - a reset
+     * driver, a taken-away adapter, a window the desktop closed under the
+     * backend. None of that is repairable from inside a draw call, so the
+     * backend says it once and stops pretending to draw. A release and a
+     * teardown still work, so the host can always hand its uploads back. */
+    if (!SDL_RenderPresent(state->renderer)) {
+        cf_logf(CF_LOG_BACKEND, "backend: the output took no frame: %s", SDL_GetError());
+        state->output_lost = true;
+    }
 }
 
 /* The library formats nothing until a sink is installed, and this is the one
