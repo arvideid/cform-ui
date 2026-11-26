@@ -34,18 +34,16 @@ static const cf_text_ops mono_ops = {mono_metrics, mono_advance, mono_has_glyph}
 static const cf_font mono = {.handle = NULL, .ops = &mono_ops};
 
 /*
- * One frame of the loop: a field over the build's buffer, declared inside
- * the frame - the bytes it keeps live in the arena cf_frame_begin emptied.
- * `keys` is the root's own key handler, for the cases that need to know which
- * chords the field below it let through.
- */
-/*
- * A frame with both doors a page can put on a field: `keys` on the root, and `ask` on
- * the field node itself - the door cf_field leaves its caller beside the keys it keeps
- * for itself, which is where a page puts the handler for this value is done with.
+ * One frame of the loop: a field over the build's buffer, declared inside the frame -
+ * the bytes it keeps live in the arena cf_frame_begin emptied. `keys` is the root's own
+ * key handler, for the cases that need to know which chords the field below it let
+ * through. `ask` and `moved` are the doors cf_field leaves its caller beside the keys it
+ * keeps for itself, which is where a page puts what to do with a value once it has moved
+ * and once it is done with.
  */
 static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
-                        void *key_data, cf_event_fn ask, void *ask_data) {
+                        void *key_data, cf_event_fn ask, void *ask_data, cf_event_fn moved,
+                        void *moved_data) {
     cf_frame_begin(ctx);
 
     const cf_text_stack stack = {.fonts = &mono, .count = 1u};
@@ -53,6 +51,8 @@ static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event
     field.disabled = disabled;
     field.handlers.activate = ask;
     field.handlers.activate_data = ask_data;
+    field.handlers.change = moved;
+    field.handlers.change_data = moved_data;
     const cf_node roots[] = {field};
     cf_node root = {.style = cf_style_default()};
     /* A column, so the field stretches across the page: the width the box keeps
@@ -73,7 +73,7 @@ static void frame_doors(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event
 
 static void frame_watched(cf_ctx *ctx, cf_text_edit *text, bool disabled, cf_event_fn keys,
                           void *key_data) {
-    frame_doors(ctx, text, disabled, keys, key_data, NULL, NULL);
+    frame_doors(ctx, text, disabled, keys, key_data, NULL, NULL, NULL, NULL);
 }
 
 static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
@@ -584,6 +584,24 @@ static void host_holds(fake_board *board, const char *run) {
 static void count_keys(cf_event *event, void *user_data) {
     (void)event;
     (*(uint32_t *)user_data)++;
+}
+
+/* What the change door was handed, so a test can tell which key moved the bytes and
+ * how many runs the door was asked about. */
+typedef struct moved_note {
+    uint32_t calls;
+    uint32_t target;
+    uint32_t key;
+    uint32_t bytes;
+} moved_note;
+
+static void count_change(cf_event *event, void *user_data) {
+    moved_note *note = user_data;
+
+    note->calls++;
+    note->target = event->target;
+    note->key = event->key;
+    note->bytes = event->text.length;
 }
 
 /* One letter key with the modifiers a desk would have put on it. */
@@ -1436,7 +1454,7 @@ static void a_space_in_a_field_is_a_character_and_enter_is_the_ask(void) {
     }
 
     ctx.theme = cf_theme_default();
-    frame_doors(&ctx, &text, false, count_keys, &through, count_keys, &asks);
+    frame_doors(&ctx, &text, false, count_keys, &through, count_keys, &asks, NULL, NULL);
     press(&ctx, 10.0f, 10.0f);
 
     type(&ctx, "a b", 3u);
@@ -1464,6 +1482,176 @@ static void a_space_in_a_field_is_a_character_and_enter_is_the_ask(void) {
 
     CF_CHECK(asks == 1u, "a chord is nobody's plain ask to act");
     CF_CHECK(through == 3u, "and both are left to whoever above bound them");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The door a page puts on a field to hear that its value moved. What counts as a move is
+ * the whole contract: a run is one change however many bytes it carried, and the keys that
+ * only move where the caret stands - an arrow, Home, a select-all - leave the bytes the
+ * page reads untouched, so a form that re-validates on this door does not re-validate on
+ * every step through the value. A run that was refused is no change either.
+ */
+static void the_change_door_hears_the_bytes_and_not_the_caret(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
+    press(&ctx, 10.0f, 10.0f);
+
+    type(&ctx, "abc", 3u);
+
+    CF_CHECK(moved.calls == 1u, "one run the keyboard wrote is one change");
+    CF_CHECK(moved.bytes == 3u, "and the door is asked on the event the bytes came in with");
+
+    type(&ctx, "d", 1u);
+
+    CF_CHECK(moved.calls == 2u && text.length == 4u, "the next key is the next change");
+
+    hold(&ctx, CF_KEY_LEFT, false);
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_END, true);
+    chord(&ctx, 'a', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 2u, "the keys that move the caret and the selection say nothing");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(moved.calls == 3u && text.length == 0u,
+             "the key that took the selected bytes is one change");
+    CF_CHECK(moved.key == (uint32_t)CF_KEY_BACKSPACE,
+             "and the door is handed the key that made it");
+
+    /* More bytes than an empty buffer has room for: refused whole, so the value the page
+     * reads is the one it read before the key. */
+    type(&ctx, "012345678901234567", 18u);
+
+    CF_CHECK(moved.calls == 3u && text.length == 0u && text.refusals == 1u,
+             "a run that lands nowhere reports no change");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The other ways the field's own keys move the value: the cut that hands bytes to the
+ * host, the paste that takes them back, and the two directions of the history. Copy is
+ * here because it is the one chord that trades with the host and changes nothing, and the
+ * spent steps are here because a key at the end of the history is a key the field used up
+ * rather than an edit the page has to look at.
+ */
+static void cutting_pasting_and_stepping_the_history_move_the_value(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    ctx.clipboard = &clipboard;
+    frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
+    select_tail(&ctx, "abcd", 2u);
+
+    CF_CHECK(moved.calls == 1u, "the run that filled the buffer is one change");
+
+    chord(&ctx, 'c', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 1u && text.length == 4u, "copy hands bytes out and moves nothing");
+
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 2u && text.length == 2u, "cut takes the selection, so it moved");
+
+    host_holds(&board, "ef");
+    chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 3u && text.length == 4u, "and a paste puts bytes in");
+
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 6u && text.length == 0u,
+             "each step back that returned bytes is a change of its own");
+
+    chord(&ctx, 'z', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 6u, "a step past the oldest state is a spent key, not a change");
+
+    chord(&ctx, 'y', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(moved.calls == 7u && text.length == 4u, "and the step forward moved them again");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * Who answers the door, and who does not. The ask is of the node whose widget edited the
+ * value - a container above it is not asked, because it can read the same buffer in its
+ * own build - and a field switched off edits nothing, so it has no change to report.
+ */
+static void the_change_door_answers_the_box_whose_value_moved(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
+
+    const uint32_t field = child_of(&ctx, ctx.root_slot, 0u);
+
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+
+    CF_CHECK(moved.calls == 1u && moved.target == field,
+             "the ask names the box whose buffer the run went into");
+
+    /* A run refused for the break it carries: no byte of the value moved, so the door
+     * stays shut on it the way it does on a run that would not fit. */
+    type(&ctx, "a\nb", 3u);
+
+    CF_CHECK(moved.calls == 1u && text.length == 2u,
+             "a run refused for its break says so nowhere but the buffer");
+
+    cf_ctx_free(&ctx);
+
+    /* The same door on a field that takes no keys: switched off, it focuses on nothing and
+     * edits nothing, so it reports nothing. */
+    memset(bytes, 0, sizeof bytes);
+    text = (cf_text_edit){.chars = bytes, .length = 0u, .capacity = 16u};
+    moved = (moved_note){0};
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts again");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_doors(&ctx, &text, true, NULL, NULL, NULL, NULL, count_change, &moved);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "ab", 2u);
+
+    CF_CHECK(moved.calls == 0u && text.length == 0u, "a field switched off reports no change");
 
     cf_ctx_free(&ctx);
 }
@@ -1508,6 +1696,9 @@ int main(void) {
     CF_RUN(the_chord_holds_every_byte_the_buffer_carries);
     CF_RUN(a_run_that_will_not_fit_says_so_in_the_buffer);
     CF_RUN(a_space_in_a_field_is_a_character_and_enter_is_the_ask);
+    CF_RUN(the_change_door_hears_the_bytes_and_not_the_caret);
+    CF_RUN(cutting_pasting_and_stepping_the_history_move_the_value);
+    CF_RUN(the_change_door_answers_the_box_whose_value_moved);
 
     return CF_REPORT();
 }

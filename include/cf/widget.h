@@ -120,6 +120,12 @@ typedef struct cf_text_edit {
  * person is still typing into, and it leaves Enter unstopped: the shell asks the node's
  * own `activate` handler, which is where a page puts what to do with a value that is
  * done with. A space held with a chord modifier climbs with the chord.
+ *
+ * The other door is `change`, and the field reports through it: every key that wrote or
+ * took bytes runs it once, on the event that did it, before the page is built again, so a
+ * form that validates as you type reads its buffer there. A key that only moved the caret
+ * or the selection, a run the buffer had no room for and a step at the end of the history
+ * write nothing, so they report nothing.
  */
 cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack);
 

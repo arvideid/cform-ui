@@ -16,12 +16,17 @@
  * history is keyed under, and the fonts to lay the bytes in - the stack the build
  * handed the field, borrowed for as long as the field is declared, which is the
  * rule a label's stack already follows.
+ *
+ * `edited` is a fact about the key being served rather than about the box: the value
+ * moves once per event however many runs the chord put in, so the edit sites note it and
+ * the handler reports once on the way out.
  */
 typedef struct field_data {
     cf_ctx *ctx;
     cf_text_edit *text;
     cf_name key;
     cf_text_stack stack;
+    bool edited;
 } field_data;
 
 static uint32_t sel_from(const cf_text_edit *text) {
@@ -460,6 +465,8 @@ static void replace(field_data *field, cf_string run) {
     if (held) {
         undo_note(&book);
     }
+
+    field->edited = true;
 }
 
 /* The bytes between two offsets go, and the caret where they were. */
@@ -480,6 +487,8 @@ static void cut(field_data *field, uint32_t from, uint32_t to) {
     if (held) {
         undo_note(&book);
     }
+
+    field->edited = true;
 }
 
 /* The bytes between the marks, or none where the field has selected nothing. */
@@ -588,10 +597,13 @@ static bool serve_shortcut(field_data *field, cf_event *event) {
         }
 
         /* Shift turns the ask around, and the Windows spelling of redo rides the key
-         * beside it rather than a modifier this field reads. */
+         * beside it rather than a modifier this field reads. A step that found nowhere to
+         * go wrote no bytes, so it is not a change the page has to look at. */
         const bool back = letter == 'z' && (event->mods & (uint32_t)CF_MOD_SHIFT) == 0u;
 
-        undo_step(&book, back);
+        if (undo_step(&book, back)) {
+            field->edited = true;
+        }
     } else {
         return false;
     }
@@ -599,15 +611,29 @@ static bool serve_shortcut(field_data *field, cf_event *event) {
     return true;
 }
 
+/*
+ * The event is the field's, and what it moved is the page's to hear about: the door runs
+ * once, on the event the bytes came in on, so a form validating a value reads its own
+ * buffer here instead of waiting for the next build to notice the caret is somewhere new.
+ */
+static void claim(field_data *field, cf_event *event) {
+    if (field->edited) {
+        cf_report_change(field->ctx, event);
+    }
+
+    cf_stop(event);
+}
+
 static void field_key(cf_event *event, void *user_data) {
     field_data *field = user_data;
     cf_text_edit *text = field->text;
 
+    field->edited = false;
     clamp_marks(text);
 
     if (event->type == CF_EVENT_TEXT) {
         replace(field, event->text);
-        cf_stop(event);
+        claim(field, event);
         return;
     }
 
@@ -619,7 +645,7 @@ static void field_key(cf_event *event, void *user_data) {
      * they are the ones the user asks the selection or the history to do something
      * about. */
     if (serve_shortcut(field, event)) {
-        cf_stop(event);
+        claim(field, event);
         return;
     }
 
@@ -706,7 +732,7 @@ static void field_key(cf_event *event, void *user_data) {
         return;
     }
 
-    cf_stop(event);
+    claim(field, event);
 }
 
 /*

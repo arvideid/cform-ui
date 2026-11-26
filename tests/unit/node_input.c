@@ -1459,6 +1459,117 @@ static void the_focused_box_is_the_one_the_key_asks(void) {
     cf_ctx_free(&ctx);
 }
 
+/* What a node's own change door answered, and how many keys the widget that reports the
+ * edit was handed first. */
+typedef struct editor {
+    cf_ctx *ctx;
+    int keys;
+    int changes;
+    uint32_t last_target;
+} editor;
+
+/* A handler that edits and says so, which is what a widget does: the event it was handed
+ * names its own node, and it reports on that event rather than a copy of it. */
+static void edit_and_report(cf_event *event, void *user_data) {
+    editor *made = user_data;
+
+    made->keys++;
+    cf_report_change(made->ctx, event);
+}
+
+static void hear_change(cf_event *event, void *user_data) {
+    editor *made = user_data;
+
+    made->changes++;
+    made->last_target = event->target;
+}
+
+/*
+ * The report a widget makes, proved at the layer that owns the doors. The ask goes to the
+ * node the event names and to nobody above it - a container that cares reads the value in
+ * its own build, and asking both would have a form revalidate twice per key. A node that
+ * declared no door answers nothing rather than faulting, so the widget does not have to
+ * look, and neither does a node that is switched off or a target the store no longer
+ * holds.
+ */
+static void a_report_asks_the_door_the_node_declared(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    editor typed = {.ctx = &ctx};
+    editor bare = {.ctx = &ctx};
+    editor page = {0};
+    cf_node children[] = {focus_box(50.0f, 50.0f, NULL, NULL), focus_box(50.0f, 50.0f, NULL, NULL)};
+    children[0].handlers.key = edit_and_report;
+    children[0].handlers.key_data = &typed;
+    children[0].handlers.change = hear_change;
+    children[0].handlers.change_data = &typed;
+    children[1].handlers.key = edit_and_report;
+    children[1].handlers.key_data = &bare;
+    cf_node root = box(200.0f, 200.0f, NULL, NULL);
+    root.handlers.change = hear_change;
+    root.handlers.change_data = &page;
+    root.children = children;
+    root.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t a = child_slot(&ctx, 0u);
+    const uint32_t b = child_slot(&ctx, 1u);
+
+    cf_focus(&ctx, a);
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'a'});
+
+    CF_CHECK(typed.keys == 1 && typed.changes == 1, "the edit reports through its own door");
+    CF_CHECK(typed.last_target == a, "on the event that named the node");
+    CF_CHECK(page.changes == 0, "and the container above is not asked as well");
+
+    /* The box with no door: the report is the widget's habit, not a question it has to
+     * check the answer to first. */
+    cf_focus(&ctx, b);
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'a'});
+
+    CF_CHECK(bare.keys == 1 && bare.changes == 0 && page.changes == 0,
+             "a node that declared no door answers nothing");
+
+    /* Switched off with the door still declared on it: an edit that came in while the box
+     * was live stops being reported the frame it went off. */
+    children[0].disabled = true;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    cf_report_change(&ctx, &(cf_event){.target = a});
+
+    CF_CHECK(typed.changes == 1 && page.changes == 0, "a node switched off reports nothing");
+
+    /* An event that names a slot the store no longer holds, and a report with nothing
+     * behind it: both are the no-op the API promises. */
+    cf_report_change(&ctx, &(cf_event){.target = 4096u});
+    cf_report_change(&ctx, NULL);
+    cf_report_change(NULL, &(cf_event){.target = a});
+
+    CF_CHECK(typed.changes == 1 && bare.changes == 0 && page.changes == 0,
+             "a report nobody can answer changes nothing");
+
+    /* The value comes back with the box: the door is the node's, not the widget's. */
+    children[0].disabled = false;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &root);
+    lay_out(&ctx, 200.0f, 200.0f);
+    cf_focus(&ctx, a);
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'a'});
+
+    CF_CHECK(typed.changes == 2, "and a box that comes back answers its door again");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -1490,6 +1601,7 @@ int main(void) {
     CF_RUN(a_box_that_answers_tab_keeps_the_move_to_itself);
     CF_RUN(a_ring_that_empties_loses_the_focus);
     CF_RUN(the_focused_box_is_the_one_the_key_asks);
+    CF_RUN(a_report_asks_the_door_the_node_declared);
 
     return CF_REPORT();
 }

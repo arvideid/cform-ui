@@ -176,11 +176,14 @@ accepted and ignored — there is no field that pretends to take these things.
   save code on the field node and chapter two copies the buffer out and prints it. The
   space bar a field holds the keyboard under is the character the device sends beside it,
   so the box keeps that key — typing a word never reads as a submission.
-- **Editing stops where the caret does.** There is no caret blink, and no notice that
-  the buffer changed: a page reads the value in its own build. An input method's
-  committed words arrive as ordinary text, but the half-composed text is never drawn and
-  the platform is never told where the caret is, so a candidate window lands wherever the
-  desk decides — the composition row of `docs/backlog.md` is the one that closes it.
+- **A key that moved the value says so.** Every edit the field's own keys make runs the
+  node's `change` handler once, on the event that moved the bytes: an arrow that walks the
+  caret, a **Ctrl**+**A** that holds the whole value, and a run the buffer turned away all
+  leave it shut. Chapter two counts the reports on its fourth line. There is no caret
+  blink, and an input method's committed words arrive as ordinary text, but the
+  half-composed text is never drawn and the platform is never told where the caret is, so a
+  candidate window lands wherever the desk decides — the composition row of
+  `docs/backlog.md` is the one that closes it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

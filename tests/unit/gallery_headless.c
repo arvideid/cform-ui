@@ -1012,6 +1012,42 @@ static void the_gallery_field_saves_on_enter_and_types_a_space(void) {
     end_session();
 }
 
+/*
+ * The other door chapter two's field reports through. The page counts the keys that moved
+ * the bytes it owns and paints the count, so a reader can see the rule the door keeps: a run
+ * is one change however many letters it carried, and the keys that move the caret or hold the
+ * selection leave the number where it stands.
+ */
+static void the_gallery_page_hears_the_value_move_and_not_the_caret(void) {
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    CF_CHECK(page_reads("changes the page heard: 0"), "an untouched buffer has moved nowhere");
+
+    step(typed_text("save me"));
+
+    CF_CHECK(typed.length == 7u && page_reads("changes the page heard: 1"),
+             "one run of bytes is one report, however many it wrote");
+
+    step(key_down(CF_KEY_LEFT));
+    step(key_down(CF_KEY_HOME));
+    step(chord('a', (uint32_t)CF_MOD_CONTROL));
+
+    CF_CHECK(page_reads("changes the page heard: 1"),
+             "a caret that walks and a value that is held are no change to it");
+
+    step(key_down(CF_KEY_BACKSPACE));
+
+    CF_CHECK(typed.length == 0u && page_reads("changes the page heard: 2"),
+             "the key that took the bytes is the next report");
+
+    end_session();
+}
+
 static void the_narrow_button_pins_the_well_and_the_lines_follow(void) {
     /* The chip and the well live in chapter three; a walk puts it on screen. */
     if (!reveal_to("narrow it", 12u)) {
@@ -1529,6 +1565,7 @@ int main(void) {
     CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
     CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
     CF_RUN(the_gallery_field_saves_on_enter_and_types_a_space);
+    CF_RUN(the_gallery_page_hears_the_value_move_and_not_the_caret);
     CF_RUN(the_narrow_button_pins_the_well_and_the_lines_follow);
     CF_RUN(the_wheel_walks_the_page_it_lands_on);
     CF_RUN(the_panel_keeps_its_own_wheel_and_reveals_its_rows);

@@ -121,6 +121,7 @@ static void gallery_init_assets(void) {
 static char status_bytes[32];
 static char echo_bytes[96];
 static char submit_bytes[96];
+static char change_bytes[64];
 static char list_bytes[64];
 static char motion_bytes[96];
 static char keyboard_bytes[96];
@@ -227,6 +228,24 @@ static void submit_entry(cf_event *event, void *user_data) {
 
     if (saved != NULL) {
         snprintf(saved, sizeof typed_bytes, "%.*s", (int)typed.length, typed.chars);
+    }
+}
+
+/* How many times the field's value moved. The door hears the keys that wrote bytes and
+ * not the ones that moved the caret, which is the difference a page that validates as you
+ * type lives on: it re-reads the value here rather than on every arrow key. */
+static uint32_t *change_count(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "changes"), sizeof(uint32_t));
+}
+
+static void note_change(cf_event *event, void *user_data) {
+    cf_ctx *ctx = user_data;
+    uint32_t *count = change_count(ctx);
+
+    (void)event;
+
+    if (count != NULL) {
+        *count += 1u;
     }
 }
 
@@ -510,6 +529,10 @@ static cf_node make_field_demo(cf_ctx *ctx) {
      * asked of the node, which is where a page puts what to do with the value. */
     entry.handlers.activate = submit_entry;
     entry.handlers.activate_data = ctx;
+    /* The other door on the same node: what the bytes are now, rather than that they
+     * stopped being typed. */
+    entry.handlers.change = note_change;
+    entry.handlers.change_data = ctx;
     entry.style.width = CF_PERCENT(100.0f);
     /* Stated rather than measured: a field with nothing in it would otherwise
      * be a hairline, and the reader cannot click a hairline. */
@@ -525,14 +548,20 @@ static cf_node make_field_demo(cf_ctx *ctx) {
         snprintf(submit_bytes, sizeof submit_bytes, "asked to save: %s",
                  saved != NULL && saved[0] != '\0' ? saved : "nothing since the page opened");
 
+    const uint32_t *changes = change_count(ctx);
+    const int moved_length =
+        snprintf(change_bytes, sizeof change_bytes, "changes the page heard: %u",
+                 changes != NULL ? *changes : 0u);
+
     return demo_column(
         ctx, 8.0f,
         (cf_node[]){
             entry,
             cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted),
             cf_label(ctx, (cf_string){submit_bytes, (uint32_t)saved_length}, &body, theme->muted),
+            cf_label(ctx, (cf_string){change_bytes, (uint32_t)moved_length}, &body, theme->muted),
         },
-        3u);
+        4u);
 }
 
 /* Chapter three: a paragraph that breaks itself, the same words capped, and the
@@ -1145,7 +1174,7 @@ static cf_node build(cf_ctx *ctx) {
             "moved: shift, caps lock, the layout and an input method are settled before the bytes "
             "arrive, so a capital lands as the capital that was typed. Backspace drops the last "
             "character, and a run too long for the buffer is refused whole rather than cut in "
-            "half - the first of the two lines under it counts how often that happened, since a "
+            "half - the first of the lines under it counts how often that happened, since a "
             "key that lands nowhere is otherwise indistinguishable from a key nobody sent. The "
             "widget copies the text nowhere, so the same line reads the buffer back. Hold ctrl "
             "(or the command key) and press c to put a selection on the clipboard, x to put it "
@@ -1159,7 +1188,11 @@ static cf_node build(cf_ctx *ctx) {
             "of it. Enter is the ask that the value is done with, and it is the page's own "
             "handler on the field that hears it - the line under the first says what was handed "
             "over - while the space bar stays the character it is, so typing a word never reads "
-            "as a submission.",
+            "as a submission. Every key that moved the bytes is reported to a handler on the "
+            "same node before the page is built again, which is where a form validating as you "
+            "type looks; the fourth line counts those reports, and an arrow that moves the caret "
+            "or a ctrl that selects the value adds nothing to it, because neither of them "
+            "changed what the buffer holds.",
             make_field_demo(ctx)),
         make_chapter(
             ctx, "03", "Text that measures itself",

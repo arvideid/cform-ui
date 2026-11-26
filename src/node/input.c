@@ -479,6 +479,27 @@ bool cf_hovered(const cf_ctx *ctx, uint32_t slot) {
     return ctx != NULL && holds_slot(ctx, ctx->hover_id, slot);
 }
 
+/*
+ * The door a widget knocks on once it has edited the value its node holds. The event the
+ * widget was handed names the node in `target`, so the ask goes to that node alone and
+ * carries the key that moved the bytes: a page validating a form reads its own buffer out
+ * of the event's frame rather than waiting for the next build to notice.
+ */
+void cf_report_change(cf_ctx *ctx, cf_event *event) {
+    if (ctx == NULL || event == NULL ||
+        !holds_slot(ctx, cf_store_id(&ctx->nodes, event->target), event->target)) {
+        return;
+    }
+
+    const node_record *record = record_of(ctx, event->target);
+
+    if (record->disabled || record->handlers.change == NULL) {
+        return;
+    }
+
+    record->handlers.change(event, record->handlers.change_data);
+}
+
 bool cf_pressed(const cf_ctx *ctx, uint32_t slot) {
     return ctx != NULL && holds_slot(ctx, ctx->press_id, slot);
 }

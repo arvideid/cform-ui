@@ -32,6 +32,15 @@ typedef struct cf_handlers {
      */
     cf_event_fn activate;
     void *activate_data;
+    /*
+     * "The value this box holds moved", asked of the node whose widget edited it: the
+     * event is the one that did it, and the bytes stay in whatever the build owns, so a
+     * page reads its own buffer rather than a copy handed to it. A caret move is not a
+     * change and runs no handler here; the ask is once per event, however many runs the
+     * key put in. A box whose value nobody declares a door for leaves it NULL.
+     */
+    cf_event_fn change;
+    void *change_data;
 } cf_handlers;
 
 /*
@@ -399,8 +408,8 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
  * the node holding focus answered the key first, which is how a dialog keeps the
  * keyboard inside itself. A page with nothing focusable loses focus.
  *
- * Enter and the space bar ask the focused node to do its job: its activate
- * handler runs, and no other node is asked.
+ * Enter and the space bar, with no chord held, ask the focused node to do its job: its
+ * activate handler runs, and no other node is asked.
  */
 void cf_input(cf_ctx *ctx, cf_event event);
 
@@ -409,6 +418,16 @@ void cf_input(cf_ctx *ctx, cf_event event);
  * refused - the same rule Tab walks, so a host cannot land focus somewhere the
  * keyboard could not reach. */
 void cf_focus(cf_ctx *ctx, uint32_t slot);
+
+/*
+ * The ask a widget hands back when it has changed the value its node holds: the node's
+ * own `change` handler runs, given the event that moved the bytes, and nobody above it
+ * is asked - the container that wants to know reads the buffer in its build. A widget
+ * calls this from inside a dispatch, on the event it was handed, whose target names the
+ * node. A node that is gone, switched off or has declared no door answers nothing, so a
+ * widget does not have to look before it reports.
+ */
+void cf_report_change(cf_ctx *ctx, cf_event *event);
 
 /*
  * The node's interaction state, asked by slot. Each answer is false for a
