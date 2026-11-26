@@ -102,13 +102,19 @@ void cf_app_run(const cf_app_config *config) {
                 return;
             }
 
+            /* The in-app inspector is a desktop affordance. On a browser tab
+             * F12 belongs to the dev tools, which already lay the frame's
+             * numbers over the page better than this one can. */
+#ifndef __EMSCRIPTEN__
             if (event.type == CF_EVENT_KEY_DOWN && event.key == CF_KEY_F12) {
                 bool *shown = cf_state(&ctx, inspector_key, sizeof *shown);
 
                 if (shown != NULL) {
                     *shown = !*shown;
                 }
-            } else {
+            } else
+#endif
+            {
                 cf_input(&ctx, event);
             }
 
