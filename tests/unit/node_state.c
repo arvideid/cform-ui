@@ -16,6 +16,13 @@ static cf_node node_of(cf_name key) {
     return (cf_node){.key = key};
 }
 
+static cf_node sized(float width, float height) {
+    cf_node node = {.style = cf_style_default()};
+    node.style.width = CF_PX(width);
+    node.style.height = CF_PX(height);
+    return node;
+}
+
 static void a_requested_block_starts_zeroed(void) {
     cf_ctx ctx;
 
@@ -356,6 +363,86 @@ static void the_context_answers_its_own_key_and_frame_bytes(void) {
     cf_ctx_free(&ctx);
 }
 
+/* What a frame answers about itself: the root its diff settled on, the box its layout measured,
+ * and the run a field staged. Before the work is done each one is answered with nothing, because a
+ * number read out of storage nobody wrote is indistinguishable from a real one by the host that
+ * gets it. */
+static void the_frame_answers_its_root_its_box_and_its_claim(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    CF_CHECK(cf_frame_root(&ctx) == CF_NO_LINK, "a context that has diffed nothing names no root");
+    CF_CHECK(cf_frame_rect(&ctx, 0u) == NULL, "and a frame that laid nothing hands out no box");
+    CF_CHECK(cf_theme_of(&ctx) == NULL, "a page that set no theme styles every box it declares");
+    CF_CHECK(cf_clipboard_of(&ctx) == NULL, "and a host that offered no board trades nothing");
+    CF_CHECK(cf_composing(&ctx) == CF_NO_NAME, "with nothing staged the page is deciding nothing");
+    CF_CHECK(cf_composition_run(&ctx).width == 0.0f, "so there is no run for a band to stand on");
+    CF_CHECK(cf_frame_root(NULL) == CF_NO_LINK, "a context that was not given answers no root");
+    CF_CHECK(cf_frame_rect(NULL, 0u) == NULL, "no box and no theme and no board");
+    CF_CHECK(cf_theme_of(NULL) == NULL, "a context that was not given hands out no theme");
+    CF_CHECK(cf_clipboard_of(NULL) == NULL, "and points at no clipboard");
+    CF_CHECK(cf_composing(NULL) == CF_NO_NAME, "and decides nothing for a page it was not given");
+    CF_CHECK(cf_composition_run(NULL).width == 0.0f, "so a run asked of nothing has no extent");
+
+    cf_node kids[] = {sized(60.0f, 20.0f)};
+    cf_node root = sized(200.0f, 100.0f);
+    root.children = kids;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    const uint32_t answered = cf_diff(&ctx, &root);
+
+    CF_CHECK(cf_frame_root(&ctx) == answered, "the root the diff answered is the frame's root");
+    CF_CHECK(cf_frame_rect(&ctx, answered) == NULL, "and before the layout there is still no box");
+
+    cf_frame_layout(&ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(100.0f)},
+                    (cf_point){0.0f, 0.0f});
+
+    const cf_rect *page = cf_frame_rect(&ctx, answered);
+    CF_CHECK(page != NULL, "the laid frame hands out its root's box");
+    CF_CHECK(page != NULL && page->width == 200.0f && page->height == 100.0f,
+             "and the box is the one the layout measured");
+    CF_CHECK(cf_frame_rect(&ctx, answered + 8u) == NULL,
+             "a slot the frame never declared is answered as no box");
+
+    /* The claim a field stages, read back the way a second box and the shell read it. */
+    const cf_name entry = cf_ctx_key(&ctx, "entry");
+    const cf_id held = cf_node_id(&ctx, answered);
+
+    /* Staged at no context, both doors leave this page as they found it. */
+    cf_mark_composition(NULL, entry, held, (cf_rect){0.0f, 0.0f, 1.0f, 1.0f});
+    cf_release_composition(NULL, entry);
+    CF_CHECK(cf_composing(&ctx) == CF_NO_NAME, "a claim written to no context is not this page's");
+
+    cf_mark_composition(&ctx, entry, held, (cf_rect){4.0f, 2.0f, 50.0f, 18.0f});
+
+    CF_CHECK(cf_composing(&ctx) == entry, "the staged run is held under the field's own name");
+    CF_CHECK(cf_composition_run(&ctx).x == 4.0f && cf_composition_run(&ctx).width == 50.0f,
+             "and where it sits inside its box is what was staged");
+
+    cf_release_composition(&ctx, cf_ctx_key(&ctx, "other"));
+    CF_CHECK(cf_composing(&ctx) == entry, "somebody else's name cannot cancel this claim");
+
+    cf_release_composition(&ctx, entry);
+    CF_CHECK(cf_composing(&ctx) == CF_NO_NAME, "the field that holds it hands it back");
+    CF_CHECK(cf_composition_run(&ctx).width == 0.0f, "and the run is gone along with the claim");
+
+    cf_mark_composition(&ctx, entry, held, (cf_rect){1.0f, 1.0f, 9.0f, 9.0f});
+    CF_CHECK(cf_composing(&ctx) == entry, "a run staged again is held again");
+
+    /* A commit that arrived with no bytes left has no key to answer with, and the run that was
+     * staged under a name nobody holds goes with the name - the numbers mean nothing once no
+     * field is deciding them. */
+    cf_mark_composition(&ctx, CF_NO_NAME, held, (cf_rect){7.0f, 7.0f, 30.0f, 12.0f});
+    CF_CHECK(cf_composing(&ctx) == CF_NO_NAME, "a name that was not given ends the run");
+    CF_CHECK(cf_composition_run(&ctx).width == 0.0f, "and the numbers staged with no name go too");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node state\n");
 
@@ -371,6 +458,7 @@ int main(void) {
     CF_RUN(a_block_larger_than_the_context_starts_with_is_served);
     CF_RUN(a_nameless_request_is_refused);
     CF_RUN(the_context_answers_its_own_key_and_frame_bytes);
+    CF_RUN(the_frame_answers_its_root_its_box_and_its_claim);
 
     return CF_REPORT();
 }
