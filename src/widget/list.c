@@ -22,7 +22,15 @@ typedef struct list_data {
 static void list_pointer(cf_event *event, void *user_data) {
     list_data *list = user_data;
 
-    if (event->type != CF_EVENT_SCROLL || list->ctx->rects == NULL) {
+    if (event->type != CF_EVENT_SCROLL) {
+        return;
+    }
+
+    /* A frame that laid nothing has no viewport to walk within, and the notch is
+     * measured against it rather than assumed. */
+    const cf_rect *viewport = cf_frame_rect(list->ctx, event->target);
+
+    if (viewport == NULL) {
         return;
     }
 
@@ -33,7 +41,7 @@ static void list_pointer(cf_event *event, void *user_data) {
     }
 
     /* One notch walks one row: the row is the unit the list shows in. */
-    const float viewport_height = list->ctx->rects[event->target].height;
+    const float viewport_height = viewport->height;
 
     const float walked = cf_scroll_clamp(held->offset + event->wheel.y * list->row_height,
                                          viewport_height, list->content_height);
@@ -122,8 +130,9 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
 
     viewport_children[0] = *content;
 
-    node.style =
-        ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
+    const cf_theme *theme = cf_theme_of(ctx);
+
+    node.style = theme != NULL ? theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
     /* A list is more than a scroller to a bridge: it is a run of items a person steps through, so
      * the boxes the row factory returns are worth declaring CF_ACCESS_ITEM on. Only the rows this

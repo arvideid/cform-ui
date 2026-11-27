@@ -610,6 +610,10 @@ static void the_list_holds_only_the_pages_that_document_the_library(void) {
  * The two halves are counted in two frames, because what is below the fold is culled out
  * of the stream rather than painted and hidden: the top of the document answers the list
  * and the heading, the bottom answers the foot.
+ *
+ * The walk to the bottom runs until the wheel stops moving the page rather than for a fixed
+ * distance, because pages grow as the library gains answers and a wheel given once would read a
+ * foot that has since slid below the fold.
  */
 static void no_label_is_written_twice_on_one_screen(void) {
     for (uint32_t row = 0u; row < SITE_NAV_COUNT; ++row) {
@@ -623,9 +627,22 @@ static void no_label_is_written_twice_on_one_screen(void) {
         CF_CHECK(lines_reading(SITE_FACE_EYEBROW, showing->label) == 0u,
                  "no label says the words the heading under it already says");
 
-        /* A walk past the end of any page the table holds, so the foot is in the frame
-         * that is read whether or not the page reached it. */
-        step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 200.0f}});
+        /* A walk to the end of whatever the page grew to: the wheel is given until it stops
+         * moving the document, which is the frame where the foot has come into view. The bound is
+         * a guard against a page that never stops moving, not a distance anyone chose. */
+        cf_scroll *page = document_scroll();
+        float walked = page != NULL ? page->offset : 0.0f;
+
+        for (uint32_t stride = 0u; stride < 200u; ++stride) {
+            step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 200.0f}});
+
+            if (page == NULL || page->offset == walked) {
+                break;
+            }
+
+            walked = page->offset;
+        }
+
         CF_CHECK(lines_reading(SITE_FACE_EYEBROW, SITE_FOOT_LABEL) == 1u,
                  "the foot is labelled once, and by a word of its own");
 

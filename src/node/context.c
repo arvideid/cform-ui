@@ -111,6 +111,30 @@ const cf_tree *cf_frame_tree(const cf_ctx *ctx) {
     return &ctx->layout;
 }
 
+uint32_t cf_frame_root(const cf_ctx *ctx) {
+    if (ctx == NULL || !ctx->layout_ready) {
+        return CF_NO_LINK;
+    }
+
+    return ctx->root_slot;
+}
+
+const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot) {
+    if (ctx == NULL || ctx->rects == NULL || slot >= ctx->layout.node_count) {
+        return NULL;
+    }
+
+    return &ctx->rects[slot];
+}
+
+const cf_theme *cf_theme_of(const cf_ctx *ctx) {
+    return ctx == NULL ? NULL : ctx->theme;
+}
+
+const cf_clipboard *cf_clipboard_of(const cf_ctx *ctx) {
+    return ctx == NULL ? NULL : ctx->clipboard;
+}
+
 void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
     if (ctx == NULL || !ctx->layout_ready || ctx->root_slot == CF_NO_LINK) {
         return;

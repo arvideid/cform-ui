@@ -383,7 +383,7 @@ static cf_text_content content_of(const field_data *field) {
 
     const uint32_t tail = text->length - field->marked.to;
     const uint32_t across = field->marked.from + field->marked.length;
-    char *display = cf_alloc(&field->ctx->frame, (size_t)across + tail);
+    char *display = cf_frame_alloc(field->ctx, (size_t)across + tail);
 
     if (display == NULL) {
         return content;
@@ -641,7 +641,7 @@ static char letter_of(uint32_t key) {
  * which is the state the user can still do something about.
  */
 static void carry_out(field_data *field, bool remove) {
-    const cf_clipboard *board = field->ctx->clipboard;
+    const cf_clipboard *board = cf_clipboard_of(field->ctx);
     cf_text_edit *text = field->text;
     const cf_string run = selection(text);
 
@@ -663,14 +663,14 @@ static void carry_out(field_data *field, bool remove) {
  * fit.
  */
 static void bring_in(field_data *field) {
-    const cf_clipboard *board = field->ctx->clipboard;
+    const cf_clipboard *board = cf_clipboard_of(field->ctx);
 
     if (board == NULL || board->read == NULL) {
         return;
     }
 
     const uint32_t wanted = board->read(board->user_data, NULL, 0u).length;
-    char *scratch = wanted > 0u ? cf_alloc(&field->ctx->frame, wanted) : NULL;
+    char *scratch = wanted > 0u ? cf_frame_alloc(field->ctx, wanted) : NULL;
 
     if (scratch == NULL) {
         return;
@@ -692,7 +692,7 @@ static void bring_in(field_data *field) {
 static bool serve_shortcut(field_data *field, cf_event *event) {
     const char letter = letter_of(event->key);
     const uint32_t primary = (uint32_t)CF_MOD_CONTROL | (uint32_t)CF_MOD_META;
-    const bool trades = field->ctx->clipboard != NULL;
+    const bool trades = cf_clipboard_of(field->ctx) != NULL;
 
     if (letter == '\0' || (event->mods & (uint32_t)CF_MOD_ALT) != 0u ||
         (event->mods & primary) == 0u) {
@@ -768,16 +768,17 @@ typedef struct field_walk {
 
 static bool walk_of(const cf_ctx *ctx, const field_data *field, uint32_t slot, field_walk *walk) {
     const cf_tree *view = cf_frame_tree(ctx);
+    const cf_rect *box = cf_frame_rect(ctx, slot);
 
-    if (view == NULL || view->styles == NULL || ctx->rects == NULL || slot >= view->node_count ||
-        field->stack.count == 0u || (field->text->length == 0u && field->marked.length == 0u)) {
+    if (view == NULL || view->styles == NULL || box == NULL || field->stack.count == 0u ||
+        (field->text->length == 0u && field->marked.length == 0u)) {
         return false;
     }
 
     const cf_style *style = &view->styles[slot];
     const cf_font *primary = &field->stack.fonts[0];
 
-    walk->box = ctx->rects[slot];
+    walk->box = *box;
 
     const cf_edges insets = cf_box_resolve(style->padding, walk->box.width);
     const cf_edges stroke = cf_box_resolve(style->border, walk->box.width);
@@ -886,11 +887,7 @@ static void end_mark(field_data *field) {
 
     /* Somebody else's claim is not this box's to cancel: the field that owns it ends it in its
      * own handlers, and a box that lost the keyboard only drops its own bytes. */
-    if (field->ctx->composing == field->key) {
-        field->ctx->composing = CF_NO_NAME;
-        field->ctx->composition_box = (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
-        field->ctx->composition_id = CF_NO_ID;
-    }
+    cf_release_composition(field->ctx, field->key);
 }
 
 /*
@@ -935,12 +932,12 @@ static void mark_run(field_data *field, uint32_t slot, cf_string run) {
     /* Read back rather than trust what was written: the offsets were taken before the copy, and
      * a build that rewrote the value behind the composition's back can make them lie. */
     marked_read(field, state);
-    ctx->composing = field->marked.length != 0u ? field->key : CF_NO_NAME;
     /* The run's place inside the box, and which box: the answer a platform is told is read
      * against the rect this frame laid under it, so the candidate window follows the page rather
-     * than staying where the keystroke landed. */
-    ctx->composition_box = run_offset(field, slot);
-    ctx->composition_id = cf_store_id(&ctx->nodes, slot);
+     * than staying where the keystroke landed. A field that ended up with no run releases the
+     * claim, which is the same refusal the walk reads. */
+    cf_mark_composition(ctx, field->marked.length != 0u ? field->key : CF_NO_NAME,
+                        cf_node_id(ctx, slot), run_offset(field, slot));
 }
 
 static void field_key(cf_event *event, void *user_data) {
@@ -1219,7 +1216,7 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
      * preedit alive. Nothing is noted here - the states the ring holds are the ones the field's
      * own keys produced, not the ones a build wrote behind them. The run the block carries is
      * read once, so every walk of this frame answers from one copy. */
-    field_state *held = field_hold(data, ctx->composing == data->key);
+    field_state *held = field_hold(data, cf_composing(ctx) == data->key);
 
     marked_read(data, held);
 
@@ -1227,7 +1224,7 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
      * a method was deciding hands the bytes back rather than going on painting a preedit nobody
      * can commit. The claim is gone by the time this build runs, because the events were served
      * before the frame began. */
-    if (data->marked.length != 0u && ctx->composing != data->key) {
+    if (data->marked.length != 0u && cf_composing(ctx) != data->key) {
         end_mark(data);
     }
 
@@ -1248,10 +1245,11 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
     /* The field paints its own bytes rather than passing them to a label: the
      * box that holds the value is the box the theme styles by focus, and a caret
      * the theme hands out has to reach the lines it stands among. */
-    node.style = ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_FIELD].base : cf_style_default();
-    node.style.color = (cf_opt_color){.present = true,
-                                      .value = ctx->theme != NULL ? ctx->theme->ink
-                                                                  : (cf_color){0u, 0u, 0u, 255u}};
+    const cf_theme *theme = cf_theme_of(ctx);
+
+    node.style = theme != NULL ? theme->variants[CF_ROLE_FIELD].base : cf_style_default();
+    node.style.color = (cf_opt_color){
+        .present = true, .value = theme != NULL ? theme->ink : (cf_color){0u, 0u, 0u, 255u}};
 
     if (stack != NULL && stack->fonts != NULL && stack->count > 0u) {
         cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);

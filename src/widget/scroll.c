@@ -26,7 +26,15 @@ static uint32_t content_of(const cf_ctx *ctx, uint32_t viewport_slot) {
 static void scroll_pointer(cf_event *event, void *user_data) {
     scroll_data *scroll = user_data;
 
-    if (event->type != CF_EVENT_SCROLL || scroll->ctx->rects == NULL) {
+    if (event->type != CF_EVENT_SCROLL) {
+        return;
+    }
+
+    /* A frame that laid nothing has no viewport to walk within, and the notch is measured
+     * against that box rather than assumed from the declaration. */
+    const cf_rect *viewport = cf_frame_rect(scroll->ctx, event->target);
+
+    if (viewport == NULL) {
         return;
     }
 
@@ -39,8 +47,14 @@ static void scroll_pointer(cf_event *event, void *user_data) {
 
     /* The content's own rect is its whole height: the wrapper hugs what the
      * build declared, however little the viewport shows of it. */
-    const float viewport_height = scroll->ctx->rects[event->target].height;
-    const float content_height = scroll->ctx->rects[content_slot].height;
+    const cf_rect *content = cf_frame_rect(scroll->ctx, content_slot);
+
+    if (content == NULL) {
+        return;
+    }
+
+    const float viewport_height = viewport->height;
+    const float content_height = content->height;
 
     const float walked = cf_scroll_clamp(held->offset + event->wheel.y * WHEEL_NOTCH,
                                          viewport_height, content_height);
@@ -91,8 +105,9 @@ cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint
 
     viewport_children[0] = *content;
 
-    node.style =
-        ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
+    const cf_theme *theme = cf_theme_of(ctx);
+
+    node.style = theme != NULL ? theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
     /* A plain scroller announces as the region it is: what is worth saying about it is what it
      * holds, and a bridge that says "scroll area" at least tells a person where they are. */

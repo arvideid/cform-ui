@@ -263,6 +263,22 @@ cf_name cf_ctx_key(cf_ctx *ctx, const char *chars);
 void *cf_frame_alloc(cf_ctx *ctx, size_t size);
 
 /*
+ * The design system this frame's roles are styled from, or NULL for a page that styles every
+ * box it declares. Borrowed from whoever set it - a host run through cf_app_run hands the one its
+ * config named, and a host running the pipeline itself sets one when it wants roles to mean
+ * something - so the answer is good for as long as the context is, and a build that keeps a style
+ * around reads it again the frame after.
+ */
+const cf_theme *cf_theme_of(const cf_ctx *ctx);
+
+/*
+ * Where a widget may put bytes a person asked out of the page, or NULL for a host that offers no
+ * such place. A field answers a refusal by keeping its selection rather than by failing, so a
+ * page with no clipboard still types, cuts back to nothing and pastes nothing.
+ */
+const cf_clipboard *cf_clipboard_of(const cf_ctx *ctx);
+
+/*
  * A block of build state keyed by an interned name. Every request under the
  * same name answers the same memory, whatever the declaration around it
  * does, and the block starts zeroed. A request larger than the one before
@@ -437,6 +453,22 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root);
 
 /* The view cf_layout reads, or NULL before this frame's diff has built one. */
 const cf_tree *cf_frame_tree(const cf_ctx *ctx);
+
+/*
+ * The slot this frame's root was declared at, CF_NO_LINK while nothing has been diffed. The same
+ * number cf_diff answered, readable after the declaration is gone: a panel that draws over the
+ * page, or a host that wants the root's box rather than the offer it was laid into, asks here.
+ * Slots are good for this frame only, which is what cf_node_id is for.
+ */
+uint32_t cf_frame_root(const cf_ctx *ctx);
+
+/*
+ * Where this frame laid the box a slot names, in the logical points the layout was given, or NULL
+ * when the frame laid nothing - before its first layout, or after one a refused arena stopped.
+ * A box the frame did not declare is answered the same way, so a stale slot reads as no box
+ * instead of as someone else's rectangle.
+ */
+const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot);
 
 /*
  * Applies the theme to this frame's view: a node that declares a role reads
@@ -715,5 +747,39 @@ bool cf_frame_takes_text(const cf_ctx *ctx);
  * belongs to. A box that has left the view answers nothing, which is the run leaving with it.
  */
 cf_rect cf_frame_composition_rect(const cf_ctx *ctx);
+
+/*
+ * The field holding the run an input method is still deciding, CF_NO_NAME when the page is
+ * deciding nothing. A field compares this against its own key before it declares a preedit, so
+ * two boxes on one page never both underline a run the method only means one of them.
+ */
+cf_name cf_composing(const cf_ctx *ctx);
+
+/*
+ * Where the run an input method is still deciding sits inside the box it stands in, in the logical
+ * points the field staged, or a rect of no extent while the page is deciding nothing. A build reads
+ * this rather than cf_frame_composition_rect because a build runs before the frame has laid the box
+ * the run lives in: the offset inside the box is already known, the box is not, and a page that
+ * draws its own candidate band lays it from the number it can have.
+ */
+cf_rect cf_composition_run(const cf_ctx *ctx);
+
+/*
+ * Stages a run that has not been settled yet: the field holding it, named by the key its
+ * declaration was given, the box it stands in, and where inside that box the run sits in logical
+ * points. The box is read again on every frame that asks, so a candidate window follows a page
+ * that scrolls under a run the method has not finished.
+ *
+ * A name that was not given ends the run instead, leaving nothing a platform could place a window
+ * beside - which is how a commit that arrived with no bytes left looks to the shell.
+ */
+void cf_mark_composition(cf_ctx *ctx, cf_name key, cf_id box, cf_rect run);
+
+/*
+ * Hands the run back, and only when this field is the one holding it. Somebody else's claim is
+ * not this box's to cancel: the field that owns it ends it in its own handlers, and a box that
+ * lost the keyboard drops its own bytes and leaves the claim standing where it was.
+ */
+void cf_release_composition(cf_ctx *ctx, cf_name key);
 
 #endif

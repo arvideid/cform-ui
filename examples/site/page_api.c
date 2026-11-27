@@ -227,10 +227,22 @@ static const api_symbol node_symbols[] = {
     {"cf_frame_alloc", "void *cf_frame_alloc(cf_ctx *ctx, size_t size);",
      "Bytes the frame owns and the next cf_frame_begin wipes, or NULL when the frame has taken "
      "more than it was sized for."},
+    {"cf_theme_of", "const cf_theme *cf_theme_of(const cf_ctx *ctx);",
+     "The design system this frame's roles are styled from, or NULL for a page that styles every "
+     "box it declares."},
+    {"cf_clipboard_of", "const cf_clipboard *cf_clipboard_of(const cf_ctx *ctx);",
+     "Where a widget may put bytes a person asked out of the page, or NULL for a host that offers "
+     "no such place."},
     {"cf_diff", "uint32_t cf_diff(cf_ctx *ctx, const cf_node *root);",
      "Reconciles a declaration against the retained tree and answers the root's slot."},
     {"cf_frame_tree", "const cf_tree *cf_frame_tree(const cf_ctx *ctx);",
      "The view the layout reads, or NULL before this frame's diff built one."},
+    {"cf_frame_root", "uint32_t cf_frame_root(const cf_ctx *ctx);",
+     "The slot this frame's root was declared at, and no link at all while nothing has been "
+     "diffed."},
+    {"cf_frame_rect", "const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot);",
+     "Where this frame laid a box, or NULL when the frame laid nothing and for a slot it never "
+     "declared - so a stale number reads as no box rather than as someone else's rectangle."},
     {"cf_frame_resolve", "void cf_frame_resolve(cf_ctx *ctx);",
      "Applies the theme to the view, between the diff that built it and the layout that reads it."},
     {"cf_frame_layout",
@@ -276,6 +288,20 @@ static const api_symbol node_symbols[] = {
      "Where the run an input method is still deciding stands, taken from the box this frame laid "
      "under it - the number a candidate window is placed with, and one that follows a page that "
      "moves."},
+    {"cf_composing", "cf_name cf_composing(const cf_ctx *ctx);",
+     "The field holding a run that has not been settled, so two boxes on one page never both "
+     "underline a run the method only means one of them."},
+    {"cf_composition_run", "cf_rect cf_composition_run(const cf_ctx *ctx);",
+     "Where the undecided run sits inside its box, which is the half a build can know before the "
+     "box has been laid."},
+    {"cf_mark_composition",
+     "void cf_mark_composition(cf_ctx *ctx, cf_name key, cf_id box, "
+     "cf_rect run);",
+     "Stages a run an input method has not finished, under the field's own name; a name that was "
+     "not given ends the run instead."},
+    {"cf_release_composition", "void cf_release_composition(cf_ctx *ctx, cf_name key);",
+     "Hands the run back, and only when this field is the one holding it, so a box that lost the "
+     "keyboard cannot cancel somebody else's claim."},
     {"cf_state", "void *cf_state(cf_ctx *ctx, cf_name key, size_t size);",
      "A block of build state under a name, zeroed once, kept while it is asked for and retired a "
      "frame after it is not."},

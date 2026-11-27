@@ -310,6 +310,16 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
 }
 
 /*
+ * The claim, the box it stands in and the run inside it are one state, written and cleared whole:
+ * a reader that finds no claim finds no numbers to place, and a run is never left held by nobody.
+ */
+static void drop_composition(cf_ctx *ctx) {
+    ctx->composing = CF_NO_NAME;
+    ctx->composition_box = (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    ctx->composition_id = CF_NO_ID;
+}
+
+/*
  * What a move of the keyboard does to a run an input method was holding: the claim goes back,
  * because the method feeds the keyboard and the keyboard has changed hands. The box that held
  * the run finds the claim gone at its next build and drops the run with it, so a preedit never
@@ -317,9 +327,7 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
  * goes empty in the same frame, since cf_frame_composition_rect reads the same claim.
  */
 static void hand_keyboard_back(cf_ctx *ctx) {
-    ctx->composing = CF_NO_NAME;
-    ctx->composition_box = (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
-    ctx->composition_id = CF_NO_ID;
+    drop_composition(ctx);
 }
 
 /*
@@ -753,4 +761,39 @@ cf_rect cf_frame_composition_rect(const cf_ctx *ctx) {
 
     return (cf_rect){box.x + ctx->composition_box.x, box.y + ctx->composition_box.y,
                      ctx->composition_box.width, ctx->composition_box.height};
+}
+
+cf_name cf_composing(const cf_ctx *ctx) {
+    return ctx == NULL ? CF_NO_NAME : ctx->composing;
+}
+
+/* The run and the claim on it are staged and cleared together, whole, by the helpers here and
+ * nothing else, so this is the plain read. */
+cf_rect cf_composition_run(const cf_ctx *ctx) {
+    return ctx == NULL ? (cf_rect){0.0f, 0.0f, 0.0f, 0.0f} : ctx->composition_box;
+}
+
+void cf_mark_composition(cf_ctx *ctx, cf_name key, cf_id box, cf_rect run) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    /* A field with no key is a box no name can find again, so the claim it would hold is one no
+     * frame could read back: the run ends rather than going out under a name nobody answers. */
+    if (key == CF_NO_NAME) {
+        drop_composition(ctx);
+        return;
+    }
+
+    ctx->composing = key;
+    ctx->composition_box = run;
+    ctx->composition_id = box;
+}
+
+void cf_release_composition(cf_ctx *ctx, cf_name key) {
+    if (ctx == NULL || key == CF_NO_NAME || ctx->composing != key) {
+        return;
+    }
+
+    drop_composition(ctx);
 }

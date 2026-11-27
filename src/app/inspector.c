@@ -64,13 +64,16 @@ static panel_counts count_of(const cf_ctx *ctx) {
     return counts;
 }
 
-static bool list_room(cf_arena *arena, cf_command_list *out) {
+/* The panel grows its commands out of the same frame arena a build does, so
+ * an exhausted one is refused the way a refused label is: the panel simply
+ * stops drawing rather than writing past a stream nobody sized. */
+static bool list_room(cf_ctx *ctx, cf_command_list *out) {
     if (out->count < out->capacity) {
         return true;
     }
 
     const uint32_t capacity = out->capacity < FIRST_COMMANDS ? FIRST_COMMANDS : out->capacity * 2u;
-    cf_command *store = cf_alloc(arena, (size_t)capacity * sizeof *store);
+    cf_command *store = cf_frame_alloc(ctx, (size_t)capacity * sizeof *store);
 
     if (store == NULL) {
         return false;
@@ -87,8 +90,8 @@ static bool list_room(cf_arena *arena, cf_command_list *out) {
     return true;
 }
 
-static void append_fill(cf_arena *arena, cf_command_list *out, cf_rect rect) {
-    if (!list_room(arena, out)) {
+static void append_fill(cf_ctx *ctx, cf_command_list *out, cf_rect rect) {
+    if (!list_room(ctx, out)) {
         return;
     }
 
@@ -96,8 +99,8 @@ static void append_fill(cf_arena *arena, cf_command_list *out, cf_rect rect) {
         (cf_command){.kind = CF_COMMAND_FILL, .rect = rect, .color = PANEL_FILL};
 }
 
-static void append_edge(cf_arena *arena, cf_command_list *out, cf_rect rect) {
-    if (!list_room(arena, out)) {
+static void append_edge(cf_ctx *ctx, cf_command_list *out, cf_rect rect) {
+    if (!list_room(ctx, out)) {
         return;
     }
 
@@ -123,7 +126,7 @@ static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *
     const int written = vsnprintf(bytes, LINE_BYTES, format, arguments);
     va_end(arguments);
 
-    if (written <= 0 || (uint32_t)written >= LINE_BYTES || !list_room(&ctx->frame, out)) {
+    if (written <= 0 || (uint32_t)written >= LINE_BYTES || !list_room(ctx, out)) {
         return;
     }
 
@@ -187,21 +190,25 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     }
 
     const float height = line_height(fonts);
-    const cf_rect page =
-        ctx->rects != NULL ? ctx->rects[ctx->root_slot] : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    /* The panel is pinned to the page it reports on. A frame that laid nothing answers no root and
+     * no box, and the corner the reading starts from is then the origin rather than a rectangle
+     * that was never measured. */
+    const uint32_t root = cf_frame_root(ctx);
+    const cf_rect *page = root != CF_NO_LINK ? cf_frame_rect(ctx, root) : NULL;
+    const cf_rect canvas = page != NULL ? *page : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
     const float panel_height = PANEL_PADDING * 2.0f + height * (float)PANEL_LINES;
 
     /* The corner the reading starts away from. A panel pinned to the origin
      * sits over the first line a reader meets, and the numbers are meant to be
      * read beside a page rather than instead of it. */
     const cf_rect panel = {
-        .x = page.width > PANEL_WIDTH ? page.x + page.width - PANEL_WIDTH : page.x,
-        .y = page.height > panel_height ? page.y + page.height - panel_height : page.y,
+        .x = canvas.width > PANEL_WIDTH ? canvas.x + canvas.width - PANEL_WIDTH : canvas.x,
+        .y = canvas.height > panel_height ? canvas.y + canvas.height - panel_height : canvas.y,
         .width = PANEL_WIDTH,
         .height = panel_height};
 
-    append_fill(&ctx->frame, out, panel);
-    append_edge(&ctx->frame, out, panel);
+    append_fill(ctx, out, panel);
+    append_edge(ctx, out, panel);
 
     if (fonts == NULL || height == 0.0f) {
         return;
@@ -215,8 +222,8 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     append_line(ctx, out, fonts, panel, 1u, height, "nodes %u", counts.nodes);
     append_line(ctx, out, fonts, panel, 2u, height, "dirty %u", counts.dirty);
     append_line(ctx, out, fonts, panel, 3u, height, "commands %u", painted);
-    append_line(ctx, out, fonts, panel, 4u, height, "page %ux%u", round_points(page.width),
-                round_points(page.height));
+    append_line(ctx, out, fonts, panel, 4u, height, "page %ux%u", round_points(canvas.width),
+                round_points(canvas.height));
     append_line(ctx, out, fonts, panel, 5u, height, "frame %uus", frame_us);
 
     /* Read last: the walk wants the rects cf_frame_layout wrote, and a page with no focused box is

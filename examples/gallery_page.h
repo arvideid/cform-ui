@@ -1456,8 +1456,8 @@ static cf_node make_composed_demo(gallery_host *host, cf_ctx *ctx) {
     /* A build runs before the frame has laid anything, so where a run stands on the page is not
      * knowable here - only where it stands inside its box, which is what the widget staged and
      * what an out-of-flow child measures its insets from. The shell is handed the sum. */
-    const bool weighing = ctx->composing == entry.key;
-    const cf_rect inside = weighing ? ctx->composition_box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    const bool weighing = cf_composing(ctx) == entry.key;
+    const cf_rect inside = cf_composition_run(ctx);
 
     cf_style strip = cf_style_default();
     strip.position = CF_POSITION_ABSOLUTE;

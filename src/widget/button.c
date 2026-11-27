@@ -23,7 +23,15 @@ static void button_pointer(cf_event *event, void *user_data) {
         return;
     }
 
-    if (event->type != CF_EVENT_POINTER_UP || button->ctx->rects == NULL) {
+    if (event->type != CF_EVENT_POINTER_UP) {
+        return;
+    }
+
+    /* A frame that laid nothing has no box a release could land inside, and a slot this frame
+     * did not declare reads the same way. */
+    const cf_rect *rect = cf_frame_rect(button->ctx, event->target);
+
+    if (rect == NULL) {
         return;
     }
 
@@ -31,10 +39,8 @@ static void button_pointer(cf_event *event, void *user_data) {
         return;
     }
 
-    const cf_rect rect = button->ctx->rects[event->target];
-
-    if (event->position.x < rect.x || event->position.x >= rect.x + rect.width ||
-        event->position.y < rect.y || event->position.y >= rect.y + rect.height) {
+    if (event->position.x < rect->x || event->position.x >= rect->x + rect->width ||
+        event->position.y < rect->y || event->position.y >= rect->y + rect->height) {
         return;
     }
 
@@ -69,8 +75,9 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
     /* The declared style is the resting box: the resolver reads the theme's
      * variants over it by interaction state, so the widget only has to start
      * from the family's base. */
-    node.style =
-        ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_BUTTON].base : cf_style_default();
+    const cf_theme *theme = cf_theme_of(ctx);
+
+    node.style = theme != NULL ? theme->variants[CF_ROLE_BUTTON].base : cf_style_default();
     node.key = cf_ctx_key(ctx, name);
     node.role = CF_ROLE_BUTTON;
     /* The family above is what the painter reads; this is what a bridge calls the box. */

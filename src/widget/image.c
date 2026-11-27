@@ -17,6 +17,8 @@ cf_node cf_image(cf_ctx *ctx, const char *name, const cf_image_content *content)
      * sentence for the picture sets `cf_node.name` on the returned box. One without it is
      * announced as an image that says nothing, which is the honest reading of an unlabeled one. */
     node.access = CF_ACCESS_IMAGE;
-    node.style = ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_IMAGE].base : cf_style_default();
+    const cf_theme *theme = cf_theme_of(ctx);
+
+    node.style = theme != NULL ? theme->variants[CF_ROLE_IMAGE].base : cf_style_default();
     return node;
 }
