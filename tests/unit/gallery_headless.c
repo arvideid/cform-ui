@@ -50,6 +50,12 @@ static cf_backend shell_backend;
  * geometry against the same offer the layout was measured in. */
 static cf_rect current_viewport;
 
+/* The block the page declares from, the way a driver's own program keeps one. It is a
+ * fixture of this tier rather than a global of the page: the cases read the buffers the
+ * field edited and the line a handler wrote, which is what a host that owns its page can
+ * see, and one block stands for the one window a case is driving. */
+static gallery_host host;
+
 /* The fake font the page measures and paints through: a fixed rhythm and a
  * fixed advance, the same table shape a real font backend answers, so every
  * position an assertion derives from text is a number the test knows. */
@@ -446,7 +452,7 @@ static void flush_frames(void) {
 
     while (cf_frame_requested(&session) && guard < 1000u) {
         cf_command_list list = {0};
-        cf_frame_run(&session, build, NULL, size, step, &list);
+        cf_frame_run(&session, build, &host, size, step, &list);
         record_frame(&list);
         ++guard;
     }
@@ -467,7 +473,7 @@ static void step(cf_event event) {
      * disabled a button would leave it still enabled to the very last
      * event of the batch. */
     cf_command_list list = {0};
-    cf_frame_run(&session, build, NULL, (cf_size){current_viewport.width, current_viewport.height},
+    cf_frame_run(&session, build, &host, (cf_size){current_viewport.width, current_viewport.height},
                  1.0f / 60.0f, &list);
     record_frame(&list);
     flush_frames();
@@ -506,21 +512,17 @@ static void start_session(cf_size size) {
     shell_backend = cf_backend_recorder(&recorder);
     shell_backend.create_texture = fake_create_texture;
 
-    theme = cf_theme_default();
-    body_font = mono_font;
-    title_font = mono_font;
-    body = (cf_text_stack){.fonts = &body_font, .count = 1u};
-    title = (cf_text_stack){.fonts = &title_font, .count = 1u};
-    gallery_init_assets();
-    logo = (cf_image_content){
-        .texture = shell_backend.create_texture(shell_backend.user_data, 8u, 8u, checker),
+    host.theme = cf_theme_default();
+    gallery_host_open(&host, mono_font, mono_font);
+    host.logo = (cf_image_content){
+        .texture = shell_backend.create_texture(shell_backend.user_data, 8u, 8u, host.checker),
         .width = 32.0f,
         .height = 32.0f};
 
     current_viewport = (cf_rect){0.0f, 0.0f, size.width, size.height};
 
     cf_command_list list = {0};
-    cf_frame_run(&session, build, NULL, size, 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, &host, size, 1.0f / 60.0f, &list);
     record_frame(&list);
     session_open = true;
 }
@@ -643,7 +645,7 @@ static bool page_scroll_to(float offset) {
     held->offset = offset;
 
     cf_command_list list = {0};
-    cf_frame_run(&session, build, NULL, current_size(), 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, &host, current_size(), 1.0f / 60.0f, &list);
     record_frame(&list);
     return true;
 }
@@ -778,10 +780,10 @@ static bool focus_the_field(void) {
         return false;
     }
 
-    typed.length = 0u;
+    host.typed.length = 0u;
     /* The refusal count is the buffer's own statement about the keys it turned away, so
      * a case that means to read it starts from none. */
-    typed.refusals = 0u;
+    host.typed.refusals = 0u;
     field_press = (cf_point){.x = field.x + 30.0f, .y = field.y + field.height / 2.0f};
     step(press_at(field_press.x, field_press.y));
     step(release_at(field_press.x, field_press.y));
@@ -822,10 +824,10 @@ static bool focus_the_memo(void) {
     CF_CHECK(box.height > 2.0f * FIELD_HEIGHT - 1.0f,
              "and the box it was painted in is the two rows the build stated");
 
-    memo.length = 0u;
-    memo.refusals = 0u;
-    memo.caret = 0u;
-    memo.mark = 0u;
+    host.memo.length = 0u;
+    host.memo.refusals = 0u;
+    host.memo.caret = 0u;
+    host.memo.mark = 0u;
     memo_press = (cf_point){.x = box.x + 30.0f, .y = box.y + box.height / 2.0f};
     step(press_at(memo_press.x, memo_press.y));
     step(release_at(memo_press.x, memo_press.y));
@@ -852,8 +854,8 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
      * what the last frame asked for is what the case then checks. */
     end_session();
 
-    CF_CHECK(typed.length == 10u, "five plus six minus the deleted character is ten bytes");
-    CF_CHECK(memcmp(typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
+    CF_CHECK(host.typed.length == 10u, "five plus six minus the deleted character is ten bytes");
+    CF_CHECK(memcmp(host.typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
     CF_CHECK(last_cursor == CF_CURSOR_TEXT, "and the pointer over the field asks for the I-beam");
     CF_CHECK(last_text, "and the field the press focused asks the device for written text");
 }
@@ -924,16 +926,16 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
 
     CF_CHECK(board.length == 2u && board.text[0] == 'l' && board.text[1] == 'o',
              "the chord puts the field's selection on the desk the page was given");
-    CF_CHECK(typed.length == 5u, "and copy takes no byte out of the buffer");
+    CF_CHECK(host.typed.length == 5u, "and copy takes no byte out of the buffer");
 
     step(chord('x', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.length == 3u, "cut drops the bytes the host agreed to hold");
+    CF_CHECK(host.typed.length == 3u, "cut drops the bytes the host agreed to hold");
 
     script_holds(&board, " world");
     step(chord('v', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.length == 9u && memcmp(typed_bytes, "hel world", 9) == 0,
+    CF_CHECK(host.typed.length == 9u && memcmp(host.typed_bytes, "hel world", 9) == 0,
              "and paste writes what the host holds over what the field had");
 
     end_session();
@@ -955,20 +957,21 @@ static void the_gallery_field_walks_its_own_typing_back(void) {
     step(typed_text("hello"));
     step(typed_text(" world"));
 
-    CF_CHECK(typed.length == 11u, "the page holds what the two runs typed");
+    CF_CHECK(host.typed.length == 11u, "the page holds what the two runs typed");
 
     step(chord('z', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.length == 5u && memcmp(typed_bytes, "hello", 5) == 0,
+    CF_CHECK(host.typed.length == 5u && memcmp(host.typed_bytes, "hello", 5) == 0,
              "a chord in a later frame walks the earlier run back out");
 
     step(chord('z', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.length == 0u, "and one more reaches where the typing started");
+    CF_CHECK(host.typed.length == 0u, "and one more reaches where the typing started");
 
     step(chord('y', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.length == 5u, "and the key beside it comes forward to where the walk stood");
+    CF_CHECK(host.typed.length == 5u,
+             "and the key beside it comes forward to where the walk stood");
 
     end_session();
 }
@@ -990,24 +993,27 @@ static void the_gallery_field_steps_a_word_and_holds_the_value(void) {
     step(typed_text("let me in"));
     step(key_down(CF_KEY_HOME));
 
-    CF_CHECK(typed.caret == 0u && typed.mark == 0u, "the caret starts at the front of the value");
+    CF_CHECK(host.typed.caret == 0u && host.typed.mark == 0u,
+             "the caret starts at the front of the value");
 
     step(word_arrow(CF_KEY_RIGHT, 0u));
 
-    CF_CHECK(typed.caret == 3u && typed.mark == 3u, "one word key spends the word it stands in");
+    CF_CHECK(host.typed.caret == 3u && host.typed.mark == 3u,
+             "one word key spends the word it stands in");
 
     step(word_arrow(CF_KEY_RIGHT, (uint32_t)CF_MOD_SHIFT));
 
-    CF_CHECK(typed.caret == 6u && typed.mark == 3u,
+    CF_CHECK(host.typed.caret == 6u && host.typed.mark == 3u,
              "with shift it crosses the blank and selects the run beyond it");
 
     step(chord('a', (uint32_t)CF_MOD_CONTROL));
 
-    CF_CHECK(typed.caret == 9u && typed.mark == 0u, "and the chord holds the whole value");
+    CF_CHECK(host.typed.caret == 9u && host.typed.mark == 0u,
+             "and the chord holds the whole value");
 
     step(typed_text("x"));
 
-    CF_CHECK(typed.length == 1u && typed_bytes[0] == 'x',
+    CF_CHECK(host.typed.length == 1u && host.typed_bytes[0] == 'x',
              "so the next run typed goes over all of it");
 
     end_session();
@@ -1034,26 +1040,27 @@ static void the_gallery_field_edits_a_joined_picture_as_one_character(void) {
 
     step(typed_text(joined));
 
-    CF_CHECK(typed.length == 18u, "the family lands whole: eighteen bytes, one character");
+    CF_CHECK(host.typed.length == 18u, "the family lands whole: eighteen bytes, one character");
 
     step(typed_text("z"));
     step(key_down(CF_KEY_BACKSPACE));
 
-    CF_CHECK(typed.length == 18u, "the letter beside it goes on its own key");
+    CF_CHECK(host.typed.length == 18u, "the letter beside it goes on its own key");
 
     step(key_down(CF_KEY_BACKSPACE));
 
-    CF_CHECK(typed.length == 0u, "and one more takes the joined pictures whole");
+    CF_CHECK(host.typed.length == 0u, "and one more takes the joined pictures whole");
 
     step(typed_text(joined));
     step(shift_arrow(CF_KEY_LEFT));
 
-    CF_CHECK(typed.caret == 0u && typed.mark == 18u,
+    CF_CHECK(host.typed.caret == 0u && host.typed.mark == 18u,
              "shift+left holds the whole character, not the byte it ends on");
 
     step(typed_text("Q"));
 
-    CF_CHECK(typed.length == 1u && typed_bytes[0] == 'Q', "and what is written replaces it");
+    CF_CHECK(host.typed.length == 1u && host.typed_bytes[0] == 'Q',
+             "and what is written replaces it");
 
     end_session();
 }
@@ -1199,7 +1206,7 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
 
     step(holding("ni"));
 
-    CF_CHECK(typed.length == 0u && typed.refusals == 0u,
+    CF_CHECK(host.typed.length == 0u && host.typed.refusals == 0u,
              "a run still being weighed is not the value the page reads back");
     CF_CHECK(page_reads("the buffer holds 0 bytes (0 refused)"),
              "and the echo line says so beside letters it does not hold");
@@ -1228,7 +1235,7 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
              "and a page that moved under the run moved the box the candidates stand beside");
     CF_CHECK(the_run_is_ruled(),
              "the rule the paint lays and the box a platform is told are still the same numbers");
-    CF_CHECK(typed.length == 0u, "and none of it reached the value");
+    CF_CHECK(host.typed.length == 0u, "and none of it reached the value");
 
     step(holding("nihao"));
 
@@ -1237,7 +1244,7 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
 
     step(typed_text("\xE6\x9D\x8E"));
 
-    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+    CF_CHECK(host.typed.length == 3u && memcmp(host.typed_bytes, "\xE6\x9D\x8E", 3) == 0,
              "the character chosen out of it goes in where the run stood");
     CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
              "and the run it was decided from is gone");
@@ -1250,12 +1257,12 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
     step(holding("si"));
     step(key_down(CF_KEY_BACKSPACE));
 
-    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+    CF_CHECK(host.typed.length == 3u && memcmp(host.typed_bytes, "\xE6\x9D\x8E", 3) == 0,
              "a key the method already spent takes no byte the value holds");
 
     step(holding(""));
 
-    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+    CF_CHECK(host.typed.length == 3u && memcmp(host.typed_bytes, "\xE6\x9D\x8E", 3) == 0,
              "a run given up takes its bytes back and adds none");
     CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
              "and the box it stood in goes empty the same frame");
@@ -1268,7 +1275,8 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
 
     CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
              "Tab walks the ring and takes the run with it");
-    CF_CHECK(typed.length == 3u, "and a run nobody committed never reached the buffer behind it");
+    CF_CHECK(host.typed.length == 3u,
+             "and a run nobody committed never reached the buffer behind it");
     CF_CHECK(the_entry_paints("\xE6\x9D\x8E"),
              "and the box the keyboard left goes on painting what it is actually holding");
     CF_CHECK(!the_entry_paints("san"), "nor is the run left standing on it");
@@ -1328,7 +1336,7 @@ static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
              "while that box goes on painting the character it was given");
     CF_CHECK(page_reads("the memo holds 0 bytes"),
              "and the box the keyboard moved to took no byte of a run it never decided");
-    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+    CF_CHECK(host.typed.length == 3u && memcmp(host.typed_bytes, "\xE6\x9D\x8E", 3) == 0,
              "what the person settled on stays, whoever the keyboard went to next");
 
     end_session();
@@ -1410,10 +1418,10 @@ static void the_gallery_page_lays_its_strip_where_the_shell_is_told(void) {
         return;
     }
 
-    composed.length = 0u;
-    composed.refusals = 0u;
-    composed.caret = 0u;
-    composed.mark = 0u;
+    host.composed.length = 0u;
+    host.composed.refusals = 0u;
+    host.composed.caret = 0u;
+    host.composed.mark = 0u;
 
     step(press_at(box.x + 30.0f, box.y + box.height / 2.0f));
     step(release_at(box.x + 30.0f, box.y + box.height / 2.0f));
@@ -1444,7 +1452,7 @@ static void the_gallery_page_lays_its_strip_where_the_shell_is_told(void) {
              "and a page that moved under a run the method has not finished moves the box with it");
     CF_CHECK(the_strip_stands_under_the_run(),
              "so the strip the page paints and the box the shell is told are still one number");
-    CF_CHECK(composed.length == 0u, "and none of it reached the value while the page moved");
+    CF_CHECK(host.composed.length == 0u, "and none of it reached the value while the page moved");
 
     step(holding(""));
 
@@ -1455,7 +1463,7 @@ static void the_gallery_page_lays_its_strip_where_the_shell_is_told(void) {
     CF_CHECK(!the_run_is_ruled(), "nothing is ruled under any more");
     CF_CHECK(page_reads("no run is standing in this box"),
              "the line under the box says what it said before the method started");
-    CF_CHECK(composed.length == 0u, "and giving up leaves no bytes behind in the value");
+    CF_CHECK(host.composed.length == 0u, "and giving up leaves no bytes behind in the value");
 
     end_session();
 }
@@ -1478,17 +1486,18 @@ static void the_gallery_field_says_what_it_had_no_room_for(void) {
 
     step(typed_text(wide));
 
-    CF_CHECK(typed.length == 41u && typed.refusals == 0u, "the first run fits the page's buffer");
+    CF_CHECK(host.typed.length == 41u && host.typed.refusals == 0u,
+             "the first run fits the page's buffer");
 
     step(typed_text(wide));
 
-    CF_CHECK(typed.length == 41u && typed.refusals == 1u,
+    CF_CHECK(host.typed.length == 41u && host.typed.refusals == 1u,
              "the one that would overflow it lands nowhere and is said");
 
     step(chord('a', (uint32_t)CF_MOD_CONTROL));
     step(typed_text(short_run));
 
-    CF_CHECK(typed.length == 25u && typed.refusals == 1u,
+    CF_CHECK(host.typed.length == 25u && host.typed.refusals == 1u,
              "and a run the selection freed is no refusal at all");
 
     end_session();
@@ -1513,13 +1522,13 @@ static void the_gallery_field_saves_on_enter_and_types_a_space(void) {
     step(typed_text("save me"));
     step(key_down(CF_KEY_SPACE));
 
-    CF_CHECK(typed.length == 7u, "a key down with no text alongside it writes no byte");
+    CF_CHECK(host.typed.length == 7u, "a key down with no text alongside it writes no byte");
     CF_CHECK(page_reads("asked to save: nothing since the page opened"),
              "and the space a person is typing asks the page to save nothing");
 
     step(typed_text(" "));
 
-    CF_CHECK(typed.length == 8u, "the character itself comes from the device as text");
+    CF_CHECK(host.typed.length == 8u, "the character itself comes from the device as text");
 
     step(key_down(CF_KEY_ENTER));
 
@@ -1547,7 +1556,7 @@ static void the_gallery_page_hears_the_value_move_and_not_the_caret(void) {
 
     step(typed_text("save me"));
 
-    CF_CHECK(typed.length == 7u && page_reads("changes the page heard: 1"),
+    CF_CHECK(host.typed.length == 7u && page_reads("changes the page heard: 1"),
              "one run of bytes is one report, however many it wrote");
 
     step(key_down(CF_KEY_LEFT));
@@ -1559,7 +1568,7 @@ static void the_gallery_page_hears_the_value_move_and_not_the_caret(void) {
 
     step(key_down(CF_KEY_BACKSPACE));
 
-    CF_CHECK(typed.length == 0u && page_reads("changes the page heard: 2"),
+    CF_CHECK(host.typed.length == 0u && page_reads("changes the page heard: 2"),
              "the key that took the bytes is the next report");
 
     end_session();
@@ -1585,7 +1594,7 @@ static void the_two_modes_answer_the_same_keys_differently(void) {
     step(key_down(CF_KEY_ENTER));
     step(typed_text("second"));
 
-    CF_CHECK(memo.length == 17u && memo_chars[10] == '\n',
+    CF_CHECK(host.memo.length == 17u && host.memo_chars[10] == '\n',
              "Enter writes the break a memo is declared to hold");
     CF_CHECK(page_reads("the memo holds 17 bytes and 1 break"),
              "and the caption says the break is in the value the page reads");
@@ -1594,11 +1603,11 @@ static void the_two_modes_answer_the_same_keys_differently(void) {
 
     step(key_down(CF_KEY_UP));
 
-    CF_CHECK(memo.caret == 6u, "one arrow steps onto the row above, six characters in");
+    CF_CHECK(host.memo.caret == 6u, "one arrow steps onto the row above, six characters in");
 
     step(shift_arrow(CF_KEY_DOWN));
 
-    CF_CHECK(memo.caret == 17u && memo.mark == 6u,
+    CF_CHECK(host.memo.caret == 17u && host.memo.mark == 6u,
              "and holding shift reaches down over the row it came back from");
 
     /* The shift above left a range held, and a key that writes takes what is selected: end
@@ -1607,12 +1616,12 @@ static void the_two_modes_answer_the_same_keys_differently(void) {
     step(key_down(CF_KEY_ENTER));
     step(typed_text("third"));
 
-    CF_CHECK(memo.length == 23u && page_reads("the memo holds 23 bytes and 2 break"),
+    CF_CHECK(host.memo.length == 23u && page_reads("the memo holds 23 bytes and 2 break"),
              "a third row lands in the value the same way");
 
     step(key_down(CF_KEY_UP));
 
-    CF_CHECK(memo.caret == 16u,
+    CF_CHECK(host.memo.caret == 16u,
              "and the arrow finds the row above it, which the box slides to show");
 
     /* The other box on the same page, with the other word said about it. */
@@ -1626,7 +1635,7 @@ static void the_two_modes_answer_the_same_keys_differently(void) {
 
     CF_CHECK(page_reads("asked to save: done memo"),
              "the single-line box hands the same key to the door the page put on it");
-    CF_CHECK(memo.length == 23u, "and adds no row to the value the other box is keeping");
+    CF_CHECK(host.memo.length == 23u, "and adds no row to the value the other box is keeping");
 
     end_session();
 }
@@ -2118,8 +2127,11 @@ static uint32_t shell_run(const cf_event *events, uint32_t count, cf_recorder *r
     shell_idle = 0u;
     shell_offer = current_size();
 
-    cf_app_run(
-        &(cf_app_config){.build = build, .backend = backend, .theme = theme, .fonts = &body});
+    cf_app_run(&(cf_app_config){.build = build,
+                                .build_user_data = &host,
+                                .backend = backend,
+                                .theme = host.theme,
+                                .fonts = &host.body});
 
     return recorder->count;
 }
@@ -2134,12 +2146,8 @@ static void the_inspector_lays_its_numbers_over_the_page(void) {
         return;
     }
 
-    theme = cf_theme_default();
-    body_font = mono_font;
-    title_font = mono_font;
-    body = (cf_text_stack){.fonts = &body_font, .count = 1u};
-    title = (cf_text_stack){.fonts = &title_font, .count = 1u};
-    gallery_init_assets();
+    host.theme = cf_theme_default();
+    gallery_host_open(&host, mono_font, mono_font);
     current_viewport = (cf_rect){0.0f, 0.0f, WINDOW_WIDTH, WINDOW_HEIGHT};
 
     /* QUIT is never in the event script; shell_poll synthesises it once
@@ -2651,6 +2659,38 @@ static void a_relation_names_the_box_the_page_carries(void) {
     end_session();
 }
 
+/* The page is declared from the block its driver handed the run: the faces it
+ * measures with, the buffers its fields write into and the line a handler says
+ * back all live there. A frame handed nothing instead states no page at all - a
+ * header with no face to measure would paint a box with words nobody can read -
+ * and the page returns whole the frame the block comes back. */
+static void a_page_handed_no_host_states_nothing(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    CF_CHECK(page_shows("cform gallery"), "the page names itself when its host is in hand");
+
+    cf_command_list bare = {0};
+    cf_frame_run(&session, build, NULL, current_size(), 1.0f / 60.0f, &bare);
+    record_frame(&bare);
+
+    uint32_t letters = 0u;
+    for (uint32_t i = 0u; i < recorded_count; ++i) {
+        if (recorded[i].kind == CF_COMMAND_TEXT) {
+            ++letters;
+        }
+    }
+
+    CF_CHECK(letters == 0u, "handed no host the frame paints no text, rather than half a page");
+    CF_CHECK(!page_shows("cform gallery"), "and the header the page is known by is not among them");
+
+    cf_command_list back = {0};
+    cf_frame_run(&session, build, &host, current_size(), 1.0f / 60.0f, &back);
+    record_frame(&back);
+    CF_CHECK(page_shows("cform gallery"), "and the page is whole again the frame its host returns");
+
+    end_session();
+}
+
 int main(void) {
     printf("gallery headless\n");
 
@@ -2686,6 +2726,7 @@ int main(void) {
     CF_RUN(a_bridge_asking_twice_sees_which_boxes_moved);
     CF_RUN(the_boxes_inside_a_live_region_are_reheard_under_their_own_ids);
     CF_RUN(a_relation_names_the_box_the_page_carries);
+    CF_RUN(a_page_handed_no_host_states_nothing);
 
     end_sessions();
     return CF_REPORT();

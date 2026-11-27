@@ -6,7 +6,8 @@
  * What is here is only the program around that page: the font the configure
  * step fetched, the window, the image the backend reads, and the shell that
  * runs the frames. The page itself lives in gallery_page.h, shared as source
- * with the headless tier so the two drivers cannot hold a page each.
+ * with the headless tier so the two drivers cannot hold a page each, and what
+ * the page reads is the one block this program keeps on its own stack.
  */
 #include <stdio.h>
 
@@ -24,12 +25,12 @@ int main(int argc, char **argv) {
      * overwrite it. */
     cf_sdl_install_log_sink();
 
-    theme = cf_theme_default();
-    body_font = cf_font_sdl(CFORM_GALLERY_FONT, BODY_POINT);
-    title_font = cf_font_sdl(CFORM_GALLERY_FONT, TITLE_POINT);
-    body = (cf_text_stack){.fonts = &body_font, .count = body_font.ops != NULL ? 1u : 0u};
-    title = (cf_text_stack){.fonts = &title_font, .count = title_font.ops != NULL ? 1u : 0u};
-    gallery_init_assets();
+    /* The faces are opened here and named once, so the page is declared from what its
+     * host holds rather than from anything the file keeps between runs. */
+    gallery_host host;
+    host.theme = cf_theme_default();
+    gallery_host_open(&host, cf_font_sdl(CFORM_GALLERY_FONT, BODY_POINT),
+                      cf_font_sdl(CFORM_GALLERY_FONT, TITLE_POINT));
 
     const cf_backend backend = cf_backend_sdl(&(cf_sdl_config){.title = "cform gallery",
                                                                .width = WINDOW_WIDTH,
@@ -47,14 +48,14 @@ int main(int argc, char **argv) {
      * slot promises - because a demo that needs an asset it cannot ship is a
      * demo that does not run. */
     if (argc > 1 && backend.load_image != NULL) {
-        if (!backend.load_image(backend.user_data, argv[1], &logo)) {
+        if (!backend.load_image(backend.user_data, argv[1], &host.logo)) {
             printf("gallery: %s is not an image this backend reads\n", argv[1]);
         }
     } else {
-        logo = (cf_image_content){.texture =
-                                      backend.create_texture(backend.user_data, 8u, 8u, checker),
-                                  .width = 32.0f,
-                                  .height = 32.0f};
+        host.logo = (cf_image_content){
+            .texture = backend.create_texture(backend.user_data, 8u, 8u, host.checker),
+            .width = 32.0f,
+            .height = 32.0f};
     }
 
     /* The desk's clipboard, named for the page: the field in chapter two copies,
@@ -64,9 +65,10 @@ int main(int argc, char **argv) {
     const cf_clipboard clipboard = cf_clipboard_sdl();
 
     cf_app_run(&(cf_app_config){.build = build,
+                                .build_user_data = &host,
                                 .backend = backend,
-                                .theme = theme,
-                                .fonts = &body,
+                                .theme = host.theme,
+                                .fonts = &host.body,
                                 .clipboard = &clipboard});
 
     /* The shell borrowed the backend and has returned, so the upload the page
@@ -75,13 +77,13 @@ int main(int argc, char **argv) {
      * process ends, which is what a long-lived host cannot afford.
      */
     if (backend.release_texture != NULL) {
-        backend.release_texture(backend.user_data, logo.texture);
+        backend.release_texture(backend.user_data, host.logo.texture);
     }
 
     /* The fonts go before the window: both were opened on the same platform, and
      * a teardown that stops it leaves a font with nothing to close through. */
-    cf_font_sdl_close(&body_font);
-    cf_font_sdl_close(&title_font);
+    cf_font_sdl_close(&host.body_font);
+    cf_font_sdl_close(&host.title_font);
 
     if (backend.destroy != NULL) {
         backend.destroy(backend.user_data);

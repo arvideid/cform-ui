@@ -7,8 +7,11 @@
  * A second translation unit would make every helper here static and unreachable
  * from the other, and the page is exactly the code a custom host must be able
  * to place in its own frame loop, so there is no library to carve out and no
- * rule the two drivers could fall out of step over. Each driver names its own
- * text stacks and uploads its own image before it runs a session.
+ * rule the two drivers could fall out of step over. What the page reads between
+ * frames - a theme, two faces, the buffers a field edits, the line a handler
+ * writes - is one gallery_host each driver keeps for itself and hands the run as
+ * its build's user data, so a driver can say which of its own values a frame
+ * moved and the page can hold nothing the driver cannot see.
  */
 
 #include <stdio.h>
@@ -76,6 +79,10 @@
  * is still a box a reader can see the edge of. */
 #define GRID_CELL 44.0f
 
+/* How much the field's value may hold, named once because two places have to agree on
+ * it: the buffer the host carries and the keyed block that remembers a submitted copy. */
+#define TYPED_BYTES 64u
+
 /* The lane the puck crosses and how long a run of it takes. The lane's width is
  * stated in points rather than stretched because the build places the puck by
  * the number the tween holds, and no layout has run to say how wide anything
@@ -92,67 +99,106 @@ typedef struct thumb_drag {
     float offset;
 } thumb_drag;
 
-static const cf_theme *theme;
-static cf_font body_font;
-static cf_font title_font;
-static cf_text_stack body;
-static cf_text_stack title;
-static cf_image_content logo;
+/*
+ * What the run owns and a frame does not.
+ *
+ * The faces a driver opened, the image it uploaded, the buffers a field edits in place
+ * and the lines a handler writes for the next frame to read. All of it lives in one
+ * block the driver keeps on its own stack and hands to every build, so a second window
+ * in the same process draws a second page instead of a second reader of the same bytes.
+ * These objects used to sit at file scope, which is the one thing a host fitting the
+ * framework into its own program cannot do twice.
+ *
+ * `ctx` is the context the last build ran in. An event handler is handed the host and
+ * nothing else - a cf_event carries no context - and it needs one to reach the keyed
+ * blocks the chapters keep their counters in. Every build writes it, so it is only ever
+ * read during the frame that wrote it.
+ */
+typedef struct gallery_host {
+    cf_ctx *ctx;
 
-/* The buffer the field edits in place: its extent is the build's to own, so it
- * outlives every frame that declares the field. */
-static char typed_bytes[64];
-static cf_text_edit typed = {.chars = typed_bytes, .capacity = sizeof typed_bytes};
+    const cf_theme *theme;
+    cf_font body_font;
+    cf_font title_font;
+    cf_text_stack body;
+    cf_text_stack title;
+    cf_image_content logo;
 
-/* The second field's buffer, in the mode that breaks lines: the same widget, the same
- * kind of extent, a different word about what Enter means. */
-static char memo_chars[96];
-static cf_text_edit memo = {.chars = memo_chars, .capacity = sizeof memo_chars};
+    /* The buffer the field edits in place: its extent is the host's to own, so it
+     * outlives every frame that declares the field. */
+    char typed_bytes[TYPED_BYTES];
+    cf_text_edit typed;
 
-/* The buffer of the box a method is deciding: the run it hands over is kept beside the value
- * rather than inside it, so committing is the only way the bytes get in. */
-static char composed_chars[48];
-static cf_text_edit composed = {.chars = composed_chars, .capacity = sizeof composed_chars};
+    /* The second field's buffer, in the mode that breaks lines: the same widget, the
+     * same kind of extent, a different word about what Enter means. */
+    char memo_chars[96];
+    cf_text_edit memo;
 
-/* The buffer of the field that has a caption named rather than drawn inside it. */
-static char related_chars[48];
-static cf_text_edit related = {.chars = related_chars, .capacity = sizeof related_chars};
+    /* The buffer of the box a method is deciding: the run it hands over is kept beside
+     * the value rather than inside it, so committing is the only way the bytes get in. */
+    char composed_chars[48];
+    cf_text_edit composed;
 
-/* Eight panel boxes and eight list rows are ever named at once, and a ring of
- * eight each never rewrites bytes a label in the same frame still points at.
- * The two keep separate rings because both declare in one frame. */
-static char row_bytes[8u][16u];
-static char panel_bytes[8u][16u];
-/* Generated, not fetched: the repo carries no binary it can regenerate. */
-static uint8_t checker[8u * 8u * 4u];
+    /* The buffer of the field that has a caption named rather than drawn inside it. */
+    char related_chars[48];
+    cf_text_edit related;
 
-/* Each driver calls this before its first frame: it builds the checker
- * pixels the logo falls back to when no image path was given. */
-static void gallery_init_assets(void) {
+    /* Eight panel boxes and eight list rows are ever named at once, and a ring of eight
+     * each never rewrites bytes a label in the same frame still points at. The two keep
+     * separate rings because both declare in one frame. */
+    char row_bytes[8u][16u];
+    char panel_bytes[8u][16u];
+
+    /* Generated, not fetched: the repo carries no binary it can regenerate. */
+    uint8_t checker[8u * 8u * 4u];
+
+    /* The lines that report state, each into its own buffer: the frame that writes the
+     * bytes is the frame that borrows them. */
+    char status_bytes[32];
+    char echo_bytes[96];
+    char submit_bytes[96];
+    char change_bytes[64];
+    char memo_bytes[96];
+    char list_bytes[64];
+    char motion_bytes[96];
+    char keyboard_bytes[96];
+    char leaving_bytes[96];
+    char spoken_bytes[64];
+    char live_bytes[64];
+    char again_bytes[64];
+    char caption_bytes[96];
+    char relate_bytes[96];
+    char compose_bytes[128];
+} gallery_host;
+
+/*
+ * The faces become the stacks, and the fallback pixels get drawn.
+ *
+ * A driver opens the two faces it wants - the window reads files, the headless tier
+ * answers with a table - and hands them here, because a stack that names a face the
+ * platform refused to open measures no line at all: the count says so rather than
+ * guessing. The checker is what the logo falls back to when no image path was given.
+ */
+static void gallery_host_open(gallery_host *host, cf_font body_font, cf_font title_font) {
+    host->body_font = body_font;
+    host->title_font = title_font;
+    host->body =
+        (cf_text_stack){.fonts = &host->body_font, .count = body_font.ops != NULL ? 1u : 0u};
+    host->title =
+        (cf_text_stack){.fonts = &host->title_font, .count = title_font.ops != NULL ? 1u : 0u};
+    host->typed = (cf_text_edit){.chars = host->typed_bytes, .capacity = sizeof host->typed_bytes};
+    host->memo = (cf_text_edit){.chars = host->memo_chars, .capacity = sizeof host->memo_chars};
+    host->composed =
+        (cf_text_edit){.chars = host->composed_chars, .capacity = sizeof host->composed_chars};
+    host->related =
+        (cf_text_edit){.chars = host->related_chars, .capacity = sizeof host->related_chars};
+
     for (uint32_t i = 0u; i < 64u; ++i) {
-        uint8_t *pixel = &checker[i * 4u];
+        uint8_t *pixel = &host->checker[i * 4u];
         pixel[0] = pixel[1] = pixel[2] = ((i / 8u + i % 8u) & 1u) != 0u ? 150u : 60u;
         pixel[3] = 255u;
     }
 }
-
-/* The lines that report state, each into its own buffer: the frame that writes
- * the bytes is the frame that borrows them. */
-static char status_bytes[32];
-static char echo_bytes[96];
-static char submit_bytes[96];
-static char change_bytes[64];
-static char memo_bytes[96];
-static char list_bytes[64];
-static char motion_bytes[96];
-static char keyboard_bytes[96];
-static char leaving_bytes[96];
-static char spoken_bytes[64];
-static char live_bytes[64];
-static char again_bytes[64];
-static char caption_bytes[96];
-static char relate_bytes[96];
-static char compose_bytes[128];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -170,8 +216,8 @@ enum {
     RULE_OVERLAY
 };
 
-static const char *rule_names[] = {"row",    "column", "wrap",  "gap",
-                                   "radius", "clamp",  "align", "overlay"};
+static const char *const rule_names[] = {"row",    "column", "wrap",  "gap",
+                                         "radius", "clamp",  "align", "overlay"};
 #define RULE_COUNT (uint32_t)(sizeof rule_names / sizeof rule_names[0])
 
 /* The state each chapter reads back: keyed blocks in the arena that outlives
@@ -246,7 +292,7 @@ static uint32_t *rows_built(cf_ctx *ctx) {
  * into the keyed block rather than into the frame: the ask happens in a dispatch and
  * the line that says so is written by whichever build comes after it. */
 static char *submitted(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "submitted"), sizeof typed_bytes);
+    return cf_state(ctx, cf_intern_text(&ctx->names, "submitted"), TYPED_BYTES);
 }
 
 static void count_click(cf_ctx *ctx, cf_id node, void *user_data) {
@@ -259,15 +305,23 @@ static void count_click(cf_ctx *ctx, cf_id node, void *user_data) {
 }
 
 /* The field's submit: Enter on the box that holds the keyboard is asked of the node's
- * own handler, and the value is copied out of the buffer the field edits in place. */
+ * own handler, and the value is copied out of the buffer the field edits in place. The host
+ * is what the handler is handed, because the buffer it copies from belongs to the run and not
+ * to the frame; the context comes along with it, for the keyed block that remembers the copy. */
 static void submit_entry(cf_event *event, void *user_data) {
-    cf_ctx *ctx = user_data;
-    char *saved = submitted(ctx);
+    gallery_host *const host = user_data;
 
     (void)event;
 
+    if (host == NULL) {
+        return;
+    }
+
+    char *saved = submitted(host->ctx);
+
     if (saved != NULL) {
-        snprintf(saved, sizeof typed_bytes, "%.*s", (int)typed.length, typed.chars);
+        snprintf(saved, sizeof host->typed_bytes, "%.*s", (int)host->typed.length,
+                 host->typed.chars);
     }
 }
 
@@ -457,14 +511,14 @@ static cf_style wrap_row(float gap) {
 
 /* One line of text that takes the width its container gives it and breaks as
  * often as that width asks - the measure, not a guess, sizes the box. */
-static cf_node make_prose(cf_ctx *ctx, const char *chars, cf_color ink) {
+static cf_node make_prose(gallery_host *host, cf_ctx *ctx, const char *chars, cf_color ink) {
     cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
 
     if (content == NULL) {
         return (cf_node){.style = cf_style_default()};
     }
 
-    *content = (cf_text_content){.stack = body, .text = cf_string_of(chars)};
+    *content = (cf_text_content){.stack = host->body, .text = cf_string_of(chars)};
 
     cf_style style = cf_style_default();
     style.color = (cf_opt_color){.present = true, .value = ink};
@@ -474,14 +528,15 @@ static cf_node make_prose(cf_ctx *ctx, const char *chars, cf_color ink) {
 
 /* The same walk capped: the content counts the lines it will let through and
  * the paint walk closes the last one with the ellipsis it asked for. */
-static cf_node make_capped(cf_ctx *ctx, const char *chars, uint32_t lines, cf_color ink) {
+static cf_node make_capped(gallery_host *host, cf_ctx *ctx, const char *chars, uint32_t lines,
+                           cf_color ink) {
     cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
 
     if (content == NULL) {
         return (cf_node){.style = cf_style_default()};
     }
 
-    *content = (cf_text_content){.stack = body,
+    *content = (cf_text_content){.stack = host->body,
                                  .text = cf_string_of(chars),
                                  .max_lines = {.present = true, .value = lines},
                                  .ellipsis = true};
@@ -492,8 +547,9 @@ static cf_node make_capped(cf_ctx *ctx, const char *chars, uint32_t lines, cf_co
     return (cf_node){.style = style, .measure = cf_text_measure, .measure_data = content};
 }
 
-static cf_node make_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *user_data) {
-    const cf_node label = cf_label(ctx, cf_string_of(name), &body, theme->on_ink);
+static cf_node make_button(gallery_host *host, cf_ctx *ctx, const char *name, cf_on_press on_press,
+                           void *user_data) {
+    const cf_node label = cf_label(ctx, cf_string_of(name), &host->body, host->theme->on_ink);
 
     return cf_button(ctx, name, on_press, user_data, &label, 1u);
 }
@@ -502,17 +558,17 @@ static cf_node make_button(cf_ctx *ctx, const char *name, cf_on_press on_press, 
  * bar, and what pressing it selects arrives as the button's own user pointer -
  * a number small enough to fit in one, so the chapter keeps no table to look
  * the choice up in. */
-static cf_node make_chip(cf_ctx *ctx, const char *name, bool chosen, cf_on_press on_press,
-                         uint32_t value) {
-    const cf_node label =
-        cf_label(ctx, cf_string_of(name), &body, chosen ? theme->on_ink : theme->muted);
+static cf_node make_chip(gallery_host *host, cf_ctx *ctx, const char *name, bool chosen,
+                         cf_on_press on_press, uint32_t value) {
+    const cf_node label = cf_label(ctx, cf_string_of(name), &host->body,
+                                   chosen ? host->theme->on_ink : host->theme->muted);
     cf_node chip = cf_button(ctx, name, on_press, (void *)(uintptr_t)value, &label, 1u);
 
     if (!chosen) {
         /* A bar rather than the accent: an unselected chip is still a press
          * target, it is just not the answer. */
-        chip.style.background = theme->bar.background;
-        chip.style.border_color = theme->bar.border_color;
+        chip.style.background = host->theme->bar.background;
+        chip.style.border_color = host->theme->bar.border_color;
     }
 
     return chip;
@@ -520,10 +576,10 @@ static cf_node make_chip(cf_ctx *ctx, const char *name, bool chosen, cf_on_press
 
 /* A chapter: its number beside its title on one line, the rule in prose under
  * it, and the thing that lets a hand check the prose at the bottom. */
-static cf_node make_chapter(cf_ctx *ctx, const char *number, const char *name, const char *prose,
-                            cf_node demo) {
-    const cf_node mark = cf_label(ctx, cf_string_of(number), &body, theme->muted);
-    const cf_node head = cf_label(ctx, cf_string_of(name), &title, theme->ink);
+static cf_node make_chapter(gallery_host *host, cf_ctx *ctx, const char *number, const char *name,
+                            const char *prose, cf_node demo) {
+    const cf_node mark = cf_label(ctx, cf_string_of(number), &host->body, host->theme->muted);
+    const cf_node head = cf_label(ctx, cf_string_of(name), &host->title, host->theme->ink);
 
     cf_style line = cf_style_default();
     line.column_gap = CF_PX(10.0f);
@@ -536,19 +592,19 @@ static cf_node make_chapter(cf_ctx *ctx, const char *number, const char *name, c
 
     const cf_node children[] = {
         cf_row(ctx, line, (cf_node[]){mark, head}, 2u),
-        make_prose(ctx, prose, theme->muted),
+        make_prose(host, ctx, prose, host->theme->muted),
         demo,
     };
 
-    return cf_col(ctx, inset_style(theme->body, CARD_PADDING, CARD_GAP), children,
+    return cf_col(ctx, inset_style(host->theme->body, CARD_PADDING, CARD_GAP), children,
                   (uint32_t)(sizeof children / sizeof children[0]));
 }
 
 /* Chapter one: three buttons, and the count the first of them keeps. */
-static cf_node make_buttons_demo(cf_ctx *ctx) {
-    cf_node count = make_button(ctx, "count", count_click, NULL);
-    const cf_node clear = make_button(ctx, "clear", clear_count, NULL);
-    const cf_node off = make_button(ctx, "switch off", flip, switch_off(ctx));
+static cf_node make_buttons_demo(gallery_host *host, cf_ctx *ctx) {
+    cf_node count = make_button(host, ctx, "count", count_click, NULL);
+    const cf_node clear = make_button(host, ctx, "clear", clear_count, NULL);
+    const cf_node off = make_button(host, ctx, "switch off", flip, switch_off(ctx));
 
     const bool *disabled = switch_off(ctx);
 
@@ -557,7 +613,7 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
     }
 
     const uint32_t *clicks = click_count(ctx);
-    const int length = snprintf(status_bytes, sizeof status_bytes, "clicked %u times",
+    const int length = snprintf(host->status_bytes, sizeof host->status_bytes, "clicked %u times",
                                 clicks != NULL ? *clicks : 0u);
 
     /* Three buttons and a gap: what does not fit the line comes round onto the
@@ -565,18 +621,18 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
      * last button outside the card. */
     const cf_style row = wrap_row(8.0f);
 
-    return demo_column(
-        ctx, 8.0f,
-        (cf_node[]){
-            cf_row(ctx, row, (cf_node[]){count, clear, off}, 3u),
-            cf_label(ctx, (cf_string){status_bytes, (uint32_t)length}, &body, theme->muted),
-        },
-        2u);
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){
+                           cf_row(ctx, row, (cf_node[]){count, clear, off}, 3u),
+                           cf_label(ctx, (cf_string){host->status_bytes, (uint32_t)length},
+                                    &host->body, host->theme->muted),
+                       },
+                       2u);
 }
 
 /* Chapter two: the field, and the same buffer read straight back. */
-static cf_node make_field_demo(cf_ctx *ctx) {
-    cf_node entry = cf_field(ctx, "entry", &typed, &body, CF_FIELD_SINGLE);
+static cf_node make_field_demo(gallery_host *host, cf_ctx *ctx) {
+    cf_node entry = cf_field(ctx, "entry", &host->typed, &host->body, CF_FIELD_SINGLE);
     /* The words a bridge says for this box. The caption below it is what an eye reads, and a walk
      * cannot pair a field with its sibling, so the build states the name beside the control. */
     entry.name = (cf_string){"Display name", sizeof("Display name") - 1u};
@@ -585,7 +641,7 @@ static cf_node make_field_demo(cf_ctx *ctx) {
     /* The door cf_field leaves its caller: the keys a field cannot serve for itself are
      * asked of the node, which is where a page puts what to do with the value. */
     entry.handlers.activate = submit_entry;
-    entry.handlers.activate_data = ctx;
+    entry.handlers.activate_data = host;
     /* The other door on the same node: what the bytes are now, rather than that they
      * stopped being typed. */
     entry.handlers.change = note_change;
@@ -596,24 +652,24 @@ static cf_node make_field_demo(cf_ctx *ctx) {
     entry.style.height = CF_PX(FIELD_HEIGHT);
     entry.style.align_items = CF_ALIGN_CENTER;
 
-    const int length =
-        snprintf(echo_bytes, sizeof echo_bytes, "the buffer holds %u bytes (%u refused): %.*s",
-                 typed.length, typed.refusals, (int)typed.length, typed_bytes);
+    const int length = snprintf(host->echo_bytes, sizeof host->echo_bytes,
+                                "the buffer holds %u bytes (%u refused): %.*s", host->typed.length,
+                                host->typed.refusals, (int)host->typed.length, host->typed_bytes);
 
     const char *saved = submitted(ctx);
     const int saved_length =
-        snprintf(submit_bytes, sizeof submit_bytes, "asked to save: %s",
+        snprintf(host->submit_bytes, sizeof host->submit_bytes, "asked to save: %s",
                  saved != NULL && saved[0] != '\0' ? saved : "nothing since the page opened");
 
     const uint32_t *changes = change_count(ctx);
     const int moved_length =
-        snprintf(change_bytes, sizeof change_bytes, "changes the page heard: %u",
+        snprintf(host->change_bytes, sizeof host->change_bytes, "changes the page heard: %u",
                  changes != NULL ? *changes : 0u);
 
     /* The other mode of the same widget: Enter writes a row instead of asking, so the
      * page hears no save out of a memo that is still being written. The height is stated
      * because the mode is, and not because a box measured two rows of bytes. */
-    cf_node block = cf_field(ctx, "memo", &memo, &body, CF_FIELD_MULTILINE);
+    cf_node block = cf_field(ctx, "memo", &host->memo, &host->body, CF_FIELD_MULTILINE);
     block.name = (cf_string){"Notes", sizeof("Notes") - 1u};
     block.style.width = CF_PERCENT(100.0f);
     block.style.height = CF_PX(2.0f * FIELD_HEIGHT);
@@ -623,37 +679,41 @@ static cf_node make_field_demo(cf_ctx *ctx) {
      * rows those bytes lay is the widget's own walk and depends on the width the box was
      * given, so the caption states neither the rows nor a height it read back. */
     uint32_t breaks = 0u;
-    for (uint32_t i = 0u; i < memo.length; ++i) {
-        if (memo_chars[i] == '\n') {
+    for (uint32_t i = 0u; i < host->memo.length; ++i) {
+        if (host->memo_chars[i] == '\n') {
             breaks++;
         }
     }
 
-    const int memo_length = snprintf(memo_bytes, sizeof memo_bytes,
-                                     "the memo holds %u bytes and %u breaks", memo.length, breaks);
+    const int memo_length =
+        snprintf(host->memo_bytes, sizeof host->memo_bytes, "the memo holds %u bytes and %u breaks",
+                 host->memo.length, breaks);
 
     /* The one line on the page worth interrupting for: its refused count moves only when a key did
      * nothing, which is the thing to say out loud before the person types another one. The lines
      * beside it report what already happened, and can wait their turn. */
-    cf_node refusal = cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted);
+    cf_node refusal = cf_label(ctx, (cf_string){host->echo_bytes, (uint32_t)length}, &host->body,
+                               host->theme->muted);
     refusal.announce = CF_ANNOUNCE_ASSERTIVE;
 
-    return demo_column(
-        ctx, 8.0f,
-        (cf_node[]){
-            entry,
-            refusal,
-            cf_label(ctx, (cf_string){submit_bytes, (uint32_t)saved_length}, &body, theme->muted),
-            cf_label(ctx, (cf_string){change_bytes, (uint32_t)moved_length}, &body, theme->muted),
-            block,
-            cf_label(ctx, (cf_string){memo_bytes, (uint32_t)memo_length}, &body, theme->muted),
-        },
-        6u);
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){
+                           entry,
+                           refusal,
+                           cf_label(ctx, (cf_string){host->submit_bytes, (uint32_t)saved_length},
+                                    &host->body, host->theme->muted),
+                           cf_label(ctx, (cf_string){host->change_bytes, (uint32_t)moved_length},
+                                    &host->body, host->theme->muted),
+                           block,
+                           cf_label(ctx, (cf_string){host->memo_bytes, (uint32_t)memo_length},
+                                    &host->body, host->theme->muted),
+                       },
+                       6u);
 }
 
 /* Chapter three: a paragraph that breaks itself, the same words capped, and the
  * button that changes the width they break at. */
-static cf_node make_text_demo(cf_ctx *ctx) {
+static cf_node make_text_demo(gallery_host *host, cf_ctx *ctx) {
     static const char *paragraph =
         "A box that measures its own text breaks the run at spaces, hyphens and "
         "east-asian glyphs, trims what a break leaves at the edges of a line, and "
@@ -669,20 +729,21 @@ static cf_node make_text_demo(cf_ctx *ctx) {
     const bool *held = narrow_text(ctx);
     const bool pinched = held != NULL && *held;
 
-    const cf_node text = make_prose(ctx, paragraph, theme->muted);
+    const cf_node text = make_prose(host, ctx, paragraph, host->theme->muted);
 
-    const cf_node squeeze =
-        make_button(ctx, pinched ? "give it the whole width" : "narrow it", flip, narrow_text(ctx));
+    const cf_node squeeze = make_button(
+        host, ctx, pinched ? "give it the whole width" : "narrow it", flip, narrow_text(ctx));
 
     /* The pinch goes on the well, which is the box the card stretches or sizes,
      * and not on the measured text: the width the well is handed is the offer
      * the paragraph breaks against, so the lines and the height booked for them
      * are the ones that paint. See TEXT_NARROW for why the number is points. */
-    cf_style well = inset_style(theme->bar, 12.0f, 10.0f);
+    cf_style well = inset_style(host->theme->bar, 12.0f, 10.0f);
     well.width = pinched ? CF_PX(TEXT_NARROW) : CF_AUTO;
     well.align_items = CF_ALIGN_START;
 
-    const cf_node children[] = {text, squeeze, make_capped(ctx, capped, 2u, theme->ink)};
+    const cf_node children[] = {text, squeeze,
+                                make_capped(host, ctx, capped, 2u, host->theme->ink)};
 
     return cf_col(ctx, well, children, (uint32_t)(sizeof children / sizeof children[0]));
 }
@@ -722,7 +783,7 @@ static void apply_rule(cf_style *strip, cf_style *item, uint32_t rule, uint32_t 
     }
 }
 
-static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
+static cf_node make_rule_strip(gallery_host *host, cf_ctx *ctx, uint32_t rule) {
     static const char *marks[] = {"a", "b", "c", "d"};
 
     /* The strip is a row of stated height, and its own box is the containing
@@ -736,7 +797,7 @@ static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
     cf_node boxes[STRIP_BOXES];
 
     for (uint32_t i = 0u; i < STRIP_BOXES; ++i) {
-        cf_style item = inset_style(theme->body, 8.0f, 0.0f);
+        cf_style item = inset_style(host->theme->body, 8.0f, 0.0f);
         /* Shared out rather than stated: a box fixed wider than the line leaves
          * the strip with nothing to distribute, and on the column rule it would
          * run past the well at any width the window is not. */
@@ -746,7 +807,7 @@ static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
 
         apply_rule(&strip, &item, rule, i);
 
-        const cf_node label = cf_label(ctx, cf_string_of(marks[i]), &body, theme->ink);
+        const cf_node label = cf_label(ctx, cf_string_of(marks[i]), &host->body, host->theme->ink);
         boxes[i] = cf_col(ctx, item, &label, 1u);
     }
 
@@ -757,7 +818,7 @@ static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
 
     /* The well gives the strip a floor to be read against, and clips it: a box
      * that overhangs must not run down into the chapter below. */
-    cf_style well = inset_style(theme->bar, 8.0f, 0.0f);
+    cf_style well = inset_style(host->theme->bar, 8.0f, 0.0f);
     well.clips_content = true;
 
     return cf_col(ctx, well, &packed, 1u);
@@ -765,35 +826,35 @@ static cf_node make_rule_strip(cf_ctx *ctx, uint32_t rule) {
 
 /* Chapter four: eight chips, one strip. The chip that is picked is painted as
  * picked, so the choice reads without a caption for it. */
-static cf_node make_rules_demo(cf_ctx *ctx) {
+static cf_node make_rules_demo(gallery_host *host, cf_ctx *ctx) {
     const uint32_t *held = picked_rule(ctx);
     const uint32_t rule = held != NULL ? *held : RULE_ROW;
 
     cf_node chips[RULE_COUNT];
 
     for (uint32_t i = 0u; i < RULE_COUNT; ++i) {
-        chips[i] = make_chip(ctx, rule_names[i], i == rule, pick_rule, i);
+        chips[i] = make_chip(host, ctx, rule_names[i], i == rule, pick_rule, i);
     }
 
     const cf_style row = wrap_row(8.0f);
 
-    return demo_column(ctx, 12.0f,
-                       (cf_node[]){cf_row(ctx, row, chips, RULE_COUNT), make_rule_strip(ctx, rule)},
-                       2u);
+    return demo_column(
+        ctx, 12.0f,
+        (cf_node[]){cf_row(ctx, row, chips, RULE_COUNT), make_rule_strip(host, ctx, rule)}, 2u);
 }
 
 /* Chapter five: a pane that walks inside the page that walks. */
-static cf_node make_panel(cf_ctx *ctx) {
+static cf_node make_panel(gallery_host *host, cf_ctx *ctx) {
     cf_node rows[PANEL_ROWS];
 
     for (uint32_t i = 0u; i < PANEL_ROWS; ++i) {
-        char *bytes = panel_bytes[i % 8u];
+        char *bytes = host->panel_bytes[i % 8u];
         const int length = snprintf(bytes, 16u, "box %u", i);
 
         const cf_node label =
-            cf_label(ctx, (cf_string){bytes, (uint32_t)length}, &body, theme->ink);
+            cf_label(ctx, (cf_string){bytes, (uint32_t)length}, &host->body, host->theme->ink);
 
-        cf_style row = inset_style(theme->body, 12.0f, 0.0f);
+        cf_style row = inset_style(host->theme->body, 12.0f, 0.0f);
         row.height = CF_PX(PANEL_ROW);
         /* The box runs a column, so the axis the label sits on is the main one:
          * centering it there is justify_content's, and leaving the cross axis to
@@ -811,7 +872,7 @@ static cf_node make_panel(cf_ctx *ctx) {
     const cf_scroll *held = panel_scroll(ctx);
     const cf_rect thumb = cf_scrollbar_thumb(panel_bar(), held != NULL ? held->offset : 0.0f);
 
-    cf_style track = inset_style(theme->bar, 0.0f, 0.0f);
+    cf_style track = inset_style(host->theme->bar, 0.0f, 0.0f);
     track.width = CF_PX(PANEL_TRACK);
     track.height = CF_PX(PANEL_VIEWPORT);
     track.radius = 3.0f;
@@ -824,7 +885,7 @@ static cf_node make_panel(cf_ctx *ctx) {
     handle.margin.top = CF_PX(thumb.y);
     handle.flex_shrink = 0.0f;
     handle.radius = 3.0f;
-    handle.background = (cf_opt_color){.present = true, .value = theme->muted};
+    handle.background = (cf_opt_color){.present = true, .value = host->theme->muted};
 
     cf_node grip = cf_col(ctx, handle, NULL, 0u);
     grip.handlers.pointer = drag_thumb;
@@ -836,8 +897,8 @@ static cf_node make_panel(cf_ctx *ctx) {
 /* The list declares only the rows the window can show; the row carries the
  * list role so the theme paints the one the pointer is on. */
 static cf_node make_row(cf_ctx *ctx, uint32_t index, void *user_data) {
-    (void)user_data;
-    char *bytes = row_bytes[index % 8u];
+    gallery_host *const host = user_data;
+    char *bytes = host->row_bytes[index % 8u];
     const int length = snprintf(bytes, 16u, "row %u", index);
 
     /* The factory is called once per row the list decides to build, so counting
@@ -849,7 +910,8 @@ static cf_node make_row(cf_ctx *ctx, uint32_t index, void *user_data) {
         *built += 1u;
     }
 
-    const cf_node label = cf_label(ctx, (cf_string){bytes, (uint32_t)length}, &body, theme->ink);
+    const cf_node label =
+        cf_label(ctx, (cf_string){bytes, (uint32_t)length}, &host->body, host->theme->ink);
 
     cf_style row = cf_style_default();
     /* The list holds every row to the height it was given, so the padding only
@@ -871,30 +933,30 @@ static cf_node make_row(cf_ctx *ctx, uint32_t index, void *user_data) {
 /* Chapter six: the virtualized list, with what the frame built written under
  * it. The count is cleared before the list is declared and read after it, so
  * the number is this frame's and not the last one's. */
-static cf_node make_list_demo(cf_ctx *ctx) {
+static cf_node make_list_demo(gallery_host *host, cf_ctx *ctx) {
     uint32_t *built = rows_built(ctx);
 
     if (built != NULL) {
         *built = 0u;
     }
 
-    const cf_node list = cf_list(ctx, "rows", LIST_VIEWPORT, LIST_ROW, LIST_ROWS, make_row, NULL);
+    const cf_node list = cf_list(ctx, "rows", LIST_VIEWPORT, LIST_ROW, LIST_ROWS, make_row, host);
     const int length =
-        snprintf(list_bytes, sizeof list_bytes, "%u of %u rows declared by this frame",
+        snprintf(host->list_bytes, sizeof host->list_bytes, "%u of %u rows declared by this frame",
                  built != NULL ? *built : 0u, LIST_ROWS);
 
-    return demo_column(
-        ctx, 10.0f,
-        (cf_node[]){
-            list,
-            cf_label(ctx, (cf_string){list_bytes, (uint32_t)length}, &body, theme->muted),
-        },
-        2u);
+    return demo_column(ctx, 10.0f,
+                       (cf_node[]){
+                           list,
+                           cf_label(ctx, (cf_string){host->list_bytes, (uint32_t)length},
+                                    &host->body, host->theme->muted),
+                       },
+                       2u);
 }
 
 /* Chapter seven: a texture, and the badge that leaves the flow to hang off it. */
-static cf_node make_badge_demo(cf_ctx *ctx) {
-    cf_node image = cf_image(ctx, "logo", &logo);
+static cf_node make_badge_demo(gallery_host *host, cf_ctx *ctx) {
+    cf_node image = cf_image(ctx, "logo", &host->logo);
     /* A picture is named by the build or by nothing, and the name is not the key above: this is the
      * sentence a person who cannot see the mark is told instead of it. */
     image.name = (cf_string){"The cform mark", sizeof("The cform mark") - 1u};
@@ -904,7 +966,7 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
     const bool *held = badge_in_flow(ctx);
     const bool in_flow = held != NULL && *held;
 
-    cf_style badge = theme->variants[CF_ROLE_BUTTON].base;
+    cf_style badge = host->theme->variants[CF_ROLE_BUTTON].base;
     badge.padding = (cf_box){CF_PX(6.0f), CF_PX(2.0f), CF_PX(6.0f), CF_PX(2.0f)};
     badge.radius = 8.0f;
 
@@ -915,7 +977,7 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
         badge.inset = (cf_box){CF_AUTO, CF_PX(-8.0f), CF_PX(-8.0f), CF_AUTO};
     }
 
-    const cf_node tag = cf_label(ctx, cf_string_of("v1"), &body, theme->on_ink);
+    const cf_node tag = cf_label(ctx, cf_string_of("v1"), &host->body, host->theme->on_ink);
     cf_node badge_box = cf_col(ctx, badge, &tag, 1u);
     badge_box.role = CF_ROLE_BUTTON;
 
@@ -931,7 +993,7 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
     over.padding.bottom = CF_PX(8.0f);
 
     const cf_node flip_button =
-        make_button(ctx, in_flow ? "let it leave the flow" : "put it back in the flow", flip,
+        make_button(host, ctx, in_flow ? "let it leave the flow" : "put it back in the flow", flip,
                     badge_in_flow(ctx));
 
     cf_style row = wrap_row(24.0f);
@@ -947,15 +1009,15 @@ static cf_node make_badge_demo(cf_ctx *ctx) {
  * columns at all. */
 enum { PLAN_COLUMNS, PLAN_REPEAT, PLAN_FREE };
 
-static const char *plan_names[] = {"three tracks", "repeated pair", "no tracks"};
+static const char *const plan_names[] = {"three tracks", "repeated pair", "no tracks"};
 #define PLAN_COUNT (uint32_t)(sizeof plan_names / sizeof plan_names[0])
 
 /* Chapter eight: the six cells the container places. What an item says about the
  * grid is only how many tracks it takes; which tracks there are is the
  * container's declaration. */
-static cf_node make_grid_cell(cf_ctx *ctx, const char *mark, uint32_t column_span,
-                              uint32_t row_span) {
-    cf_style cell = inset_style(theme->body, 8.0f, 0.0f);
+static cf_node make_grid_cell(gallery_host *host, cf_ctx *ctx, const char *mark,
+                              uint32_t column_span, uint32_t row_span) {
+    cf_style cell = inset_style(host->theme->body, 8.0f, 0.0f);
     cell.min_height = CF_PX(GRID_CELL);
     cell.justify_content = CF_JUSTIFY_CENTER;
     cell.align_items = CF_ALIGN_CENTER;
@@ -964,7 +1026,7 @@ static cf_node make_grid_cell(cf_ctx *ctx, const char *mark, uint32_t column_spa
     cell.column_span = column_span;
     cell.row_span = row_span;
 
-    const cf_node label = cf_label(ctx, cf_string_of(mark), &body, theme->ink);
+    const cf_node label = cf_label(ctx, cf_string_of(mark), &host->body, host->theme->ink);
 
     return cf_col(ctx, cell, &label, 1u);
 }
@@ -974,7 +1036,7 @@ static cf_node make_grid_cell(cf_ctx *ctx, const char *mark, uint32_t column_spa
 #define GRID_COLUMNS 4u
 #define GRID_ROWS 2u
 
-static cf_node make_grid_demo(cf_ctx *ctx) {
+static cf_node make_grid_demo(gallery_host *host, cf_ctx *ctx) {
     const uint32_t *held = picked_plan(ctx);
     const uint32_t plan = held != NULL ? *held : PLAN_COLUMNS;
 
@@ -1012,7 +1074,7 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
 
     /* Two rows are written and six cells want more, so the rest land in rows the
      * grid adds for them as content-sized tracks of their own. */
-    cf_style grid = inset_style(theme->bar, 12.0f, 12.0f);
+    cf_style grid = inset_style(host->theme->bar, 12.0f, 12.0f);
     grid.display = CF_DISPLAY_GRID;
     grid.width = CF_PERCENT(100.0f);
     /* Auto tracks are sized by what they hold and CSS lets a grid whose plans do
@@ -1029,15 +1091,18 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
     grid.row_count = plan == PLAN_FREE ? 0u : GRID_ROWS;
 
     const cf_node cells[] = {
-        make_grid_cell(ctx, "two columns", 2u, 0u), make_grid_cell(ctx, "auto", 0u, 0u),
-        make_grid_cell(ctx, "auto", 0u, 0u),        make_grid_cell(ctx, "two rows", 0u, 2u),
-        make_grid_cell(ctx, "auto", 0u, 0u),        make_grid_cell(ctx, "auto", 0u, 0u),
+        make_grid_cell(host, ctx, "two columns", 2u, 0u),
+        make_grid_cell(host, ctx, "auto", 0u, 0u),
+        make_grid_cell(host, ctx, "auto", 0u, 0u),
+        make_grid_cell(host, ctx, "two rows", 0u, 2u),
+        make_grid_cell(host, ctx, "auto", 0u, 0u),
+        make_grid_cell(host, ctx, "auto", 0u, 0u),
     };
 
     cf_node chips[PLAN_COUNT];
 
     for (uint32_t i = 0u; i < PLAN_COUNT; ++i) {
-        chips[i] = make_chip(ctx, plan_names[i], i == plan, pick_plan, i);
+        chips[i] = make_chip(host, ctx, plan_names[i], i == plan, pick_plan, i);
     }
 
     const cf_style row = wrap_row(8.0f);
@@ -1049,14 +1114,14 @@ static cf_node make_grid_demo(cf_ctx *ctx) {
 
 /* The three curves a run of the lane may take, named as the chips read and
  * numbered in the order cf_ease numbers them. */
-static const char *ease_names[] = {"linear", "ease out", "ease in out"};
+static const char *const ease_names[] = {"linear", "ease out", "ease in out"};
 #define EASE_COUNT (uint32_t)(sizeof ease_names / sizeof ease_names[0])
 
 /* Chapter nine: one number, restated by every frame that moves it. The press
  * aims the tween and the build steps it, which is the whole division between an
  * event and an animation: nothing on the input side is left running once the
  * button has been let go. */
-static cf_node make_motion_demo(cf_ctx *ctx) {
+static cf_node make_motion_demo(gallery_host *host, cf_ctx *ctx) {
     cf_tween *tween = slide_tween(ctx);
     bool travelling = false;
     float at = 0.0f;
@@ -1080,14 +1145,14 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
      * of pushing it off the screen, and the right padding is the room the puck
      * needs at the far end - the full run lands flush with the border rather than
      * half past it. */
-    cf_style lane = inset_style(theme->bar, 0.0f, 0.0f);
+    cf_style lane = inset_style(host->theme->bar, 0.0f, 0.0f);
     lane.width = CF_PERCENT(100.0f);
     lane.max_width = CF_PX(SLIDE_TRAVEL + SLIDE_PUCK);
     lane.padding.right = CF_PX(SLIDE_PUCK);
     lane.height = CF_PX(SLIDE_PUCK);
     lane.clips_content = true;
 
-    cf_style puck = theme->variants[CF_ROLE_BUTTON].base;
+    cf_style puck = host->theme->variants[CF_ROLE_BUTTON].base;
     puck.width = CF_PX(SLIDE_PUCK);
     puck.height = CF_PX(SLIDE_PUCK);
     puck.radius = 8.0f;
@@ -1101,7 +1166,7 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
      * happens to have. Both boxes now follow the window: what differs is the
      * lever - a margin that moves a fixed box along the lane against a width that
      * grows from the lane's own start. */
-    cf_style meter = inset_style(theme->bar, 0.0f, 0.0f);
+    cf_style meter = inset_style(host->theme->bar, 0.0f, 0.0f);
     meter.width = CF_PERCENT(100.0f);
     meter.height = CF_PX(12.0f);
 
@@ -1109,7 +1174,7 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
      * so a 12-point track wearing 8 points of padding top and bottom cannot be
      * 12 points tall, and a share of a track that has to leave 24 points for
      * nothing is a fill that shows progress when the tween has none. */
-    cf_style fill = inset_style(theme->variants[CF_ROLE_BUTTON].base, 0.0f, 0.0f);
+    cf_style fill = inset_style(host->theme->variants[CF_ROLE_BUTTON].base, 0.0f, 0.0f);
     fill.width = CF_PERCENT(at / SLIDE_TRAVEL * 100.0f);
 
     const uint32_t *held = picked_ease(ctx);
@@ -1118,21 +1183,22 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
     cf_node chips[EASE_COUNT];
 
     for (uint32_t i = 0u; i < EASE_COUNT; ++i) {
-        chips[i] = make_chip(ctx, ease_names[i], i == ease, pick_ease, i);
+        chips[i] = make_chip(host, ctx, ease_names[i], i == ease, pick_ease, i);
     }
 
     const cf_style row = wrap_row(8.0f);
 
-    const int length =
-        snprintf(motion_bytes, sizeof motion_bytes, "%.0f of %.0f points, %s", at, SLIDE_TRAVEL,
-                 travelling ? "and the page asked for another frame" : "and the page is at rest");
+    const int length = snprintf(
+        host->motion_bytes, sizeof host->motion_bytes, "%.0f of %.0f points, %s", at, SLIDE_TRAVEL,
+        travelling ? "and the page asked for another frame" : "and the page is at rest");
 
     const cf_node parts[] = {
         cf_row(ctx, lane, (cf_node[]){(cf_node){.style = puck}}, 1u),
         cf_row(ctx, meter, (cf_node[]){(cf_node){.style = fill}}, 1u),
         cf_row(ctx, row, chips, EASE_COUNT),
-        make_button(ctx, aimed_far(tween) ? "bring it back" : "send it", send_it, NULL),
-        cf_label(ctx, (cf_string){motion_bytes, (uint32_t)length}, &body, theme->muted),
+        make_button(host, ctx, aimed_far(tween) ? "bring it back" : "send it", send_it, NULL),
+        cf_label(ctx, (cf_string){host->motion_bytes, (uint32_t)length}, &host->body,
+                 host->theme->muted),
     };
 
     return demo_column(ctx, 12.0f, parts, (uint32_t)(sizeof parts / sizeof parts[0]));
@@ -1140,7 +1206,7 @@ static cf_node make_motion_demo(cf_ctx *ctx) {
 
 /* The four chips of the keyboard chapter, in the order a walk meets them. The
  * third is switched off, so it is in the row and not in that order. */
-static const char *keyboard_names[] = {"chip one", "chip two", "switched off", "chip three"};
+static const char *const keyboard_names[] = {"chip one", "chip two", "switched off", "chip three"};
 #define KEYBOARD_COUNT (uint32_t)(sizeof keyboard_names / sizeof keyboard_names[0])
 #define KEYBOARD_OFF 2u
 
@@ -1149,7 +1215,7 @@ static const char *keyboard_names[] = {"chip one", "chip two", "switched off", "
  * asked at rather than what the ask is made of. The row above them holds the other
  * half of the rule: a control the keyboard walks onto and the page then loses,
  * leaving the keyboard standing where it was found. */
-static cf_node make_keyboard_demo(cf_ctx *ctx) {
+static cf_node make_keyboard_demo(gallery_host *host, cf_ctx *ctx) {
     const uint32_t *held = answered_chip(ctx);
     bool *shown = dialog_box(ctx);
     const bool open = shown != NULL && *shown;
@@ -1158,14 +1224,15 @@ static cf_node make_keyboard_demo(cf_ctx *ctx) {
 
     /* Two names that never change, so the button that opened the row is the same box
      * after it as before: only the second control comes and goes with the flag. */
-    dialog[0] = make_button(ctx, "open the box", open_box, shown);
+    dialog[0] = make_button(host, ctx, "open the box", open_box, shown);
 
     if (open) {
-        dialog[1] = make_button(ctx, "close the box", flip, shown);
+        dialog[1] = make_button(host, ctx, "close the box", flip, shown);
     }
 
     for (uint32_t i = 0u; i < KEYBOARD_COUNT; ++i) {
-        chips[i] = make_chip(ctx, keyboard_names[i], held != NULL && *held == i, chip_answers, i);
+        chips[i] =
+            make_chip(host, ctx, keyboard_names[i], held != NULL && *held == i, chip_answers, i);
 
         if (i == KEYBOARD_OFF) {
             /* Switching a box off takes it out of both doors at once: the ring
@@ -1176,17 +1243,18 @@ static cf_node make_keyboard_demo(cf_ctx *ctx) {
     }
 
     const char *answer = held != NULL ? keyboard_names[*held] : "nothing yet";
-    const int length =
-        snprintf(keyboard_bytes, sizeof keyboard_bytes, "the keyboard last asked: %s", answer);
+    const int length = snprintf(host->keyboard_bytes, sizeof host->keyboard_bytes,
+                                "the keyboard last asked: %s", answer);
 
     const cf_style row = wrap_row(8.0f);
 
-    return demo_column(ctx, 8.0f,
-                       (cf_node[]){cf_row(ctx, row, dialog, open ? 2u : 1u),
-                                   cf_row(ctx, row, chips, KEYBOARD_COUNT),
-                                   cf_label(ctx, (cf_string){keyboard_bytes, (uint32_t)length},
-                                            &body, theme->muted)},
-                       3u);
+    return demo_column(
+        ctx, 8.0f,
+        (cf_node[]){cf_row(ctx, row, dialog, open ? 2u : 1u),
+                    cf_row(ctx, row, chips, KEYBOARD_COUNT),
+                    cf_label(ctx, (cf_string){host->keyboard_bytes, (uint32_t)length}, &host->body,
+                             host->theme->muted)},
+        3u);
 }
 
 /* The press the page's own ending rides on. It is handed the context, which is the
@@ -1199,15 +1267,15 @@ static void end_the_run(cf_ctx *ctx, cf_id node, void *user_data) {
 
 /* Chapter eleven: the two asks a build has. One keeps the frames coming, the other
  * stops them, and what the shell does with either is the host's. */
-static cf_node make_leaving_demo(cf_ctx *ctx) {
+static cf_node make_leaving_demo(gallery_host *host, cf_ctx *ctx) {
     const int length =
-        snprintf(leaving_bytes, sizeof leaving_bytes,
+        snprintf(host->leaving_bytes, sizeof host->leaving_bytes,
                  cf_quit_requested(ctx) ? "the page has asked to be done" : "nothing asked yet");
 
     return demo_column(ctx, 8.0f,
-                       (cf_node[]){make_button(ctx, "end the run", end_the_run, NULL),
-                                   cf_label(ctx, (cf_string){leaving_bytes, (uint32_t)length},
-                                            &body, theme->muted)},
+                       (cf_node[]){make_button(host, ctx, "end the run", end_the_run, NULL),
+                                   cf_label(ctx, (cf_string){host->leaving_bytes, (uint32_t)length},
+                                            &host->body, host->theme->muted)},
                        2u);
 }
 
@@ -1217,8 +1285,8 @@ static uint32_t *spoken_control(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "spoken"), sizeof(uint32_t));
 }
 
-static const char *spoken_names[] = {"the one named on its face", "the one named by the build",
-                                     "the one nobody named"};
+static const char *const spoken_names[] = {"the one named on its face",
+                                           "the one named by the build", "the one nobody named"};
 
 static void a_control_answers(cf_ctx *ctx, cf_id node, void *user_data) {
     (void)node, (void)ctx;
@@ -1234,15 +1302,15 @@ static void a_control_answers(cf_ctx *ctx, cf_id node, void *user_data) {
 /* Chapter twelve: the words a box is announced by. Three controls that sit in one row and are
  * handed to a bridge three different ways - words on the face of it, words the build stated beside
  * it, and no words at all. */
-static cf_node make_words_demo(cf_ctx *ctx) {
+static cf_node make_words_demo(gallery_host *host, cf_ctx *ctx) {
     /* Nothing names this box but the label inside it, which is the common case and the one a walk
      * can work out for itself. */
-    const cf_node labelled = make_button(ctx, "ring the bell", a_control_answers, NULL);
+    const cf_node labelled = make_button(host, ctx, "ring the bell", a_control_answers, NULL);
 
     /* The second carries words on its face as well, and states its own name besides: the stated
      * name is what a bridge is handed, because a caption a person placed beside a control is a
      * better answer than whatever the control happens to draw. */
-    const cf_node inner = cf_label(ctx, cf_string_of("save"), &body, theme->on_ink);
+    const cf_node inner = cf_label(ctx, cf_string_of("save"), &host->body, host->theme->on_ink);
     cf_node stated = cf_button(ctx, "stated", a_control_answers, (void *)(uintptr_t)1u, &inner, 1u);
     stated.name = cf_string_of("the one named by the build");
     stated.description = cf_string_of("its name was written beside it, not on it");
@@ -1257,7 +1325,7 @@ static cf_node make_words_demo(cf_ctx *ctx) {
     const uint32_t *held = spoken_control(ctx);
     const uint32_t answered = held != NULL ? *held : 0u;
     const int length = snprintf(
-        spoken_bytes, sizeof spoken_bytes, "the page heard: %s",
+        host->spoken_bytes, sizeof host->spoken_bytes, "the page heard: %s",
         answered >= 1u && answered <= (uint32_t)(sizeof spoken_names / sizeof spoken_names[0])
             ? spoken_names[answered - 1u]
             : "nothing yet");
@@ -1266,8 +1334,8 @@ static cf_node make_words_demo(cf_ctx *ctx) {
 
     return demo_column(ctx, 8.0f,
                        (cf_node[]){cf_row(ctx, row, (cf_node[]){labelled, stated, unnamed}, 3u),
-                                   cf_label(ctx, (cf_string){spoken_bytes, (uint32_t)length}, &body,
-                                            theme->muted)},
+                                   cf_label(ctx, (cf_string){host->spoken_bytes, (uint32_t)length},
+                                            &host->body, host->theme->muted)},
                        2u);
 }
 
@@ -1289,27 +1357,29 @@ static void make_the_news(cf_ctx *ctx, cf_id node, void *user_data) {
 /* Chapter thirteen: which words are worth hearing twice. A region of the page is marked once and
  * everything inside it is covered, so the lines a control rewrites can be announced without any of
  * them being named as an announcement. */
-static cf_node make_live_demo(cf_ctx *ctx) {
+static cf_node make_live_demo(gallery_host *host, cf_ctx *ctx) {
     const uint32_t *counted = news_count(ctx);
     const uint32_t news = counted != NULL ? *counted : 0u;
-    const int length =
-        snprintf(live_bytes, sizeof live_bytes, "the page has made news %u times", news);
-    const int again_length =
-        snprintf(again_bytes, sizeof again_bytes, "and %u of them were this button", news);
+    const int length = snprintf(host->live_bytes, sizeof host->live_bytes,
+                                "the page has made news %u times", news);
+    const int again_length = snprintf(host->again_bytes, sizeof host->again_bytes,
+                                      "and %u of them were this button", news);
 
-    const cf_node again = make_button(ctx, "make news", make_the_news, NULL);
+    const cf_node again = make_button(host, ctx, "make news", make_the_news, NULL);
 
     /* The mark goes on the box that holds the lines, not on the lines: a region is an area of the
      * page and grows another line without anything being remarked. The holder is announced by
      * nothing at all - no role, only a direction - so the level has to be read on the way down to
      * the words that moved, which is what the walk does. */
-    cf_node status = cf_row(
-        ctx, wrap_row(4.0f),
-        (cf_node[]){
-            cf_label(ctx, (cf_string){live_bytes, (uint32_t)length}, &body, theme->muted),
-            cf_label(ctx, (cf_string){again_bytes, (uint32_t)again_length}, &body, theme->muted),
-        },
-        2u);
+    cf_node status =
+        cf_row(ctx, wrap_row(4.0f),
+               (cf_node[]){
+                   cf_label(ctx, (cf_string){host->live_bytes, (uint32_t)length}, &host->body,
+                            host->theme->muted),
+                   cf_label(ctx, (cf_string){host->again_bytes, (uint32_t)again_length},
+                            &host->body, host->theme->muted),
+               },
+               2u);
     status.announce = CF_ANNOUNCE_POLITE;
 
     return demo_column(ctx, 8.0f, (cf_node[]){again, status}, 2u);
@@ -1319,11 +1389,11 @@ static cf_node make_live_demo(cf_ctx *ctx) {
  * words it carries inside itself and with nothing else, so the caption beside a field and the area
  * a button brings about have to be named by the build. A name is booked once and resolved every
  * read, which is what makes a relation to a box that is not declared answer no box at all. */
-static cf_node make_related_demo(cf_ctx *ctx) {
+static cf_node make_related_demo(gallery_host *host, cf_ctx *ctx) {
     bool *shown = note_box(ctx);
     const bool open = shown != NULL && *shown;
 
-    cf_node entry = cf_field(ctx, "signature", &related, &body, CF_FIELD_SINGLE);
+    cf_node entry = cf_field(ctx, "signature", &host->related, &host->body, CF_FIELD_SINGLE);
     entry.name = cf_string_of("Signature");
     entry.style.width = CF_PERCENT(100.0f);
     entry.style.height = CF_PX(FIELD_HEIGHT);
@@ -1331,22 +1401,22 @@ static cf_node make_related_demo(cf_ctx *ctx) {
     /* The caption's words move with the flag, and the relation does not: the box the field points
      * at is the same box in every frame, whatever it happens to be saying in it. */
     const int caption_length =
-        snprintf(caption_bytes, sizeof caption_bytes, "Letters only%s",
+        snprintf(host->caption_bytes, sizeof host->caption_bytes, "Letters only%s",
                  open ? ", and the note below says what the button brought about" : "");
 
-    cf_node caption =
-        cf_label(ctx, (cf_string){caption_bytes, (uint32_t)caption_length}, &body, theme->muted);
+    cf_node caption = cf_label(ctx, (cf_string){host->caption_bytes, (uint32_t)caption_length},
+                               &host->body, host->theme->muted);
     caption.key = cf_intern_text(&ctx->names, "signature-caption");
     entry.described_by = caption.key;
 
-    cf_node opener = make_button(ctx, "toggle the note", flip, shown);
+    cf_node opener = make_button(host, ctx, "toggle the note", flip, shown);
     /* The key of the box the press writes in and out of the page. Nothing is stored behind it: the
      * walk looks the name up in the tree it is already walking, so the answer follows the frame. */
     opener.controls = cf_intern_text(&ctx->names, "signature-note");
 
-    const int relate_length =
-        snprintf(relate_bytes, sizeof relate_bytes, "the note the button controls is %s",
-                 open ? "in the reading" : "not declared this frame");
+    const int relate_length = snprintf(host->relate_bytes, sizeof host->relate_bytes,
+                                       "the note the button controls is %s",
+                                       open ? "in the reading" : "not declared this frame");
 
     cf_node parts[5];
     uint32_t count = 0u;
@@ -1356,28 +1426,29 @@ static cf_node make_related_demo(cf_ctx *ctx) {
     parts[count++] = opener;
 
     if (open) {
-        cf_node note =
-            cf_label(ctx, cf_string_of("the note the press brings about"), &body, theme->muted);
+        cf_node note = cf_label(ctx, cf_string_of("the note the press brings about"), &host->body,
+                                host->theme->muted);
         note.key = opener.controls;
         parts[count++] = note;
     }
 
-    parts[count++] =
-        cf_label(ctx, (cf_string){relate_bytes, (uint32_t)relate_length}, &body, theme->muted);
+    parts[count++] = cf_label(ctx, (cf_string){host->relate_bytes, (uint32_t)relate_length},
+                              &host->body, host->theme->muted);
 
     return demo_column(ctx, 8.0f, parts, count);
 }
 
-static cf_node make_note(cf_ctx *ctx, const char *chars) {
-    return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
+static cf_node make_note(gallery_host *host, cf_ctx *ctx, const char *chars) {
+    return CF_COL(ctx, inset_style(host->theme->bar, 12.0f, 0.0f),
+                  make_prose(host, ctx, chars, host->theme->muted));
 }
 
 /* Chapter fifteen: the run a method has not finished. The bytes arrive through a door of their own,
  * are ruled under rather than taken in, and the box they stand in is the answer a platform is given
  * so its candidate list can stand beside the letters. The page lays its strip from the same numbers
  * the shell is handed, which is the part a person can check without an input method at all. */
-static cf_node make_composed_demo(cf_ctx *ctx) {
-    cf_node entry = cf_field(ctx, "composed", &composed, &body, CF_FIELD_SINGLE);
+static cf_node make_composed_demo(gallery_host *host, cf_ctx *ctx) {
+    cf_node entry = cf_field(ctx, "composed", &host->composed, &host->body, CF_FIELD_SINGLE);
     entry.name = cf_string_of("A box to compose in");
     entry.style.width = CF_PERCENT(100.0f);
     entry.style.height = CF_PX(FIELD_HEIGHT);
@@ -1393,7 +1464,7 @@ static cf_node make_composed_demo(cf_ctx *ctx) {
     strip.inset = (cf_box){CF_PX(inside.x), CF_PX(inside.y + inside.height), CF_AUTO, CF_AUTO};
     strip.width = CF_PX(inside.width);
     strip.height = CF_PX(CANDIDATE_BAND);
-    strip.background = (cf_opt_color){.present = true, .value = theme->ink};
+    strip.background = (cf_opt_color){.present = true, .value = host->theme->ink};
 
     const cf_node band = (cf_node){.style = strip};
 
@@ -1402,14 +1473,14 @@ static cf_node make_composed_demo(cf_ctx *ctx) {
      * reading. */
     const int length =
         weighing
-            ? snprintf(compose_bytes, sizeof compose_bytes,
+            ? snprintf(host->compose_bytes, sizeof host->compose_bytes,
                        "a run stands %g points across its row and %g down, %g wide and %g tall",
                        inside.x, inside.y, inside.width, inside.height)
-            : snprintf(compose_bytes, sizeof compose_bytes,
+            : snprintf(host->compose_bytes, sizeof host->compose_bytes,
                        "no run is standing in this box, so no strip is laid under it");
 
-    const cf_node caption =
-        cf_label(ctx, (cf_string){compose_bytes, (uint32_t)length}, &body, theme->muted);
+    const cf_node caption = cf_label(ctx, (cf_string){host->compose_bytes, (uint32_t)length},
+                                     &host->body, host->theme->muted);
 
     /* The box the strip is placed against: an absolute child counts its insets from the nearest
      * ancestor that says it frames them, and without the wrapper here the strip would be laid
@@ -1426,10 +1497,11 @@ static cf_node make_composed_demo(cf_ctx *ctx) {
     return demo_column(ctx, 8.0f, (cf_node[]){holding, caption}, 2u);
 }
 
-static cf_node make_header(cf_ctx *ctx) {
-    const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
+static cf_node make_header(gallery_host *host, cf_ctx *ctx) {
+    const cf_node name =
+        cf_label(ctx, cf_string_of("cform gallery"), &host->title, host->theme->ink);
     const cf_node note = cf_label(ctx, cf_string_of("fifteen rules, each with something to try"),
-                                  &body, theme->muted);
+                                  &host->body, host->theme->muted);
 
     cf_style row = cf_style_default();
     row.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
@@ -1443,8 +1515,8 @@ static cf_node make_header(cf_ctx *ctx) {
  * rather than the window they scroll through, because the range a scroller
  * walks is its content's height - padding on the viewport would be there at
  * the top of the document and gone at the bottom of it. */
-static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
-    cf_style sheet = inset_style(theme->page, PAGE_PADDING, CHAPTER_GAP);
+static cf_node make_page(gallery_host *host, cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
+    cf_style sheet = inset_style(host->theme->page, PAGE_PADDING, CHAPTER_GAP);
     sheet.width = CF_PERCENT(100.0f);
     sheet.max_width = CF_PX(PAGE_MAX_WIDTH);
     sheet.direction = CF_DIRECTION_COLUMN;
@@ -1455,7 +1527,7 @@ static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
     /* The style is restated whole, so the direction and the clip the widget
      * asked for are restated with it; the wheel handler the scroller installed
      * rides the node rather than the style and stays. */
-    page.style = theme->page;
+    page.style = host->theme->page;
     page.style.width = CF_PERCENT(100.0f);
     page.style.height = CF_PERCENT(100.0f);
     page.style.direction = CF_DIRECTION_COLUMN;
@@ -1469,18 +1541,29 @@ static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
 }
 
 static cf_node build(cf_ctx *ctx, void *user_data) {
-    (void)user_data;
+    gallery_host *const host = user_data;
+
+    /* A build with nothing in hand has no faces to measure with and no buffers for the
+     * chapters to name themselves from, so it states no page rather than a broken one. */
+    if (host == NULL) {
+        return (cf_node){0};
+    }
+
+    /* The handlers the page installs are handed this block and not the context, so the
+     * frame that runs them is the one whose context they will find here. */
+    host->ctx = ctx;
+
     const cf_node chapters[] = {
-        make_header(ctx),
+        make_header(host, ctx),
         make_chapter(
-            ctx, "01", "Buttons, and the state they keep",
+            host, ctx, "01", "Buttons, and the state they keep",
             "A button's whole job is the click it fires: the release that starts inside its "
             "rect and ends inside it. What a click changes goes into a block the name keys, "
             "in the arena that outlives the frame, so the count survives a rebuild - and the "
             "line under the buttons is written again by whichever build shows it.",
-            make_buttons_demo(ctx)),
+            make_buttons_demo(host, ctx)),
         make_chapter(
-            ctx, "02", "A field that edits a buffer you own",
+            host, ctx, "02", "A field that edits a buffer you own",
             "Click the box and type. The press that starts inside it books focus, and what a "
             "focused field is handed after that is what the keyboard wrote rather than which keys "
             "moved: shift, caps lock, the layout and an input method are settled before the bytes "
@@ -1514,17 +1597,17 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "whole instead of refused. The mode is the build's word and never a reading of the "
             "box - the memo is two rows tall because it was declared so, and the field above it "
             "would break lines just the same if it had been named this way.",
-            make_field_demo(ctx)),
+            make_field_demo(host, ctx)),
         make_chapter(
-            ctx, "03", "Text that measures itself",
+            host, ctx, "03", "Text that measures itself",
             "The paragraph below is a box that asks its own text how tall it is: the measure walks "
             "the run, and the height it counts is the height the layout books and the paint draws. "
             "Press the button and the one number that changes is the width the grey well is given; "
             "the lines the text breaks into and the height of the box follow from it, so nothing "
             "ends up outside the edge it drew itself - the same rule a window resize runs on.",
-            make_text_demo(ctx)),
+            make_text_demo(host, ctx)),
         make_chapter(
-            ctx, "04", "Eight rules, one row",
+            host, ctx, "04", "Eight rules, one row",
             "The strip is four boxes in one row. The chip you press picks which field of the "
             "style the build states differently and nothing else changes: wrap breaks the "
             "line before it squeezes it, gap is the space between, radius past half the "
@@ -1532,9 +1615,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "stated a height, and overlay takes the last box out of the flow. The well clips "
             "what the row runs past: an overhanging box is cut at its edge rather than drawn "
             "over the chapters below it.",
-            make_rules_demo(ctx)),
+            make_rules_demo(host, ctx)),
         make_chapter(
-            ctx, "05", "A pane that scrolls itself",
+            host, ctx, "05", "A pane that scrolls itself",
             "A scroller walks a content box taller than the rect that shows it: the wheel writes "
             "the offset the next declaration reads back. All eight boxes are declared every frame, "
             "on screen or not - this chapter is about the offset itself, and the thumb beside the "
@@ -1542,18 +1625,18 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "numbers rather than by a layout that has not run. Drag it. Once the pane has run out "
             "of content it stops taking notches, and the ones it cannot spend walk this page "
             "instead - a column that swallowed the wheel would read as a stuck window.",
-            make_panel(ctx)),
+            make_panel(host, ctx)),
         make_chapter(
-            ctx, "06", "A list that builds only what shows",
+            host, ctx, "06", "A list that builds only what shows",
             "What separates this from the pane above is what the frame declares, not what the eye "
             "sees. Forty rows cost it the handful the viewport can show: the list works out which "
             "indices the offset puts on screen and asks the row factory for those alone, so the "
             "line under it stays at a few of forty the whole way down. Each row is held to one "
             "height, so the range is arithmetic and one notch walks one row, and the row the "
             "pointer rests on takes the theme's hover tone.",
-            make_list_demo(ctx)),
+            make_list_demo(host, ctx)),
         make_chapter(
-            ctx, "07", "An image, and a badge that leaves the flow",
+            host, ctx, "07", "An image, and a badge that leaves the flow",
             "A texture the backend uploaded draws into the box the measure sized. The badge has to "
             "be a child of the same column as the logo, because an absolute box is placed against "
             "the padding box of the nearest ancestor that is not static - hang it off anything "
@@ -1561,9 +1644,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "is as tall with the badge as without it, and the negative insets are the half that "
             "hangs past the corner. Put it back in the flow and it takes its own line under the "
             "logo, gap and all.",
-            make_badge_demo(ctx)),
+            make_badge_demo(host, ctx)),
         make_chapter(
-            ctx, "08", "Tracks a container declares",
+            host, ctx, "08", "Tracks a container declares",
             "A grid is the one layout whose sizes come from the parent rather than from the "
             "children: the style states the column tracks and the cells are placed into them. An "
             "item says only how many tracks it takes - the first cell here claims two columns and "
@@ -1572,9 +1655,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "pair repeated by the helper into the same flat array the pass reads, or none, which "
             "leaves a single content-sized column. Two rows are declared and six cells want more, "
             "so the rest land in rows the grid adds as tracks of their own.",
-            make_grid_demo(ctx)),
+            make_grid_demo(host, ctx)),
         make_chapter(
-            ctx, "09", "A value that moves between frames",
+            host, ctx, "09", "A value that moves between frames",
             "A tween holds one number and the time it was aimed at. The press aims it and the "
             "build steps it by the seconds this frame covers, which is the whole division between "
             "an event and an animation - nothing is left running on the input side once the button "
@@ -1583,9 +1666,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "in the frame that lands the value: the line below says which of the two this frame "
             "was. The puck is placed in points inside a lane of stated width; the bar under it is "
             "the same number as a share, so it keeps stretching when the window does.",
-            make_motion_demo(ctx)),
+            make_motion_demo(host, ctx)),
         make_chapter(
-            ctx, "10", "The box the keyboard stands on",
+            host, ctx, "10", "The box the keyboard stands on",
             "A box says whether the keyboard can stand on it, because a role paints a control and "
             "does not make it reachable: the button declares the focus for its caller and the "
             "label "
@@ -1605,9 +1688,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "one box deep, so a second control lost the same way leaves the page waiting for a "
             "Tab, "
             "which enters the ring from its start.",
-            make_keyboard_demo(ctx)),
+            make_keyboard_demo(host, ctx)),
         make_chapter(
-            ctx, "11", "The end the page asks for",
+            host, ctx, "11", "The end the page asks for",
             "A run has two endings and the page may name one of them. The window's close "
             "button reaches the shell as an event the tree never sees, while a control inside "
             "the page has no event to send, so it asks through its context - the one thing a "
@@ -1617,9 +1700,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "context is freed. A host that runs the pipeline itself reads the same ask and "
             "decides what it is worth - this window leaves, a dialog would be dismissed, and "
             "nothing in the framework closes a window a page has no handle on.",
-            make_leaving_demo(ctx)),
+            make_leaving_demo(host, ctx)),
         make_chapter(
-            ctx, "12", "The words a box is announced by",
+            host, ctx, "12", "The words a box is announced by",
             "A box can say more than it shows: what it is, what it is called, what it holds. The "
             "family the theme paints with and the role a bridge reads are two declarations, so a "
             "box "
@@ -1639,9 +1722,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "place in the tree, so a page that rebuilds around a control leaves a bridge looking "
             "at "
             "the same box instead of a different one in the same slot.",
-            make_words_demo(ctx)),
+            make_words_demo(host, ctx)),
         make_chapter(
-            ctx, "13", "The words worth hearing twice",
+            host, ctx, "13", "The words worth hearing twice",
             "Most of what a page says is worth saying once. A line that reports what just "
             "happened is not, and the person who cannot see it needs it the moment the bytes "
             "move under them - with a word about whether to be interrupted for it. The build "
@@ -1657,9 +1740,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "tried. Words that move with no event and no dirty box are the page's own news, and "
             "asking for a frame is how it says so: the shell's idle rule cannot see a number "
             "that changed in a block nothing was told about.",
-            make_live_demo(ctx)),
+            make_live_demo(host, ctx)),
         make_chapter(
-            ctx, "14", "The boxes meant to be read together",
+            host, ctx, "14", "The boxes meant to be read together",
             "A walk pairs a control with the words it carries inside itself, and that is as far as "
             "it can go on its own: the line explaining a field sits beside it rather than under "
             "it, "
@@ -1679,9 +1762,9 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "which answered no box a moment ago, now answers the note's own identity - and the "
             "field "
             "still names the same caption it did, whatever that line happens to be saying.",
-            make_related_demo(ctx)),
+            make_related_demo(host, ctx)),
         make_chapter(
-            ctx, "15", "The run a method has not finished",
+            host, ctx, "15", "The run a method has not finished",
             "What a person types and what a person means are not always the same keystroke. An "
             "input method offers a syllable first and the character later, so it hands the box the "
             "run it is holding through a door of its own: the page rules the bytes from under "
@@ -1693,15 +1776,15 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "syllable. Turn on the input method your system has and type a syllable in this box: "
             "the underline the page draws and the strip it lays under the run are the numbers a "
             "platform is handed, so a machine with no method on it can still see the rule hold.",
-            make_composed_demo(ctx)),
-        make_note(ctx,
+            make_composed_demo(host, ctx)),
+        make_note(host, ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "
                   "microseconds the frame took, and the words the box holding the keyboard is "
                   "announced by."),
     };
 
-    return make_page(ctx, chapters, (uint32_t)(sizeof chapters / sizeof chapters[0]));
+    return make_page(host, ctx, chapters, (uint32_t)(sizeof chapters / sizeof chapters[0]));
 }
 
 #endif /* CF_EXAMPLES_GALLERY_PAGE_H */
