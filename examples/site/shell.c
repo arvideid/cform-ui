@@ -17,9 +17,11 @@
  * This file is the driver only. It owns the fonts, the window, the current route and
  * the address bar. The document a frame is made of is in document.h, which the headless
  * tier builds as well - so what that tier measures is what ships, rather than a copy of
- * it someone has to keep in step. A page is handed a context and the table of values,
- * the whole of what a page is given, so a page cannot reach the window, the route or the
- * platform behind it.
+ * it someone has to keep in step. A page is handed a context, the table of values and the
+ * faces the driver opened: the whole of what a page is given, so a page cannot reach the
+ * window, the route or the platform behind it. The driver keeps none of its own state in
+ * a file-scope variable - the faces are a local main hands to every frame, and the
+ * address is the keyed block a page reads its own state from.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,13 +50,28 @@
 #define CFORM_SITE_FONT_MONO "/IBMPlexMono-Regular.ttf"
 #endif
 
-static site_view view;
-static char route[ROUTE_BYTES];
+/*
+ * The address the reader is on, in the keyed block a page keeps its own state in.
+ *
+ * A press writes it through the context its handler was handed; the arrow keys reach the
+ * same block through the context the build stored as the root's handler data, because an
+ * event carries no context of its own. Nothing else holds a route, so a second window in
+ * one process is a second address rather than one shared.
+ *
+ * cf_state hands a fresh block zeroed, and an empty route is the table's first page, so
+ * the block needs no seeding to be readable.
+ */
+#define ROUTE_KEY "cf/site/route"
 
-/* The row the address bar names, which is the whole of the site's state: a route
- * with nothing behind it is the first page, and a page is a row of the table. */
-static const site_entry *current(void) {
-    return site_entry_or_first(route);
+static char *route_of(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, ROUTE_KEY), ROUTE_BYTES);
+}
+
+/* The one write a navigation makes: the shell's record, then the bar that is the
+ * reader's copy of it. */
+static void write_route(char *held, const site_entry *entry) {
+    snprintf(held, ROUTE_BYTES, "%s", entry->route);
+    cf_web_write_hash(held);
 }
 
 /*
@@ -64,17 +81,21 @@ static const site_entry *current(void) {
  * the write follows an event the shell already saw, so the frame that paints the new
  * page is the one that event wakes and nothing has to ask for a second one.
  */
-static void follow(const site_entry *entry) {
-    snprintf(route, sizeof route, "%s", entry->route);
-    cf_web_write_hash(route);
+static void follow(cf_ctx *ctx, const site_entry *entry) {
+    char *held = route_of(ctx);
+
+    if (held != NULL) {
+        write_route(held, entry);
+    }
 }
 
 static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
-    (void)ctx;
     (void)node;
 
-    if (user_data != NULL) {
-        follow(user_data);
+    const site_entry *entry = user_data;
+
+    if (entry != NULL) {
+        follow(ctx, entry);
     }
 }
 
@@ -87,18 +108,24 @@ static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
  * climbs to it, so a row the Tab key reached is a row the arrows can walk off.
  */
 static void route_key(cf_event *event, void *user_data) {
-    (void)user_data;
+    cf_ctx *ctx = user_data;
 
-    if (event->type != CF_EVENT_KEY_DOWN) {
+    if (event->type != CF_EVENT_KEY_DOWN || ctx == NULL) {
         return;
     }
 
-    const uint32_t at = site_index_of(current());
+    char *held = route_of(ctx);
+
+    if (held == NULL) {
+        return;
+    }
+
+    const uint32_t at = site_index_of(site_entry_or_first(held));
 
     if (event->key == CF_KEY_RIGHT && at + 1u < SITE_NAV_COUNT) {
-        follow(site_entry_at(at + 1u));
+        write_route(held, site_entry_at(at + 1u));
     } else if (event->key == CF_KEY_LEFT && at > 0u) {
-        follow(site_entry_at(at - 1u));
+        write_route(held, site_entry_at(at - 1u));
     }
 
     /* The address bar follows the page here as much as it does after a press: a reader on
@@ -116,31 +143,45 @@ static void route_key(cf_event *event, void *user_data) {
  * of the same route from turning one navigation into two rebuilds.
  *
  * A build with no browser reads nothing and keeps what it has, so a native window stays
- * on the keyboard route and this line costs it a call that answers false.
+ * on the keyboard route and this line costs it a call that answers false. It is handed
+ * the block rather than looking it up again: one frame holds one route pointer, and the
+ * shell never asks the state store to grow that block after its first frame.
  */
-static void follow_address_bar(void) {
+static void follow_address_bar(char *held) {
     char named[ROUTE_BYTES];
 
-    if (!cf_web_read_hash(named, sizeof named) || strcmp(named, route) == 0) {
+    if (!cf_web_read_hash(named, sizeof named) || strcmp(named, held) == 0) {
         return;
     }
 
-    snprintf(route, sizeof route, "%s", named);
+    snprintf(held, ROUTE_BYTES, "%s", named);
 }
 
 /*
  * The frame the page is drawn in, and the one thing the driver adds to it: the keys
  * that walk the table, which are this shell's route and not something a headless tier
  * building the same document has any use for.
+ *
+ * The faces come from the host's pointer and the address from the keyed block: with
+ * neither in hand there is no page to state, and a build that declares nothing is the
+ * honest answer rather than a document drawn with nobody's fonts.
  */
-static cf_node build(cf_ctx *ctx) {
+static cf_node build(cf_ctx *ctx, void *user_data) {
+    site_view *const view = user_data;
+    char *held = route_of(ctx);
+
+    if (view == NULL || held == NULL) {
+        return (cf_node){0};
+    }
+
     /* Read before the page is chosen: a route the bar named has to be the one this
      * frame describes, or the reader sees the page they left for one more frame. */
-    follow_address_bar();
+    follow_address_bar(held);
 
-    const site_entry *entry = current();
-    cf_node root = site_document(ctx, &view, entry, entry->page(ctx, &view), go_to);
+    const site_entry *entry = site_entry_or_first(held);
+    cf_node root = site_document(ctx, view, entry, entry->page(ctx, view), go_to);
     root.handlers.key = route_key;
+    root.handlers.key_data = ctx;
 
     return root;
 }
@@ -148,7 +189,7 @@ static cf_node build(cf_ctx *ctx) {
 /* The faces, one per job, from the two files the configure step fetched. A font
  * carries its size and no layer above the backend resizes one, so the table of
  * sizes in tokens.h is what opens them. */
-static void bind_view(void) {
+static void bind_view(site_view *view) {
     cf_font fonts[SITE_FACE_COUNT];
 
     for (uint32_t i = 0u; i < SITE_FACE_COUNT; ++i) {
@@ -158,16 +199,16 @@ static void bind_view(void) {
                                site_face_point(face));
     }
 
-    site_view_bind(&view, fonts);
+    site_view_bind(view, fonts);
 
     /* The one platform call a page is allowed to reach, handed over as a
      * function the driver picked rather than as a call the page makes. */
-    view.open_url = cf_web_open_url;
+    view->open_url = cf_web_open_url;
 }
 
-static void close_view(void) {
+static void close_view(site_view *view) {
     for (uint32_t i = 0u; i < SITE_FACE_COUNT; ++i) {
-        cf_font_sdl_close(&view.fonts[i]);
+        cf_font_sdl_close(&view->fonts[i]);
     }
 }
 
@@ -182,20 +223,29 @@ static void close_view(void) {
  * this one shows.
  */
 static int dump_semantics(const char *want) {
-    snprintf(route, sizeof route, "%s", want);
-    bind_view();
+    site_view view;
+    bind_view(&view);
 
     cf_ctx ctx;
 
     if (!cf_ctx_init(&ctx, 1024u * 1024u)) {
         fprintf(stderr, "site: no context\n");
-        close_view();
+        close_view(&view);
         return 1;
+    }
+
+    /* The address the caller asked for, written into the block the build reads it
+     * back from: this run has no window to leave it in, and no bar to be read
+     * from, so the route is stated here rather than discovered there. */
+    char *held = route_of(&ctx);
+
+    if (held != NULL) {
+        snprintf(held, ROUTE_BYTES, "%s", want);
     }
 
     ctx.theme = cf_theme_default();
     cf_command_list list = {0};
-    cf_frame_run(&ctx, build, (cf_size){1440.0f, 900.0f}, 0.016f, &list);
+    cf_frame_run(&ctx, build, &view, (cf_size){1440.0f, 900.0f}, 0.016f, &list);
 
     char *out = cf_alloc_block(256u * 1024u);
     int failed = 0;
@@ -212,7 +262,7 @@ static int dump_semantics(const char *want) {
     }
 
     cf_ctx_free(&ctx);
-    close_view();
+    close_view(&view);
 
     return failed;
 }
@@ -224,14 +274,14 @@ int main(int argc, char **argv) {
 
     cf_sdl_install_log_sink();
 
-    /* The address the reader arrived on, if there was one. A native build reads
-     * nothing at all and the table answers its first page; the keys are the route
-     * from there. */
-    if (!cf_web_read_hash(route, sizeof route)) {
-        route[0] = '\0';
-    }
-
-    bind_view();
+    /* The faces live here, on the run's own stack, and reach every frame through the
+     * build's pointer: the driver keeps no file-scope copy a second window in the same
+     * process would have to share. The address is not seeded here at all - the first
+     * build reads it from the bar the way every later one does, a native build reads
+     * nothing from that bar, and the table answers its first page, which is where the
+     * keys are the route from. */
+    site_view view;
+    bind_view(&view);
 
     /* The name and nothing else, because on a browser tab SDL writes this into
      * document.title after the page's own head has been read - a longer window title
@@ -245,13 +295,14 @@ int main(int argc, char **argv) {
                                                                .min_height = 320u});
     if (backend.submit == NULL) {
         printf("site: no window\n");
-        close_view();
+        close_view(&view);
         return 1;
     }
 
     const cf_clipboard clipboard = cf_clipboard_sdl();
 
     cf_app_run(&(cf_app_config){.build = build,
+                                .build_user_data = &view,
                                 .backend = backend,
                                 .theme = cf_theme_default(),
                                 .fonts = &view.faces[SITE_FACE_PROSE],
@@ -260,7 +311,7 @@ int main(int argc, char **argv) {
     /* The run is over, so the faces the driver opened are its own to hand back, and
      * they go before the window: a font belongs to the platform, and the teardown
      * may be the thing that stops it. */
-    close_view();
+    close_view(&view);
 
     if (backend.destroy != NULL) {
         backend.destroy(backend.user_data);
