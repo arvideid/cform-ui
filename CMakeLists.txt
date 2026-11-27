@@ -78,10 +78,12 @@ add_library(cf_layout STATIC
 target_link_libraries(cf_layout PUBLIC cf_style cf_base)
 
 # cf_text turns borrowed text into measured extents: line breaking, min and
-# max content, the ellipsis cap. It reads fonts through a table of pen
-# distances and never rasterizes - a real font backend answers the same
-# table, which is what keeps this layer headless.
+# max content, the ellipsis cap, and the cluster boundaries an editor steps
+# along. It reads fonts through a table of pen distances and never rasterizes -
+# a real font backend answers the same table, which is what keeps this layer
+# headless.
 add_library(cf_text STATIC
+    src/text/cluster.c
     src/text/measure.c
     src/text/utf8.c
 )

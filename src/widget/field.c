@@ -275,38 +275,26 @@ static cf_text_content content_of(const field_data *field) {
                              .nowrap = field->mode == CF_FIELD_SINGLE};
 }
 
-/* One scalar back: over the continuation bytes the scalar owns, then off its
- * lead byte. */
-static uint32_t back_one(const cf_text_edit *text, uint32_t at) {
-    while (at > 0u && ((unsigned char)text->chars[at - 1u] & 0xC0u) == 0x80u) {
-        at--;
-    }
-
-    return at > 0u ? at - 1u : 0u;
+/*
+ * One character back, one character on - a character being what a reader sees, so an
+ * accent written onto a letter is crossed with it and an emoji built from joined
+ * pictures comes out on one keypress. The rule is the text layer's (cf/text.h), which
+ * is also where its boundaries are read from: a field that counted its own bytes
+ * would disagree with the caret a click places about where a character begins.
+ */
+static uint32_t back_cluster(const cf_text_edit *text, uint32_t at) {
+    return cf_text_prev_cluster((cf_string){text->chars, text->length}, at);
 }
 
-/* One scalar on: past the lead byte and every byte that continues it, stopping
- * at the end of what the buffer holds. */
-static uint32_t forward_one(const cf_text_edit *text, uint32_t at) {
-    if (at >= text->length) {
-        return text->length;
-    }
-
-    at++;
-
-    while (at < text->length && ((unsigned char)text->chars[at] & 0xC0u) == 0x80u) {
-        at++;
-    }
-
-    return at;
+static uint32_t forward_cluster(const cf_text_edit *text, uint32_t at) {
+    return cf_text_next_cluster((cf_string){text->chars, text->length}, at);
 }
 
 /*
- * The classes a word key moves between, read off the byte the scalar walk above
- * already lands on: a blank, an ASCII letter or digit, and anything else. The last
- * class holds every scalar above ASCII, because naming a codepoint's category is the
- * text layer's work and its decoder is private to it - the same limit that makes a
- * combining mark two deletes instead of one, which docs/backlog.md keeps. So an
+ * The classes a word key moves between, read off the scalar that opens the cluster the
+ * walk above lands on: a blank, an ASCII letter or digit, and anything else. The last
+ * class holds every non-ASCII letter, because naming a codepoint's category is the
+ * text layer's work and its tables carry the marks rather than the letters - so an
  * unspaced CJK run is one jump rather than one glyph, and a pasted non-breaking
  * space ends a word instead of being one.
  */
@@ -345,18 +333,18 @@ static bool other_lead(const cf_text_edit *text, uint32_t at) {
 static uint32_t run_end(const cf_text_edit *text, uint32_t at,
                         bool (*kind)(const cf_text_edit *, uint32_t)) {
     while (kind(text, at)) {
-        at = forward_one(text, at);
+        at = forward_cluster(text, at);
     }
 
     return at;
 }
 
-/* The same walk backwards: a caret sits between two scalars, and the one a back
+/* The same walk backwards: a caret sits between two characters, and the one a back
  * arrow owns is the one behind it. */
 static uint32_t run_start(const cf_text_edit *text, uint32_t at,
                           bool (*kind)(const cf_text_edit *, uint32_t)) {
-    while (at > 0u && kind(text, back_one(text, at))) {
-        at = back_one(text, at);
+    while (at > 0u && kind(text, back_cluster(text, at))) {
+        at = back_cluster(text, at);
     }
 
     return at;
@@ -387,7 +375,7 @@ static uint32_t back_word(const cf_text_edit *text, uint32_t at) {
         return 0u;
     }
 
-    const uint32_t before = back_one(text, at);
+    const uint32_t before = back_cluster(text, at);
 
     if (letter_lead(text, before)) {
         return run_start(text, at, letter_lead);
@@ -407,7 +395,7 @@ static uint32_t back_word(const cf_text_edit *text, uint32_t at) {
         return 0u;
     }
 
-    const uint32_t prior = back_one(text, at);
+    const uint32_t prior = back_cluster(text, at);
 
     return letter_lead(text, prior) ? run_start(text, at, letter_lead)
                                     : run_start(text, at, other_lead);
@@ -762,10 +750,10 @@ static void field_key(cf_event *event, void *user_data) {
         }
 
         if (back) {
-            text->caret = by_word ? back_word(text, text->caret) : back_one(text, text->caret);
+            text->caret = by_word ? back_word(text, text->caret) : back_cluster(text, text->caret);
         } else {
             text->caret =
-                by_word ? forward_word(text, text->caret) : forward_one(text, text->caret);
+                by_word ? forward_word(text, text->caret) : forward_cluster(text, text->caret);
         }
 
         if (!shift) {
@@ -787,7 +775,7 @@ static void field_key(cf_event *event, void *user_data) {
         if (sel_from(text) != sel_to(text)) {
             cut(field, sel_from(text), sel_to(text));
         } else if (text->caret > 0u) {
-            cut(field, back_one(text, text->caret), text->caret);
+            cut(field, back_cluster(text, text->caret), text->caret);
         }
         break;
 
@@ -795,7 +783,7 @@ static void field_key(cf_event *event, void *user_data) {
         if (sel_from(text) != sel_to(text)) {
             cut(field, sel_from(text), sel_to(text));
         } else if (text->caret < text->length) {
-            cut(field, text->caret, forward_one(text, text->caret));
+            cut(field, text->caret, forward_cluster(text, text->caret));
         }
         break;
 

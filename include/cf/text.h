@@ -147,6 +147,31 @@ uint32_t cf_text_line_of(const cf_text_content *content, const cf_text_line *lin
                          uint32_t offset);
 
 /*
+ * The cluster boundaries beside a byte offset: `next` answers the first one past the
+ * character standing at `offset`, `prev` the one that opens the character ending at
+ * `offset`. A cluster is what a reader sees as one character - a letter with the
+ * accents written onto it, a family of joined pictures, a flag from two indicator
+ * letters - so these two are what an editor needs to move a caret and to delete: a
+ * step never leaves a mark behind with nothing to sit on.
+ *
+ * The rule is Unicode's (UAX #29), bounded to what a form meets: a carriage return
+ * keeps the line feed after it, a control stands alone, a combining mark, a
+ * variation selector, a skin tone, the keycap sign and a tag character join what
+ * they follow, a zero-width joiner ties a picture to the picture after it, and two
+ * regional indicators make one flag. The classes are read from the block ranges in
+ * src/text/cluster.c rather than the whole property table, so a Hangul syllable
+ * built from jamo still comes apart in more than one step.
+ *
+ * An offset inside a cluster is treated as inside it: both answers land on the
+ * cluster's own boundaries, so a caret a click placed between two pictures moves
+ * whichever way the key goes. Neither answer steps off the buffer - an offset past
+ * the end asks about the last character the text holds, and one at the front is
+ * already a boundary - and a byte that decodes to nothing is a cluster of its own.
+ */
+uint32_t cf_text_next_cluster(cf_string text, uint32_t offset);
+uint32_t cf_text_prev_cluster(cf_string text, uint32_t offset);
+
+/*
  * The bytes a control moves out of the page and back in: what copy, cut and paste
  * carry between this program's buffers and whatever the host keeps beside it.
  *

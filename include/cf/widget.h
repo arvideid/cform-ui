@@ -102,15 +102,18 @@ typedef enum cf_field_mode { CF_FIELD_SINGLE, CF_FIELD_MULTILINE } cf_field_mode
  * that starts inside books focus on the field itself rather than on a box its role
  * named, and the keys the focused field receives edit the buffer in place: what
  * the keyboard wrote lands at the caret over whatever is selected, backspace and
- * delete take the selection or the scalar on the side they name, and left, right,
+ * delete take the selection or the character on the side they name, and left, right,
  * home and end move the caret - holding shift extends the selection instead. A
- * press places the caret under the pointer and a drag from it selects to wherever
- * the pointer went; a single-line field keeps its height whatever it holds, and the
- * box slides along the value to keep the caret in view. Left and
- * right held on either Control or a command key move a word rather than a scalar:
+ * character is what a reader sees rather than a byte, so an accent written onto a
+ * letter and a family of joined pictures each cross on one keypress
+ * (cf_text_next_cluster). A press places the caret under the pointer and a drag from it
+ * selects to wherever the pointer went; a single-line field keeps its height whatever it
+ * holds, and the box slides along the value to keep the caret in view. Left and
+ * right held on either Control or a command key move a word rather than a character:
  * the run of letters and digits the caret stands in, the run of anything else, or
- * the blanks ahead and the run after them. A word is read off the bytes, so a
- * scalar above ASCII counts as a letter and an unspaced run of them is one step.
+ * the blanks ahead and the run after them. A word is named by its first byte, so
+ * anything above ASCII is neither blank nor letter and an unspaced run of it steps as
+ * one word.
  *
  * The theme's focused variant hands out the caret and selection tones, so an
  * unfocused field shows its bytes and nothing else. A NULL context, name or
