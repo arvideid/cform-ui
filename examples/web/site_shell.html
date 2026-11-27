@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!--
+    The document's own description, so the one thing a crawler and a person
+    without WebGL both read says what the site is. The per-route title and the
+    sharing tags are set by the script below from the address the reader arrived
+    on, because one page served once carries a whole site and a canvas has no
+    headings for a host to read.
+  -->
+    <meta name="description"
+        content="Documentation for cform-ui: a C UI framework that declares a frame instead of managing widgets, built from the same code this site runs on.">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="cform-ui">
+    <meta property="og:title" content="cform-ui - documentation">
+    <meta property="og:url" content="https://arvideid.github.io/cform-ui/">
+    <meta property="og:description"
+        content="A C UI framework: declarative layout, one command stream, no DSL. The docs are drawn by the library they document.">
+    <title>cform-ui - documentation</title>
+
+    <style>
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+            overflow: hidden;
+            background: #f5f5f5;
+            color: #525252;
+            font: 14px/1.5 system-ui, sans-serif;
+        }
+
+        /* The canvas' CSS box is the page, exactly as in the gallery's shell. SDL's
+     * Emscripten video driver reads that box, so a wider tab lays the site out
+     * against a wider surface instead of scaling the same picture, and the
+     * sidebar stops fitting at a different width than the window does.
+     *
+     * The background is the theme's page tone (src/theme/default.c) rather than
+     * white: the WebGL context carries alpha, so any pixel the command stream
+     * has not covered shows this, and showing a different field than the native
+     * window paints is a seam nobody can explain. */
+        #canvas {
+            position: fixed;
+            inset: 0;
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+            background: #f5f5f5;
+        }
+
+        /* Only ever seen with scripting or WebGL2 missing, where the canvas paints
+       nothing: a plain list of the same pages, each linking to the text the
+       repository keeps beside them. */
+        #fallback {
+            max-width: 44rem;
+            margin: 0 auto;
+            padding: 2rem 1.5rem;
+        }
+
+        #fallback h1 {
+            font-size: 1.5rem;
+            color: #0a0a0a;
+        }
+
+        #fallback nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        #fallback li {
+            margin: 0.4rem 0;
+        }
+
+        #fallback a {
+            color: #0a0a0a;
+        }
+    </style>
+    <script>
+        /* SDL asks the browser for a WebGL context with preserveDrawingBuffer off,
+         * the default. A browser then clears the drawing buffer every time it
+         * composites the canvas, so any frame the shell does not redraw before the
+         * next composite - the idle frame it presents without drawing, the wait for
+         * the next event - shows the cleared buffer: the page flickers to black
+         * under the cursor. Locking the attribute on keeps the last drawn frame in
+         * the buffer. The context type is left exactly as it was asked for; only the
+         * one attribute is added. */
+        (function () {
+            var getContext = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function (type, attributes) {
+                if (type === 'webgl' || type === 'webgl2' || type === 'experimental-webgl') {
+                    attributes = Object.assign({}, attributes, { preserveDrawingBuffer: true });
+                }
+                return getContext.call(this, type, attributes);
+            };
+        })();
+    </script>
+    <script>
+        /*
+         * The route in the address bar, turned back into the words a document title and
+         * a shared link need.
+         *
+         * This is the navigation table's content spelled a second time, and it is the
+         * only place on this site where that happens: a canvas paints its headings and
+         * a host therefore reads none, so the shell has to state them for the tab strip,
+         * a search result and a link preview. `tools/check_docs.py` reads this map and
+         * `examples/site/nav.h` and fails a route that appears in one and not the other,
+         * which is what makes a second spelling of a thing safe to keep.
+         */
+        (function () {
+            var routes = {
+                '/docs/getting-started': {
+                    title: 'Getting started',
+                    text: 'The three ways to take cform into a build, and the whole program each one runs.'
+                },
+                '/docs/concepts': {
+                    title: 'Concepts',
+                    text: 'The words the source uses, and what happens between two frames.'
+                },
+                '/docs/api': {
+                    title: 'API reference',
+                    text: 'Every public symbol, by layer, with the contract one line long.'
+                },
+                '/docs/versioning': {
+                    title: 'Versioning',
+                    text: 'What a version number promises, and what a CI gate enforces about it.'
+                },
+                '/docs/releases': {
+                    title: 'Releases',
+                    text: 'How a tag becomes an archive, a set of notes and this site.'
+                },
+                '/docs/principles': {
+                    title: 'Principles',
+                    text: 'The rules the code is written to, and what each one buys.'
+                },
+                '/showcase': {
+                    title: 'Showcase',
+                    text: 'Every gallery chapter, drawn with the framework it demonstrates.'
+                }
+            };
+
+            function stamp() {
+                var route = location.hash.replace(/^#/, '');
+                var page = routes[route];
+
+                /* An address this site does not hold still describes itself honestly: the
+                 * program shows its first page, so the tab says the site's own name. */
+                document.title = page ? page.title + ' - cform-ui' : 'cform-ui - documentation';
+
+                var summary = page ? page.text : document.querySelector('meta[name="description"]').content;
+                document.querySelector('meta[name="description"]').content = summary;
+                document.querySelector('meta[property="og:title"]').content = document.title;
+                document.querySelector('meta[property="og:description"]').content = summary;
+                document.querySelector('meta[property="og:url"]').content = location.href;
+            }
+
+            window.addEventListener('hashchange', stamp);
+            stamp();
+        })();
+    </script>
+</head>
+
+<body>
+    <canvas id="canvas" width="1440" height="900" tabindex="0">cform needs a browser with WebGL2.</canvas>
+
+    <!--
+    The reach that a drawing cannot have. Every page the site holds is listed here as
+    text, pointing at the markdown or the C the same words live in: a person without
+    WebGL gets somewhere, and a crawler that reads this document gets the site's whole
+    shape instead of one line about a canvas. The repository's own files are published
+    beside the site as plain markdown by the release workflow, under `repo-docs/`.
+  -->
+    <noscript>
+        <div id="fallback">
+            <h1>cform-ui</h1>
+            <p>
+                A C UI framework that declares a frame instead of managing widgets: flexbox and
+                grid layout, a text measurer, one command stream, and a backend ABI of ten
+                functions. This documentation is drawn by that framework, so it needs WebAssembly
+                and WebGL2 to appear. Everything it says also lives in the repository as text.
+            </p>
+            <nav>
+                <ul>
+                    <li><a href="repo-docs/README.md">Getting started and the quickstart</a></li>
+                    <li><a href="repo-docs/docs/principles.md">Principles</a></li>
+                    <li><a href="repo-docs/docs/versioning.md">Versioning</a></li>
+                    <li><a href="repo-docs/docs/releases.md">Releases</a></li>
+                    <li><a href="repo-docs/docs/backend-abi.md">Writing a backend</a></li>
+                    <li><a href="releases/">Released versions</a></li>
+                    <li><a href="playground/gallery.html">The gallery, running in a tab</a></li>
+                    <li><a href="https://github.com/arvideid/cform-ui">The source</a></li>
+                    <li><a href="sitemap.xml">Every page</a></li>
+                </ul>
+            </nav>
+        </div>
+    </noscript>
+
+    {{{ SCRIPT }}}
+</body>
+
+</html>

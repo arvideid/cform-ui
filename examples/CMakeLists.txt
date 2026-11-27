@@ -48,4 +48,55 @@ if(CFORM_WITH_SDL_BACKEND)
     if(CFORM_WARNINGS)
         target_compile_options(gallery PRIVATE ${CFORM_WARNINGS})
     endif()
+
+    # The documentation site, which is a program of the same shape as the gallery:
+    # one driver, pages as declaration functions, the app shell, the SDL backend.
+    # It is built natively so the pages get compiled and headless-tested on every
+    # OS the CI runs, and to WebAssembly so the deployment can serve the same C.
+    add_executable(site
+        site/shell.c
+        site/page_getting_started.c
+        site/page_concepts.c
+        site/page_api.c
+        site/page_project.c
+        site/page_showcase.c)
+
+    target_link_libraries(site PRIVATE cf_backend_sdl cf_app cf_theme)
+    target_include_directories(site PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/site)
+
+    if(EMSCRIPTEN)
+        # The same flags the gallery needs, plus the second face and the shell file
+        # that carries this site's title, description and noscript mirror. Both fonts
+        # are embedded rather than fetched: one file a tab opens, no sidecar to
+        # arrange to be served beside it.
+        target_compile_definitions(site PRIVATE
+            CFORM_SITE_FONT="/Lato-Regular.ttf"
+            CFORM_SITE_FONT_MONO="/IBMPlexMono-Regular.ttf")
+
+        target_link_options(site PRIVATE
+            "-sASYNCIFY=1"
+            "-sALLOW_MEMORY_GROWTH=1"
+            "-sUSE_WEBGL2=1"
+            "-sSINGLE_FILE=1"
+            "--embed-file=${CFORM_FONT_FILE}@/Lato-Regular.ttf"
+            "--embed-file=${CFORM_FONT_MONO_FILE}@/IBMPlexMono-Regular.ttf"
+            "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/site_shell.html"
+        )
+
+        set_target_properties(site PROPERTIES SUFFIX ".html")
+
+        # The shell file is read at link time and is not a source, so nothing would
+        # notice it changing: LINK_DEPENDS is what makes editing the HTML rebuild the
+        # page instead of leaving the old one in the build tree.
+        set_property(TARGET site APPEND PROPERTY LINK_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/web/site_shell.html")
+    else()
+        target_compile_definitions(site PRIVATE
+            CFORM_SITE_FONT="${CFORM_FONT_FILE}"
+            CFORM_SITE_FONT_MONO="${CFORM_FONT_MONO_FILE}")
+    endif()
+
+    if(CFORM_WARNINGS)
+        target_compile_options(site PRIVATE ${CFORM_WARNINGS})
+    endif()
 endif()

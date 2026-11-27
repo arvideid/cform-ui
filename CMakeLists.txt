@@ -215,12 +215,26 @@ if(CFORM_WITH_SDL_BACKEND)
         src/backend/sdl/text.c
     )
 
+    # The address bar belongs to the browser, so the file that reads it is chosen
+    # by the platform rather than by a preprocessor branch in the page that uses
+    # it. Every other platform links the answers that do nothing, which is what
+    # lets one source navigate on both without a single #ifdef in it.
+    if(EMSCRIPTEN)
+        target_sources(cf_backend_sdl PRIVATE src/backend/sdl/web_nav.c)
+    else()
+        target_sources(cf_backend_sdl PRIVATE src/backend/sdl/web_nav_none.c)
+    endif()
+
     target_link_libraries(cf_backend_sdl PUBLIC cf_paint cf_text SDL3::SDL3 SDL3_ttf::SDL3_ttf)
 
     # The one font the examples and the font adapter read is fetched, not
     # committed: the repository carries no binary it can download. Both read
     # this path, so it is settled once here rather than per consumer, and an
     # offline machine gets a page without labels instead of a failed configure.
+    #
+    # The directory is made rather than assumed: file(DOWNLOAD) writes a file and
+    # not the tree above it, so a fresh build tree left both faces unfetched.
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/fonts")
     set(CFORM_FONT_FILE "${CMAKE_BINARY_DIR}/fonts/Lato-Regular.ttf")
 
     if(NOT EXISTS "${CFORM_FONT_FILE}")
@@ -228,6 +242,27 @@ if(CFORM_WITH_SDL_BACKEND)
             "https://raw.githubusercontent.com/google/fonts/main/ofl/lato/Lato-Regular.ttf"
             "${CFORM_FONT_FILE}"
             STATUS CFORM_FONT_STATUS)
+    endif()
+
+    # The second face the docs site asks for: prose in Lato reads fine and code in
+    # Lato does not, so the panels that show commands get a monospaced one. Fetched
+    # the same way and with the same offline answer as the face above - a page that
+    # cannot get its mono stack shows code in prose, which is ugly rather than
+    # broken.
+    #
+    # Source Code Pro was the first choice and is not available: the family is
+    # published on this host as one variable file, and a variable font opened
+    # without naming an instance answers whatever the font's default weight is
+    # rather than the regular a panel wants. IBM Plex Mono ships static instances
+    # from the same repository under the same licence, and the Regular file is the
+    # one thing here that cannot disagree with itself.
+    set(CFORM_FONT_MONO_FILE "${CMAKE_BINARY_DIR}/fonts/IBMPlexMono-Regular.ttf")
+
+    if(NOT EXISTS "${CFORM_FONT_MONO_FILE}")
+        file(DOWNLOAD
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf"
+            "${CFORM_FONT_MONO_FILE}"
+            STATUS CFORM_FONT_MONO_STATUS)
     endif()
 endif()
 
