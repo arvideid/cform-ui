@@ -227,6 +227,12 @@ static const api_symbol node_symbols[] = {
     {"cf_frame_alloc", "void *cf_frame_alloc(cf_ctx *ctx, size_t size);",
      "Bytes the frame owns and the next cf_frame_begin wipes, or NULL when the frame has taken "
      "more than it was sized for."},
+    {"cf_use_theme", "void cf_use_theme(cf_ctx *ctx, const cf_theme *theme);",
+     "Names the design system the page's roles are styled from, borrowed for as long as the "
+     "context reads it; NULL is a page that styles every box itself."},
+    {"cf_use_clipboard", "void cf_use_clipboard(cf_ctx *ctx, const cf_clipboard *clipboard);",
+     "Names where a widget may put bytes a person asked out of the page; NULL leaves the copy "
+     "and cut chords unserved."},
     {"cf_theme_of", "const cf_theme *cf_theme_of(const cf_ctx *ctx);",
      "The design system this frame's roles are styled from, or NULL for a page that styles every "
      "box it declares."},

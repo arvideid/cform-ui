@@ -92,11 +92,11 @@ void cf_app_run(const cf_app_config *config) {
         return;
     }
 
-    ctx.theme = config->theme;
+    cf_use_theme(&ctx, config->theme);
     /* The clipboard is the host's, not the backend's: a shell that draws through
      * one window can still be asked to move bytes somewhere else entirely, and a
      * host that names nowhere hands NULL. */
-    ctx.clipboard = config->clipboard;
+    cf_use_clipboard(&ctx, config->clipboard);
     const cf_name inspector_key = cf_ctx_key(&ctx, INSPECTOR_KEY);
     bool painted = false;
     /* The shape the backend was last told to show. A window opens as an arrow, so

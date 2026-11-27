@@ -173,13 +173,15 @@ typedef struct cf_ctx {
     cf_store nodes;
     cf_store states;
     /* The design system cf_frame_resolve reads. Borrowed, never copied; a
-     * build that styles every box itself leaves it NULL. */
+     * build that styles every box itself leaves it NULL. cf_use_theme is the
+     * only writer outside src/node. */
     const cf_theme *theme;
     /*
      * What a widget reaches when it is asked to move bytes out of the page: the
-     * host's copy, cut and paste. NULL is a page with no such place to put them,
-     * which a field answers by keeping its selection rather than by failing.
-     * Borrowed the way the theme is, and for as long as the context reads it.
+     * host's copy, cut and paste. NULL is a page with no such place to put them, which
+     * a field answers by keeping its selection rather than by failing. Borrowed the way
+     * the theme is, and for as long as the context reads it; cf_use_clipboard is the only
+     * writer outside src/node.
      */
     const cf_clipboard *clipboard;
     /* The view cf_layout reads, rebuilt by every diff into the frame arena. */
@@ -261,6 +263,24 @@ cf_name cf_ctx_key(cf_ctx *ctx, const char *chars);
  * by saying less rather than by failing the frame.
  */
 void *cf_frame_alloc(cf_ctx *ctx, size_t size);
+
+/*
+ * Names the design system this page's roles are styled from, replacing whatever the context was
+ * using. The theme is borrowed, not copied: it has to stand for as long as the context reads it,
+ * which is every resolve from here until the context is freed or another theme is named. NULL says
+ * the page styles every box it declares, and is what a context that was never configured holds.
+ *
+ * A theme handed over between frames takes effect on the resolve that follows it: a resolved style
+ * lives in the frame that computed it, so there is no cache to invalidate.
+ */
+void cf_use_theme(cf_ctx *ctx, const cf_theme *theme);
+
+/*
+ * Names where a widget may put bytes a person asked out of the page, replacing whatever the context
+ * was using. NULL - what a context starts with - means the host has not decided where the bytes go,
+ * and a field asked to cut then keeps its selection rather than failing the edit.
+ */
+void cf_use_clipboard(cf_ctx *ctx, const cf_clipboard *clipboard);
 
 /*
  * The design system this frame's roles are styled from, or NULL for a page that styles every

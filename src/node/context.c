@@ -127,6 +127,22 @@ const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot) {
     return &ctx->rects[slot];
 }
 
+void cf_use_theme(cf_ctx *ctx, const cf_theme *theme) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    ctx->theme = theme;
+}
+
+void cf_use_clipboard(cf_ctx *ctx, const cf_clipboard *clipboard) {
+    if (ctx == NULL) {
+        return;
+    }
+
+    ctx->clipboard = clipboard;
+}
+
 const cf_theme *cf_theme_of(const cf_ctx *ctx) {
     return ctx == NULL ? NULL : ctx->theme;
 }

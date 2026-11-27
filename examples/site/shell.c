@@ -243,7 +243,7 @@ static int dump_semantics(const char *want) {
         snprintf(held, ROUTE_BYTES, "%s", want);
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     cf_command_list list = {0};
     cf_frame_run(&ctx, build, &view, (cf_size){1440.0f, 900.0f}, 0.016f, &list);
 
