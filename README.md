@@ -168,6 +168,16 @@ accepted and ignored — there is no field that pretends to take these things.
   way to type: the frame's
   `cf_frame_takes_text` answer reaches `set_text_input`, so a screen keyboard or an
   input method is offered while a box can take the words and not while it cannot.
+- **A box a key names can be reached.** `cf_slot_named` answers a key a build
+  declared with the slot the retained tree carries that box at, and `cf_reveal`
+  brings it inside every pane which scrolls it — the move **Tab** makes when the
+  ring lands on a control below the fold. A build runs before the frame has been
+  measured, so an ask made there waits for the layout pass that measures it and
+  the frame after shows it, while a handler running between frames moves the page
+  at once. Every heading on the documentation site is keyed by the slug of its
+  title, so an address with a
+  [fragment](https://developer.mozilla.org/en-US/docs/Web/URI/Reference/Fragment)
+  ending in `#backend` lands on that heading rather than at the top of the page.
 - **Copy, cut and paste need a clipboard from the host.** The field answers
   **Ctrl** or **Cmd** with **C**, **X** and **V** through `cf_clipboard`, a read/write
   pair the shell names in its `cf_app_config`; `cf_clipboard_sdl()` is the desktop's,
@@ -269,7 +279,7 @@ and a C17 compiler ([GCC](https://gcc.gnu.org/) or
 ```sh
 cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON   # set up a Debug build
 cmake --build --preset dev                        # compile everything
-ctest --preset dev                                # run the 39 headless checks
+ctest --preset dev                                # run the 37 tiers and the 4 benches
 build/dev/bin/gallery                             # open the demo window
 ```
 
@@ -444,8 +454,8 @@ SDL itself.
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 37 checks, 39 once the SDL backend is on |
-| `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `gallery` and `layout_only` |
+| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 35 checks, 37 once the SDL backend is on |
+| `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `layout_only`, and beside the SDL backend `gallery` and `site` |
 | `CFORM_WITH_SDL_BACKEND` | `OFF` | the SDL window backend, and the SDL download |
 | `CFORM_WITH_SANITIZERS` | `OFF` | memory and undefined-behaviour checkers |
 
