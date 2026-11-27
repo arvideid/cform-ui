@@ -231,10 +231,10 @@ static const api_symbol node_symbols[] = {
      "void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);",
      "Lays this frame's tree into rect storage the context owns."},
     {"cf_frame_run",
-     "void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds, "
-     "cf_command_list *out);",
-     "One frame end to end, and the whole reason a refused arena yields an empty list rather than "
-     "a half-laid screen."},
+     "void cf_frame_run(cf_ctx *ctx, cf_build_fn build, void *user_data, cf_size offer, "
+     "float seconds, cf_command_list *out);",
+     "One frame end to end, with the host's pointer handed to the build unread, and the whole "
+     "reason a refused arena yields an empty list rather than a half-laid screen."},
     {"cf_error_message", "const char *cf_error_message(const cf_ctx *ctx);",
      "Why the last boundary refused since the frame began, or NULL when nothing has."},
     {"cf_input", "void cf_input(cf_ctx *ctx, cf_event event);",
@@ -392,6 +392,7 @@ static const api_symbol widget_symbols[] = {
 static const api_symbol app_symbols[] = {
     {"cf_app_run", "void cf_app_run(const cf_app_config *config);",
      "Every frame: drain the backend's events, run the pipeline against the surface offered now, "
+     "handing the build the config's build_user_data, "
      "submit what was painted, until the run is over."},
 };
 

@@ -46,7 +46,7 @@ static const char *const meanings[] = {
 
 /* The four steps, each with the call that performs it. */
 static const char *const describe[] = {
-    "static cf_node build(cf_ctx *ctx) {",
+    "static cf_node build(cf_ctx *ctx, void *user_data) {",
     "    cf_style row = cf_style_default();",
     "    row.direction = CF_DIRECTION_ROW;",
     "    row.column_gap = CF_PT(8.0f);",
