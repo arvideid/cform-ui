@@ -38,12 +38,27 @@
  * the tags, because a canvas cannot fetch and a link can. */
 #define SITE_RELEASES "releases/"
 
-/* The groups, named here so a page can put its own name under the heading it lives
- * beneath and the navigation table can file it there - one spelling, and the list, the
- * foot and the bar all read the filing rather than restating it. */
+/*
+ * The groups, named here so the navigation table can file a page and the page can put
+ * that filing above its own heading - one spelling, and the list, the foot and the bar
+ * all read the filing rather than restating it.
+ *
+ * A group's word is printed once per screen, over the heading of the page filed under
+ * it. The surfaces that offer rows are labelled by what they are rather than by the
+ * group, because a label read beside the prose and a label read over it are the same
+ * glance, and the same word twice in one glance reads as a drawing that repeated itself.
+ *
+ * The showcase's group is the gallery rather than the showcase, because the page's own
+ * title is already the word the bar reads - a group named the same as the heading under
+ * it would say the page's name twice and describe nothing.
+ */
 #define SITE_GROUP_DOCS "Documentation"
 #define SITE_GROUP_PROJECT "The project"
-#define SITE_GROUP_SHOWCASE "Showcase"
+#define SITE_GROUP_SHOWCASE "Gallery"
+
+/* The words over the two lists: the pages beside the document, and the pages under it. */
+#define SITE_SIDEBAR_LABEL "Contents"
+#define SITE_FOOT_LABEL "More pages"
 
 cf_node site_page_getting_started(cf_ctx *ctx, const site_view *view);
 cf_node site_page_concepts(cf_ctx *ctx, const site_view *view);

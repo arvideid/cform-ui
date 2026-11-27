@@ -35,8 +35,9 @@
  * window it was offered, that a route with no browser behind it still lands somewhere,
  * that every page is offered by a press somewhere on the first one - the list beside the
  * document, its bar, or its foot - that the list asks for the page a reader pressed it
- * for, and that the document moves under a wheel notch and under the Tab key - the two
- * ways a reader has of asking to see the rest of a page that does not fit.
+ * for, that no two labels read in one glance say the same word, and that the document
+ * moves under a wheel notch and under the Tab key - the two ways a reader has of asking
+ * to see the rest of a page that does not fit.
  *
  * The frame is built by the same function the window runs, out of document.h, rather
  * than by a copy of it drawn here. A tier that measures a hand-made layout can pass
@@ -298,6 +299,24 @@ static uint32_t lines_in_face(site_face face) {
 
     for (uint32_t i = 0u; i < recorded_count; ++i) {
         if (recorded[i].kind == CF_COMMAND_TEXT && recorded[i].font.handle == &face_marker[face]) {
+            seen++;
+        }
+    }
+
+    return seen;
+}
+
+/* How many lines in one face read exactly these words: how a case tells a label that
+ * was written once from one the drawing wrote twice. */
+static uint32_t lines_reading(site_face face, const char *words) {
+    const uint32_t length = (uint32_t)strlen(words);
+    uint32_t seen = 0u;
+
+    for (uint32_t i = 0u; i < recorded_count; ++i) {
+        const cf_command command = recorded[i];
+
+        if (command.kind == CF_COMMAND_TEXT && command.font.handle == &face_marker[face] &&
+            command.text.length == length && strncmp(command.text.chars, words, length) == 0) {
             seen++;
         }
     }
@@ -580,6 +599,39 @@ static void the_list_holds_only_the_pages_that_document_the_library(void) {
 }
 
 /*
+ * The label over the list and the label over the page's heading are read in one glance,
+ * and so is the label at the foot of the page under it. A word written twice where a
+ * reader sees it twice is a drawing that repeated itself, and it is the kind of defect
+ * only a picture shows - so the words themselves are counted here, in the face only
+ * labels are drawn in.
+ *
+ * The two halves are counted in two frames, because what is below the fold is culled out
+ * of the stream rather than painted and hidden: the top of the document answers the list
+ * and the heading, the bottom answers the foot.
+ */
+static void no_label_is_written_twice_on_one_screen(void) {
+    for (uint32_t row = 0u; row < SITE_NAV_COUNT; ++row) {
+        showing = site_entry_at(row);
+        start(surfaces[0]);
+
+        CF_CHECK(lines_reading(SITE_FACE_EYEBROW, showing->group) == 1u,
+                 "the page states its group once, above its own heading");
+        CF_CHECK(lines_reading(SITE_FACE_EYEBROW, SITE_SIDEBAR_LABEL) == 1u,
+                 "the list beside the prose is labelled once, and by a word of its own");
+        CF_CHECK(lines_reading(SITE_FACE_EYEBROW, showing->label) == 0u,
+                 "no label says the words the heading under it already says");
+
+        /* A walk past the end of any page the table holds, so the foot is in the frame
+         * that is read whether or not the page reached it. */
+        step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 200.0f}});
+        CF_CHECK(lines_reading(SITE_FACE_EYEBROW, SITE_FOOT_LABEL) == 1u,
+                 "the foot is labelled once, and by a word of its own");
+
+        end();
+    }
+}
+
+/*
  * The list beside the document is the site's contents, so a row of it has to ask for
  * the page it names. This is as much of a navigation as a build with no address bar can
  * check: the press reaches the driver's callback carrying the row it was aimed at, and
@@ -748,6 +800,7 @@ int main(void) {
     CF_RUN(a_tab_the_reader_opened_survives_the_next_frame);
     CF_RUN(every_page_is_offered_from_the_first_one);
     CF_RUN(the_list_holds_only_the_pages_that_document_the_library);
+    CF_RUN(no_label_is_written_twice_on_one_screen);
     CF_RUN(a_row_in_the_list_names_the_page_it_holds);
     CF_RUN(a_wheel_walks_the_document_wherever_it_lands);
     CF_RUN(a_tab_past_the_fold_moves_the_page);

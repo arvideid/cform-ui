@@ -18,8 +18,10 @@
  * crowd. The list holds the pages that document the library; the pages that talk about
  * the project sit at the foot of the column and the showcase is a word in the bar, so the
  * list stays short without a page becoming somewhere nobody can click to. Each row is
- * filed by group, and the group is the same word the page itself puts over its title, so
- * the list and the prose cannot disagree about where a page belongs.
+ * filed by group, and the group is the word the page itself puts over its title, so the
+ * list and the prose cannot disagree about where a page belongs. Each list is labelled by
+ * what it is rather than by that word, because a reader sees the label and the heading in
+ * one glance.
  *
  * `static inline` rather than `static`, and in a header rather than in the driver,
  * because two translation units build this and must build the same one: the program that
@@ -124,11 +126,11 @@ static inline cf_node site_masthead(cf_ctx *ctx, const site_view *view, const si
 }
 
 /*
- * One group of the table: its name over the rows under it.
+ * One group of the table: a line over the rows under it.
  *
- * The label is the eyebrow a page already puts over its own title, so the list says
- * what the page says. A row stretches, because a list of words a reader chooses between
- * is a column of ends lined up, not a row of them.
+ * The caller brings the label, because a list says what it is rather than repeating the
+ * group word its pages already put above their own headings. A row stretches, because a
+ * list of words a reader chooses between is a column of ends lined up, not a row of them.
  */
 static inline cf_node site_group(cf_ctx *ctx, const site_view *view, const char *label,
                                  const site_entry *const *rows, uint32_t count,
@@ -163,9 +165,9 @@ static inline cf_node site_group(cf_ctx *ctx, const site_view *view, const char 
  *
  * Only the documentation is listed here, because this list is a reader's table of
  * contents for the library and the rest of the table is about the project rather than
- * the code. The group is asked of the table rather than repeated here, so filing a page
- * under Documentation is the whole of what adding it to the list takes - and a page
- * filed anywhere else is offered by the foot below, not lost.
+ * the code. Which rows belong is asked of the table rather than repeated here, so filing
+ * a page under Documentation is the whole of what adding it to the list takes - and a
+ * page filed anywhere else is offered by the foot below, not lost.
  *
  * The list keeps its measure and the prose gives up its own: a column that shrank
  * beside a paragraph would be a table of contents with words on two lines each.
@@ -174,7 +176,7 @@ static inline cf_node site_sidebar(cf_ctx *ctx, const site_view *view, const sit
                                    cf_on_press go_to) {
     const site_entry *rows[SITE_NAV_COUNT];
     const uint32_t count = site_group_rows(SITE_GROUP_DOCS, rows, SITE_NAV_COUNT);
-    cf_node list = site_group(ctx, view, SITE_GROUP_DOCS, rows, count, current, go_to);
+    cf_node list = site_group(ctx, view, SITE_SIDEBAR_LABEL, rows, count, current, go_to);
 
     list.style.width = CF_PT(SIDEBAR_WIDTH);
     list.style.flex_shrink = 0.0f;
@@ -214,7 +216,7 @@ static inline cf_node site_foot(cf_ctx *ctx, const site_view *view, const site_e
     sheet.row_gap = CF_PT(GROUP_HEAD_GAP);
     sheet.align_items = CF_ALIGN_START;
 
-    const cf_node children[] = {site_eyebrow(ctx, view, SITE_GROUP_PROJECT),
+    const cf_node children[] = {site_eyebrow(ctx, view, SITE_FOOT_LABEL),
                                 cf_row(ctx, line, links, count)};
 
     return cf_col(ctx, sheet, children, SITE_COUNT(children));
