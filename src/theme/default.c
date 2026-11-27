@@ -105,8 +105,15 @@ static const cf_theme
                                      .marked = {.present = true, .value = RGBA(37, 99, 235)}},
                          .disabled =
                              {.background = {.present = true, .value = RGBA(229, 229, 229)}}},
-                    [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,
-                                                                 .value = RGBA(229, 229, 229)}}},
+                    [CF_ROLE_LIST] =
+                        {.hovered = {.background = {.present = true, .value = RGBA(229, 229, 229)}},
+                         /* A row is a control whenever a page makes it pressable, and
+                          * the keyboard reaches it the same way it reaches a button.
+                          * The mark is the edge rather than the fill: a row already
+                          * wears the hover's well under a hand, and a focus the eye
+                          * cannot tell from a mouse would say nothing about where
+                          * Enter lands. Ink on the page's own tone is 19:1. */
+                         .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)}}},
                     /* The role styles the scrollable container, not the thumb. A pane that
                      * darkens wherever the pointer happens to rest is not a control, and the
                      * thumb that answers a drag carries its own styling; so the container
