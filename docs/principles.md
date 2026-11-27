@@ -130,8 +130,10 @@ still presenting without building.
 
 Every length a caller writes and every rectangle a test asserts is a logical point. The
 backend is handed points plus a scale and does the rounding into whatever a real device
-owns. A `cf_length` carries the unit in its kind — `CF_PT`, `CF_PX`, `CF_PERCENT`,
-`CF_FR`, `CF_AUTO` — rather than being a float with a convention beside it.
+owns. A `cf_length` carries the unit in its kind — `CF_LENGTH_AUTO`, `CF_LENGTH_PX`,
+`CF_LENGTH_PERCENT`, `CF_LENGTH_FR` and the two intrinsic keywords — rather than being a
+float with a convention beside it. A caller writes the constructor instead: `CF_AUTO`,
+`CF_PT`, `CF_PERCENT`, `CF_FR`, `CF_MAX_CONTENT`, `CF_STRETCH`.
 
 **Why.** A DPI of 1.75 exists. So does a window a drag makes 400 points wide, and a
 golden test that stores numbers a person can read. If the engine rounded to device pixels
