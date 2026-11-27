@@ -32,13 +32,19 @@
  *
  * What is added here is the site's own contract: that a row of the table renders a
  * page, that the page states its heading in the title face, that the prose fits the
- * window it was offered, and that a route with no browser behind it still lands
- * somewhere.
+ * window it was offered, that a route with no browser behind it still lands somewhere,
+ * and that the document moves under a wheel notch and under the Tab key - the two ways
+ * a reader has of asking to see the rest of a page that does not fit.
  */
 
 #define FRAME_BYTES (1024u * 1024u)
 #define STORE_BYTES (256u * 1024u)
 #define SEMANTIC_BYTES (128u * 1024u)
+
+/* How many times a case may press Tab before it is told the keyboard is going nowhere.
+ * A page holds a handful of controls, so this is several rounds of the ring: enough that
+ * a walk which stops short is a page that moved, and not a walk that ran out. */
+#define TAB_WALK 24u
 
 /* Wide, medium, phone: the three windows the layout has to answer, with the narrow
  * one at 420 points because that is the minimum width the native window accepts. */
@@ -83,31 +89,35 @@ static void bind_view(void) {
     view.open_url = NULL;
 }
 
-/* The page under test, in the column the shell puts a page in: capped, centred,
- * clipped. Driving a bare page would measure it against a window it never gets. */
+/* The page under test, in the document the shell puts it in: one column, capped at a
+ * readable measure, padded, and walked by a single scroller. Driving a bare page would
+ * measure it against a window it never gets. */
 static const site_entry *showing;
 
 static cf_node build(cf_ctx *ctx) {
     const cf_node page = showing->page(ctx, &view);
 
-    cf_node column = page;
-    column.style.max_width = CF_PT(CONTENT_WIDTH);
-    column.style.padding = site_pad(CONTENT_PADDING);
-    column.style.margin = (cf_box){CF_AUTO, CF_PT(0.0f), CF_AUTO, CF_PT(0.0f)};
+    cf_style sheet = cf_style_default();
+    sheet.direction = CF_DIRECTION_COLUMN;
+    sheet.row_gap = CF_PT(DOC_GAP);
+    sheet.width = CF_PERCENT(100.0f);
+    sheet.max_width = CF_PT(DOC_WIDTH);
+    sheet.padding = site_pad(DOC_PADDING);
 
-    cf_node content = cf_scroller(ctx, "content", &column, 1u);
+    const cf_node document = cf_col(ctx, sheet, &page, 1u);
 
-    /* The same reset the shell makes, because this harness exists to measure what
-     * ships: a viewport is restated to the page tone and carries no visual role. */
-    content.role = CF_ROLE_NONE;
-    content.style = view.surface;
-    content.style.width = CF_PERCENT(100.0f);
-    content.style.height = CF_PERCENT(100.0f);
-    content.style.direction = CF_DIRECTION_COLUMN;
-    content.style.align_items = CF_ALIGN_CENTER;
-    content.style.clips_content = true;
+    /* The node the shell declares, restated the same way and for the same reason - and
+     * keeping the role cf_scroller asked for, because the tier exists to measure what
+     * ships and what ships is a viewport the keyboard can scroll. */
+    cf_node root = cf_scroller(ctx, "page", &document, 1u);
+    root.style = view.surface;
+    root.style.width = CF_PERCENT(100.0f);
+    root.style.height = CF_PERCENT(100.0f);
+    root.style.direction = CF_DIRECTION_COLUMN;
+    root.style.align_items = CF_ALIGN_CENTER;
+    root.style.clips_content = true;
 
-    return content;
+    return root;
 }
 
 /* ---------- the recorder, and what the last frame submitted ------------------ */
@@ -237,6 +247,30 @@ static void end(void) {
     cf_arena_free(&store);
 }
 
+/* One frame, submitted, with the harness reading the stream it produced. Every event a
+ * case sends is followed by this, because a wheel and a key both write state that the
+ * next build is the thing which turns into a moved page. */
+static void frame(void) {
+    cf_command_list list = {0};
+    cf_frame_run(&session, build, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f, &list);
+    check_stream(list.commands, list.count, viewport);
+
+    recorder.count = 0u;
+    shell_backend.submit(shell_backend.user_data, list.commands, list.count);
+    recorded = recorder.commands;
+    recorded_count = recorder.count;
+}
+
+static void step(cf_event event) {
+    cf_input(&session, event);
+    frame();
+}
+
+/* The document's own offset, or NULL for a build that stopped carrying a scroller. */
+static cf_scroll *document_scroll(void) {
+    return cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+}
+
 /* ---------- reading the last frame back ------------------------------------- */
 
 static bool command_reads(const cf_command *command, const char *needle) {
@@ -299,6 +333,32 @@ static bool every_line_fits(cf_rect output) {
     return !spilled;
 }
 
+/* Where a line was painted, which is how a case knows where to put its pointer. */
+static cf_rect text_rect(const char *needle, bool *found) {
+    for (uint32_t i = 0u; i < recorded_count; ++i) {
+        if (command_reads(&recorded[i], needle)) {
+            *found = true;
+            return recorded[i].rect;
+        }
+    }
+
+    *found = false;
+
+    return (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
+/* Whether a line is painted where a reader looking at the window can see it - inside the
+ * viewport, rather than merely present in a stream that runs the length of the document. */
+static bool text_in_view(const char *needle) {
+    for (uint32_t i = 0u; i < recorded_count; ++i) {
+        if (command_reads(&recorded[i], needle) && rect_inside(recorded[i].rect, viewport)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 /* ---------- cases ----------------------------------------------------------- */
 
 /* The table is the site's whole structure, so it is checked as data before anything is
@@ -315,7 +375,7 @@ static void the_table_names_a_page_each_route_reaches(void) {
         CF_CHECK(entry->label != NULL && entry->description != NULL,
                  "every row says what it is and what it holds");
         CF_CHECK(site_entry_for_route(entry->route) == entry, "its own address finds its row");
-        CF_CHECK(site_group_first(entry->group) < SITE_NAV_COUNT, "its group files it somewhere");
+        CF_CHECK(site_index_of(entry) < SITE_NAV_COUNT, "the table can find the row it named");
     }
 
     CF_CHECK(site_entry_at(SITE_NAV_COUNT) == NULL, "the row past the end is nothing");
@@ -391,22 +451,10 @@ static void a_tab_the_reader_opened_survives_the_next_frame(void) {
         const cf_rect tab = recorded[i].rect;
         const cf_point at = {tab.x + tab.width / 2.0f, tab.y + tab.height / 2.0f};
 
-        cf_input(&session, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at, .button = 1u});
-        cf_command_list down = {0};
-        cf_frame_run(&session, build, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f,
-                     &down);
-        check_stream(down.commands, down.count, viewport);
-
-        cf_input(&session, (cf_event){.type = CF_EVENT_POINTER_UP, .position = at, .button = 1u});
-        cf_command_list up = {0};
-        cf_frame_run(&session, build, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f,
-                     &up);
-        check_stream(up.commands, up.count, viewport);
-
-        recorder.count = 0u;
-        shell_backend.submit(shell_backend.user_data, up.commands, up.count);
-        recorded = recorder.commands;
-        recorded_count = recorder.count;
+        /* A press is two events with a frame between them, which is what a click looks
+         * like to a running shell. */
+        step((cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at, .button = 1u});
+        step((cf_event){.type = CF_EVENT_POINTER_UP, .position = at, .button = 1u});
         tapped = true;
         break;
     }
@@ -417,15 +465,77 @@ static void a_tab_the_reader_opened_survives_the_next_frame(void) {
 
     /* A rebuild that is not a click: the choice has to survive it, which is the whole
      * reason it lives in keyed state rather than beside the node. */
-    cf_command_list again = {0};
-    cf_frame_run(&session, build, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f, &again);
-    check_stream(again.commands, again.count, viewport);
-    recorder.count = 0u;
-    shell_backend.submit(shell_backend.user_data, again.commands, again.count);
-    recorded = recorder.commands;
-    recorded_count = recorder.count;
+    frame();
 
     CF_CHECK(shows("find_package(cform-ui REQUIRED CONFIG)"), "a frame after keeps the choice");
+
+    end();
+}
+
+/*
+ * The complaint the document's shape is the answer to: a wheel notch has to move the page,
+ * and it has to move it wherever the hand happens to be. A notch that arrives with the
+ * pointer at the window's origin is what a browser reports before anything has moved, and
+ * a page built out of panes has to guess which of them the reader meant. One viewport has
+ * nothing beside it to mean.
+ */
+static void a_wheel_walks_the_document_wherever_it_lands(void) {
+    /* The longest page in the table, so a walk of two notches cannot run into its end and
+     * answer zero for the wrong reason. */
+    showing = site_entry_for_route(SITE_PREFIX "api");
+    start(surfaces[0]);
+
+    CF_CHECK(document_scroll() != NULL, "the document is in a scroller the state can find");
+
+    /* A notch is forty-eight points, so two are worth ninety-six - asked for as two so
+     * that a page which moved by a rounding does not pass for one that walked. */
+    step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 2.0f}});
+
+    cf_scroll *held = document_scroll();
+    CF_CHECK(held != NULL && held->offset >= 96.0f, "a notch the pointer never moved still walks");
+
+    /* The same notch over prose, which is where a reader's hand actually rests. */
+    bool found = false;
+    const cf_rect lede = text_rect("Every exported function", &found);
+    CF_CHECK(found, "the page's opening line is painted");
+
+    if (found) {
+        const cf_point at = {lede.x + lede.width / 2.0f, lede.y + lede.height / 2.0f};
+        step((cf_event){.type = CF_EVENT_POINTER_MOVE, .position = at});
+        step((cf_event){.type = CF_EVENT_SCROLL, .position = at, .wheel = {.x = 0.0f, .y = 2.0f}});
+
+        held = document_scroll();
+        CF_CHECK(held != NULL && held->offset >= 192.0f,
+                 "and the notch walks the same document under the prose");
+    }
+
+    end();
+}
+
+/*
+ * The keyboard's half of the same document: a Tab that lands on a control below the fold
+ * has to bring the page with it, or the control is reachable and invisible - the worst kind
+ * of accessible. The tree only moves a viewport it knows is one, so this case is also the
+ * one that fails the day somebody strips the scroller's role to settle a colour.
+ */
+static void a_tab_past_the_fold_moves_the_page(void) {
+    showing = site_entry_for_route(SITE_PREFIX "api");
+    start(surfaces[0]);
+
+    CF_CHECK(!text_in_view("The headers themselves"),
+             "the page's last control starts below what the window shows");
+
+    bool reached = false;
+
+    for (uint32_t n = 0u; n < TAB_WALK && !reached; ++n) {
+        step((cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_TAB});
+        reached = text_in_view("The headers themselves");
+    }
+
+    const cf_scroll *held = document_scroll();
+
+    CF_CHECK(reached, "walking the ring brings the page to the control it reached");
+    CF_CHECK(held != NULL && held->offset > 0.0f, "and the offset is the page that moved");
 
     end();
 }
@@ -450,12 +560,15 @@ static void the_semantic_tree_names_each_page(void) {
 
         CF_CHECK(fits, "the page's tree fits the buffer");
         CF_CHECK(strstr(out, showing->group) != NULL, "the tree carries the heading block");
-        /* The words the sidebar row reads and the words the page's own H1 reads are
+        /* The words the nav chip reads and the words the page's own H1 reads are
          * the same words, so the table alone says what every page has to be
          * findable by: a page that renders a heading the tree does not name is a
          * heading nobody using a screen reader reaches. */
         CF_CHECK(strstr(out, showing->label) != NULL, "the tree names the page's title");
         CF_CHECK(strstr(out, "'") != NULL, "the tree quotes text rather than only boxes");
+        /* The viewport is part of what a host adapter has to translate: a box a reader
+         * walks is a region to expose, and only the role says so. */
+        CF_CHECK(strstr(out, "scroll") != NULL, "the tree says the page scrolls");
     }
 
     /* That the tree says which boxes act is a claim about the site's own spelling: a
@@ -480,6 +593,8 @@ int main(void) {
     CF_RUN(a_build_with_no_browser_answers_no_route);
     CF_RUN(every_page_paints_at_every_surface);
     CF_RUN(a_tab_the_reader_opened_survives_the_next_frame);
+    CF_RUN(a_wheel_walks_the_document_wherever_it_lands);
+    CF_RUN(a_tab_past_the_fold_moves_the_page);
     CF_RUN(the_semantic_tree_names_each_page);
 
     end();

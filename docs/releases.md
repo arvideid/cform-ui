@@ -42,7 +42,7 @@ git commit --only -m "chore(release): prepare 0.2.0" -- include/cf/version.h
 
 Nothing else carries the version. `project()` reads the header through
 `cmake/cform_version.cmake`, `cform.pc` and the package config file take it from
-`project()`, and the top bar of the site prints `CF_VERSION_STRING`. A commit
+`project()`, and the masthead of the site prints `CF_VERSION_STRING`. A commit
 that edits two of those three has found a bug in this file rather than a step to
 perform.
 

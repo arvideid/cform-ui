@@ -36,7 +36,8 @@
         /* The canvas' CSS box is the page, exactly as in the gallery's shell. SDL's
      * Emscripten video driver reads that box, so a wider tab lays the site out
      * against a wider surface instead of scaling the same picture, and the
-     * sidebar stops fitting at a different width than the window does.
+     * document measures itself against the tab it is in rather than against a
+     * fixed picture of one.
      *
      * The background is the theme's page tone (src/theme/default.c) rather than
      * white: the WebGL context carries alpha, so any pixel the command stream

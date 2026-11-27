@@ -14,7 +14,7 @@
  * included by five translation units that one program links together - the shell
  * and four pages - and a `static` value in a header would be five copies that
  * agree only by accident. The driver fills one `site_view` and hands a pointer to
- * it down, so a page reads the same table the bar above it read.
+ * it down, so a page reads the same table the masthead above it read.
  */
 
 #include "cf/style.h"
@@ -44,32 +44,29 @@ typedef enum site_face {
 #define MONO_POINT 14.0f
 
 /*
- * The chrome's geometry, taken from the layout this site mirrors: a bar of a
- * stated height over a fixed sidebar beside a column of prose that stops growing
- * at a readable measure. None of these is a suggestion the page may overrule - a
- * second number for the same edge is how a layout starts to disagree with itself.
+ * The document's geometry, in the shape the gallery uses: one column of blocks that
+ * stops growing at a readable measure, centred in whatever window draws it, inside
+ * one scroller that carries the whole page. The padding rides the column rather than
+ * the viewport because a scroller's range is its content's height - a viewport's
+ * padding is there at the top of the document and gone at the bottom of it.
+ *
+ * None of these is a suggestion a page may overrule: a second number for the same
+ * edge is how a layout starts to disagree with itself.
  */
-#define BAR_HEIGHT 64.0f
-#define BAR_PADDING 24.0f
-#define BAR_ITEM_GAP 8.0f
-/* The one width every rule on the page is drawn at - the bar's bottom, the
- * sidebar's edge, the outline of an external-link mark. A theme states the same
- * number on a card's border; this is the same hairline, named once. */
-#define HAIRLINE 1.0f
-#define SIDEBAR_WIDTH 260.0f
-#define SIDEBAR_PADDING 16.0f
-#define SIDEBAR_GAP 20.0f
-/* The active row's rule. Two points is the narrowest line that survives a
- * density of one and still reads as a marker rather than a border. */
-#define NAV_RULE_WIDTH 2.0f
-#define NAV_ROW_PADDING 10.0f
-/* The measure prose stops at, and the room it gets to sit in. A line of a
- * hundred characters is not a line a reader tracks back along. */
-#define CONTENT_WIDTH 760.0f
-#define CONTENT_PADDING 32.0f
-#define CONTENT_GAP 20.0f
-/* One block of prose under the next, and one line of code under the last. */
+#define DOC_WIDTH 820.0f
+#define DOC_PADDING 28.0f
+/* One block of the document under the next, and one section under its heading. */
+#define DOC_GAP 24.0f
 #define BLOCK_GAP 12.0f
+/*
+ * A press target that is a box rather than a line of prose: the nav chip, the tab,
+ * the way to the page before this one. The edge width is stated on every chip and
+ * coloured on none - an unstated tone paints nothing - so the box is quiet at rest
+ * and the theme's focus mark has something to colour when the keyboard arrives.
+ */
+#define CHIP_GAP 8.0f
+#define CHIP_PADDING 10.0f
+#define CHIP_EDGE 1.0f
 #define PANEL_PADDING 16.0f
 #define PANEL_LINE_GAP 2.0f
 #define CARD_PADDING 16.0f
@@ -98,8 +95,8 @@ typedef enum site_face {
  * the API table is longer than any word in the glossary, and a table whose first
  * column wraps is a table that has stopped aligning anything. */
 #define TERM_WIDTH 200.0f
-/* The mark's square and the two columns drawn inside it. Stated as points of the
- * bar, so the mark is the same object at any window size. */
+/* The mark's square and the two columns drawn inside it, in points, so the mark is
+ * the same object at any window size and needs no file to be drawn from. */
 #define MARK_SIZE 28.0f
 #define MARK_STROKE 4.0f
 
@@ -111,10 +108,6 @@ typedef enum site_face {
  * command list is as long as the commands are.
  */
 #define SITE_TAB_COUNT 6u
-/* The rows one sidebar group can hold. Longer than the table has today, so a
- * page added to a group still lands and a group that outgrows it is a group that
- * needs splitting rather than a number to bump. */
-#define SITE_GROUP_ROWS 12u
 
 /* The size a face is read at. One table, so the driver that opens the fonts and
  * the page that names the face cannot disagree about what title means. */
@@ -157,19 +150,16 @@ static inline cf_box site_pad(float points) {
 typedef struct site_view {
     /* Surfaces, each read from the theme's own box. */
     cf_style surface; /* the field behind the whole page */
-    cf_style chrome;  /* the top bar, the sidebar, a note */
+    cf_style chrome;  /* a note, the well a chosen chip wears */
     cf_style card;    /* a callout, a showcase tile */
     cf_style accent;  /* the primary action's box, used for the mark */
     cf_style panel;   /* a code panel: the one box the theme has no slot for */
 
     /* Tones. */
     cf_color prose;     /* the ink a body of text reads in */
-    cf_color aside;     /* secondary text: an eyebrow, a caption, a nav row */
+    cf_color aside;     /* secondary text: an eyebrow, a caption, a chip at rest */
     cf_color on_accent; /* the tone text carries over the accent */
     cf_color on_panel;  /* the tone code carries over the panel */
-
-    /* The states a nav row wears, read from the family a nav row belongs to. */
-    const cf_variants *nav;
 
     /* Leaving the document. A page names an address and never a platform: the
      * driver decides whether this build has a browser to ask, and a build with
@@ -201,7 +191,6 @@ static inline void site_view_bind(site_view *view, const cf_font *fonts) {
     view->prose = theme->ink;
     view->aside = theme->muted;
     view->on_accent = theme->on_ink;
-    view->nav = &theme->variants[CF_ROLE_BUTTON];
 
     /* The mark wears the accent the theme hands its primary action, with the
      * button's padding off: a mark is a shape, not something to press. */

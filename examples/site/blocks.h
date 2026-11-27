@@ -142,7 +142,7 @@ static inline cf_node site_panel(cf_ctx *ctx, const site_view *view, const char 
     return cf_col(ctx, sheet, rows, count);
 }
 
-/* A note set off the prose: the same box the bar wears, so a aside reads as
+/* A note set off the prose: the same well a chosen chip wears, so an aside reads as
  * furniture rather than as another paragraph. */
 static inline cf_node site_note(cf_ctx *ctx, const site_view *view, const char *chars) {
     cf_style well = view->chrome;
@@ -154,15 +154,19 @@ static inline cf_node site_note(cf_ctx *ctx, const site_view *view, const char *
 }
 
 /*
- * One press target that is not a pill: a nav row, a top-bar item, a tab.
+ * One press target that is not a pill: a nav chip, a tab, a link out.
  *
  * The family it asks to be styled as is a list row, and that is the whole design
- * decision - the theme's list family is the one that hands out a hover well and
- * nothing else, which is what a row in a sidebar is. The resting box therefore
- * stays the page's own, and `active` says what sets this row apart: an ink rule
- * down its leading edge for the row the reader is on, and nothing for the rows
- * beside it. The width is reserved either way, so an inactive row does not slide
- * when it becomes the active one.
+ * decision - the theme's list family is the one that hands out a hover well, the
+ * focus mark that says where the keyboard stands, and nothing else. The resting box
+ * therefore stays the page's own, and `active` says what sets this row apart: the
+ * well a hovered row already wears, so the row the reader is on is filled and inked
+ * and the rows beside it are a word and nothing more.
+ *
+ * An edge is stated on every chip and coloured on none. A border paints nothing
+ * without a tone, which leaves the chip quiet until the keyboard reaches it, and it
+ * is stated on all four sides at once because a box stroked on one edge alone has
+ * three edges for the stroke to leak along.
  */
 static inline cf_node site_row_of(cf_ctx *ctx, const site_view *view, const char *name,
                                   const cf_node *label, uint32_t label_count, bool active,
@@ -174,29 +178,26 @@ static inline cf_node site_row_of(cf_ctx *ctx, const site_view *view, const char
      * style of its own. */
     row.role = CF_ROLE_LIST;
     row.style = cf_style_default();
-    row.style.column_gap = CF_PT(BAR_ITEM_GAP);
+    row.style.column_gap = CF_PT(CHIP_GAP);
     row.style.align_items = CF_ALIGN_CENTER;
-    row.style.padding = site_pad(NAV_ROW_PADDING);
+    row.style.padding = site_pad(CHIP_PADDING);
+    row.style.border = site_pad(CHIP_EDGE);
+    row.style.radius = view->chrome.radius;
+
+    if (active) {
+        row.style.background = view->chrome.background;
+    }
 
     if (stretch) {
         row.style.width = CF_PERCENT(100.0f);
         row.style.align_items = CF_ALIGN_START;
     }
 
-    /* A border on one edge only, and no colour for the rows that do not need it:
-     * an unstated tone paints nothing, which leaves the space and takes the
-     * line away. */
-    row.style.border =
-        (cf_box){CF_PT(active ? NAV_RULE_WIDTH : 0.0f), CF_PT(0.0f), CF_PT(0.0f), CF_PT(0.0f)};
-    row.style.border_color = active ? (cf_opt_color){.present = true, .value = view->prose}
-                                    : (cf_opt_color){.present = false, .value = view->prose};
-
     return row;
 }
 
-/* The row above, with one word for its label - which is what a nav row, a tab and
- * two of the three bar items are. The one that is not is a word with a mark beside
- * it, and calls the form that takes both. */
+/* The row above, with one word for its label - which is what a nav chip, a tab and
+ * a link out are. */
 static inline cf_node site_row_button(cf_ctx *ctx, const site_view *view, const char *name,
                                       const char *label, bool active, bool stretch,
                                       cf_on_press on_press, void *user_data) {
@@ -207,13 +208,18 @@ static inline cf_node site_row_button(cf_ctx *ctx, const site_view *view, const 
 }
 
 /*
- * A press that leaves the document.
+ * A row whose press opens something that is not this page.
  *
  * The address travels with the button that names it, in the arena the dispatch
  * reads from, and so does the one function the driver allowed this build to have
  * for opening it. A page therefore says *where* a link goes and nothing about how
  * anything gets there - the shell hands the view its `open_url` or leaves it
  * unset, and a build with no browser shows the same link and follows it nowhere.
+ *
+ * The link is the word and the chip around it. A drawn arrow would need a glyph
+ * neither of the two faces here is obliged to carry, and a mark made of two
+ * hairlines reads as a smudge at the size a label needs; a page that has to point
+ * at its own links has not named them well enough.
  */
 #define SITE_URL_BYTES 160
 typedef struct site_address {
@@ -232,15 +238,6 @@ static inline void site_follow(cf_ctx *ctx, uint32_t slot, void *user_data) {
     }
 }
 
-/*
- * A row whose press opens something that is not this page, marked as such.
- *
- * The mark is drawn rather than typed: an arrow glyph is a promise about a font
- * that neither of the two faces here is obliged to keep, and a link that leaves
- * has to say it is leaving whatever the reader is looking at. A box outlined on
- * the two edges the arrow would have crossed is the same statement in the
- * hairline the page already uses for its own edges.
- */
 static inline cf_node site_link(cf_ctx *ctx, const site_view *view, const char *name,
                                 const char *label, const char *url) {
     site_address *address = cf_alloc(&ctx->frame, sizeof *address);
@@ -254,15 +251,7 @@ static inline cf_node site_link(cf_ctx *ctx, const site_view *view, const char *
 
     const cf_node text = site_text(ctx, view, SITE_FACE_PROSE, view->aside, label);
 
-    cf_style mark = cf_style_default();
-    mark.width = CF_PT(MARK_STROKE * 2.0f);
-    mark.height = CF_PT(MARK_STROKE * 2.0f);
-    mark.border = (cf_box){CF_PT(HAIRLINE), CF_PT(HAIRLINE), CF_PT(0.0f), CF_PT(0.0f)};
-    mark.border_color = (cf_opt_color){.present = true, .value = view->aside};
-
-    const cf_node children[] = {text, {.style = mark}};
-
-    return site_row_of(ctx, view, name, children, 2u, false, false, site_follow, address);
+    return site_row_of(ctx, view, name, &text, 1u, false, false, site_follow, address);
 }
 
 /* Which panel a tab block shows, kept between frames under the name the block
@@ -287,9 +276,9 @@ static inline void site_pick_tab(cf_ctx *ctx, uint32_t slot, void *user_data) {
  * Tabs over panels: the labels in a row, the chosen panel under them.
  *
  * The choice lives in the keyed block the name opens, so a rebuild - a resize, a
- * click three columns away - keeps the tab the reader opened. The underline is a
- * bottom border in the prose tone and nothing else: the resting box is the page's
- * own, and the states come from the same list family a nav row reads.
+ * click three columns away - keeps the tab the reader opened. A chosen tab is the
+ * chip the reader is on, filled and inked exactly as a nav chip is: one rule for
+ * "where you are", stated once in `site_row_of`.
  */
 static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *name,
                                 const char *const *labels, uint32_t count, const cf_node *panels,
@@ -314,20 +303,14 @@ static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *
 
         cf_node tab = site_row_button(ctx, view, labels[i], labels[i], i == picked, false,
                                       site_pick_tab, pick);
-        /* The chosen tab's mark moves from the leading edge to the trailing one:
-         * the same rule, turned, is what reads as an underline. A tab is a box of
-         * its label alone, so it pads its sides with the row's own gap. */
-        tab.style.padding = (cf_box){CF_PT(BAR_ITEM_GAP), CF_PT(NAV_ROW_PADDING),
-                                     CF_PT(BAR_ITEM_GAP), CF_PT(NAV_ROW_PADDING)};
-        tab.style.border = (cf_box){CF_PT(0.0f), CF_PT(0.0f), CF_PT(0.0f),
-                                    CF_PT(i == picked ? NAV_RULE_WIDTH : 0.0f)};
 
         tabs[i] = tab;
     }
 
     cf_style strip = cf_style_default();
-    strip.column_gap = CF_PT(BAR_ITEM_GAP);
+    strip.column_gap = CF_PT(CHIP_GAP);
     strip.align_items = CF_ALIGN_START;
+    strip.wrap = CF_WRAP;
 
     const cf_node shown =
         picked < panel_count ? panels[picked] : (cf_node){.style = cf_style_default()};
@@ -335,7 +318,7 @@ static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *
 
     cf_style sheet = cf_style_default();
     sheet.direction = CF_DIRECTION_COLUMN;
-    sheet.row_gap = CF_PT(CONTENT_GAP);
+    sheet.row_gap = CF_PT(DOC_GAP);
     sheet.width = CF_PERCENT(100.0f);
     sheet.align_items = CF_ALIGN_START;
 
@@ -410,7 +393,7 @@ static inline cf_node site_page(cf_ctx *ctx, const site_view *view, const char *
 
     cf_style sheet = cf_style_default();
     sheet.direction = CF_DIRECTION_COLUMN;
-    sheet.row_gap = CF_PT(CONTENT_GAP);
+    sheet.row_gap = CF_PT(DOC_GAP);
     sheet.width = CF_PERCENT(100.0f);
     sheet.align_items = CF_ALIGN_START;
 
@@ -422,8 +405,9 @@ static inline cf_node site_page(cf_ctx *ctx, const site_view *view, const char *
  * declared by the block that owns its size. */
 static inline cf_node site_strip(cf_ctx *ctx, const cf_node *items, uint32_t count) {
     cf_style row = cf_style_default();
-    row.column_gap = CF_PT(BAR_ITEM_GAP);
+    row.column_gap = CF_PT(CHIP_GAP);
     row.align_items = CF_ALIGN_CENTER;
+    row.wrap = CF_WRAP;
 
     return cf_row(ctx, row, items, count);
 }
