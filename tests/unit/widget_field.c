@@ -168,7 +168,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = (uint32_t)CF_KEY_BACKSPACE});
 
-    CF_CHECK(text.length == 1u && bytes[0] == 'h', "backspace drops the last scalar");
+    CF_CHECK(text.length == 1u && bytes[0] == 'h', "backspace drops the last character");
 
     cf_ctx_free(&ctx);
 }
@@ -317,7 +317,7 @@ static void the_arrows_move_the_caret_and_shift_extends_the_selection(void) {
     hold(&ctx, CF_KEY_RIGHT, true);
 
     CF_CHECK(text.caret == 1u && text.mark == 0u,
-             "shift+right takes the next scalar into what is selected");
+             "shift+right takes the next character into what is selected");
 
     hold(&ctx, CF_KEY_END, true);
 
@@ -335,7 +335,7 @@ static void the_arrows_move_the_caret_and_shift_extends_the_selection(void) {
     cf_ctx_free(&ctx);
 }
 
-static void an_arrow_steps_a_whole_scalar(void) {
+static void an_arrow_steps_a_whole_character(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
@@ -355,21 +355,233 @@ static void an_arrow_steps_a_whole_scalar(void) {
     type(&ctx, acute, 2u);
     type(&ctx, "b", 1u);
 
-    CF_CHECK(text.length == 4u, "three scalars in four bytes");
+    CF_CHECK(text.length == 4u, "three characters in four bytes");
 
     hold(&ctx, CF_KEY_HOME, false);
     hold(&ctx, CF_KEY_RIGHT, false);
 
-    CF_CHECK(text.caret == 1u, "the first step leaves the one-byte scalar");
+    CF_CHECK(text.caret == 1u, "the first step leaves the one-byte character");
 
     hold(&ctx, CF_KEY_RIGHT, false);
 
-    CF_CHECK(text.caret == 3u, "and the next one leaves the two-byte scalar whole");
+    CF_CHECK(text.caret == 3u, "and the next one leaves the two-byte character whole");
 
     hold(&ctx, CF_KEY_BACKSPACE, false);
 
     CF_CHECK(text.length == 2u && bytes[0] == 'a' && bytes[1] == 'b',
-             "backspace from past it takes the whole scalar, not the byte that ends it");
+             "backspace from past it takes the whole character, not the byte that ends it");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The bytes the cluster cases below write: a family, which is three pictures and the two
+ * joiners that tie them, an e with its accent written onto it, and a flag from two
+ * regional indicators. They are spelled in bytes because every claim here is about a byte
+ * count - what one arrow and one delete owe a character the reader sees as one thing.
+ */
+static const char joined_family[] = "\xF0\x9F\x91\xA8"
+                                    "\xE2\x80\x8D"
+                                    "\xF0\x9F\x91\xA9"
+                                    "\xE2\x80\x8D"
+                                    "\xF0\x9F\x91\xA7";
+static const char accented_e[] = "e"
+                                 "\xCC\x81";
+static const char flag_pair[] = "\xF0\x9F\x87\xBA"
+                                "\xF0\x9F\x87\xB8";
+
+static void an_accent_leaves_the_field_under_the_letter_it_sits_on(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, accented_e, 3u);
+    type(&ctx, "x", 1u);
+
+    CF_CHECK(text.length == 4u, "the accent costs bytes and no character");
+
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_RIGHT, false);
+
+    CF_CHECK(text.caret == 3u, "one arrow crosses the letter with the accent on it");
+
+    hold(&ctx, CF_KEY_LEFT, false);
+
+    CF_CHECK(text.caret == 0u, "and the same key comes back over both");
+
+    hold(&ctx, CF_KEY_RIGHT, true);
+
+    CF_CHECK(text.caret == 3u && text.mark == 0u, "shift holds the pair as one selection");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'x', "and one delete leaves no mark behind");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_joined_sequence_enters_and_leaves_the_field_as_one_character(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, joined_family, 18u);
+    type(&ctx, "z", 1u);
+
+    CF_CHECK(text.length == 19u, "the family costs eighteen bytes and one character");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 18u, "the plain letter beside it goes on its own");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 0u, "and the next delete takes the joined pictures whole");
+
+    type(&ctx, joined_family, 18u);
+    type(&ctx, "z", 1u);
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_DELETE, false);
+
+    CF_CHECK(text.length == 1u && bytes[0] == 'z', "delete from the front does the same");
+
+    type(&ctx, joined_family, 18u);
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_RIGHT, true);
+
+    CF_CHECK(text.caret == 18u && text.mark == 0u, "and a selection reaches past all of it");
+
+    type(&ctx, "Q", 1u);
+
+    CF_CHECK(text.length == 2u && bytes[0] == 'Q' && bytes[1] == 'z',
+             "so what is written replaces the character and not a piece of it");
+
+    cf_ctx_free(&ctx);
+}
+
+static void two_indicator_letters_are_one_character_too(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, flag_pair, 8u);
+    type(&ctx, "!", 1u);
+
+    CF_CHECK(text.length == 9u, "the flag is eight bytes of the buffer and one character");
+
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_RIGHT, false);
+
+    CF_CHECK(text.caret == 8u, "the pair is one step, not two");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 1u && bytes[0] == '!', "and one delete takes the flag whole");
+
+    type(&ctx, flag_pair, 8u);
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_RIGHT, true);
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 1u && bytes[0] == '!', "as does the selection it leaves");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The word key moves between runs of one class and steps the clusters along the way, so
+ * the jump ends past an accent rather than under it - which is the difference between a
+ * word key and one that leaves a mark with nothing to sit on.
+ */
+static void a_word_key_leaves_no_mark_behind_at_the_end_of_its_run(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "caf", 3u);
+    type(&ctx, accented_e, 3u);
+    type(&ctx, "!", 1u);
+
+    CF_CHECK(text.length == 7u, "four letters, one of them carrying an accent");
+
+    hold(&ctx, CF_KEY_HOME, false);
+    hold_with(&ctx, CF_KEY_RIGHT, (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.caret == 6u, "the jump ends past the accent, not under it");
+
+    hold_with(&ctx, CF_KEY_LEFT, (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(text.caret == 0u, "and the same key comes back over the whole run");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A click measures along the ink and answers a scalar boundary, which for a joined
+ * picture is a place inside one character. The keys still owe the person the whole
+ * character: the caret moves out of it before it moves on.
+ */
+static void a_caret_a_click_placed_inside_a_character_moves_out_of_it(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, joined_family, 18u);
+
+    /* Five scalars at ten points each, the content inset by eight and a border: the
+     * third picture's ink stands between x 29 and x 39, and a point inside it answers
+     * one of the boundaries about it. */
+    press(&ctx, 36.0f, 10.0f);
+
+    CF_CHECK(text.caret > 0u && text.caret < 18u, "the press lands inside the sequence");
+
+    hold(&ctx, CF_KEY_LEFT, false);
+
+    CF_CHECK(text.caret == 0u, "one arrow brings the caret out in front of it");
+
+    hold(&ctx, CF_KEY_RIGHT, false);
+
+    CF_CHECK(text.caret == 18u, "and the other takes the whole character past it");
 
     cf_ctx_free(&ctx);
 }
@@ -430,7 +642,7 @@ static void a_full_buffer_takes_what_the_selection_frees(void) {
     cf_ctx_free(&ctx);
 }
 
-static void the_edit_keys_cut_the_selection_or_the_scalar_they_name(void) {
+static void the_edit_keys_cut_the_selection_or_the_character_they_name(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
     cf_ctx ctx;
@@ -2072,10 +2284,15 @@ int main(void) {
     CF_RUN(a_disabled_field_neither_focuses_nor_edits);
     CF_RUN(a_key_that_carries_no_text_edits_nothing);
     CF_RUN(the_arrows_move_the_caret_and_shift_extends_the_selection);
-    CF_RUN(an_arrow_steps_a_whole_scalar);
+    CF_RUN(an_arrow_steps_a_whole_character);
+    CF_RUN(an_accent_leaves_the_field_under_the_letter_it_sits_on);
+    CF_RUN(a_joined_sequence_enters_and_leaves_the_field_as_one_character);
+    CF_RUN(two_indicator_letters_are_one_character_too);
+    CF_RUN(a_word_key_leaves_no_mark_behind_at_the_end_of_its_run);
+    CF_RUN(a_caret_a_click_placed_inside_a_character_moves_out_of_it);
     CF_RUN(what_is_selected_gives_way_to_what_is_typed);
     CF_RUN(a_full_buffer_takes_what_the_selection_frees);
-    CF_RUN(the_edit_keys_cut_the_selection_or_the_scalar_they_name);
+    CF_RUN(the_edit_keys_cut_the_selection_or_the_character_they_name);
     CF_RUN(a_press_places_the_caret_and_a_drag_selects_to_where_it_went);
     CF_RUN(a_press_below_the_rows_the_field_holds_stands_on_the_last_one);
     CF_RUN(copy_puts_the_selection_where_the_host_keeps_bytes);

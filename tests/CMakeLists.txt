@@ -71,6 +71,10 @@ endif()
 
 cf_add_layer_test(text_measure unit/text_measure.c cf_text)
 
+# Where a character begins and ends is its own rule, checked apart from the
+# measure that walks the same bytes for width.
+cf_add_layer_test(text_cluster unit/text_cluster.c cf_text)
+
 # The measure slot is the seam layout and text share: this one links both
 # layers and asserts the height a wrapped label contributes to its parent.
 cf_add_layer_test(text_layout unit/text_layout.c cf_layout cf_text)

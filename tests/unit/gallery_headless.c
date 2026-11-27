@@ -844,7 +844,7 @@ static void a_focused_field_takes_what_the_keyboard_wrote(void) {
      * what the last frame asked for is what the case then checks. */
     end_session();
 
-    CF_CHECK(typed.length == 10u, "five plus six minus the deleted scalar is ten bytes");
+    CF_CHECK(typed.length == 10u, "five plus six minus the deleted character is ten bytes");
     CF_CHECK(memcmp(typed_bytes, "hello worl", 10) == 0, "and they are the bytes typed");
     CF_CHECK(last_cursor == CF_CURSOR_TEXT, "and the pointer over the field asks for the I-beam");
     CF_CHECK(last_text, "and the field the press focused asks the device for written text");
@@ -1006,6 +1006,51 @@ static void the_gallery_field_steps_a_word_and_holds_the_value(void) {
 }
 
 /*
+ * The same field handed one character the reader sees and the bytes of five scalars. This
+ * is the case that says the page's field steps and deletes whole clusters through the frame
+ * run, and not only the context widget_field assembles for itself.
+ */
+static void the_gallery_field_edits_a_joined_picture_as_one_character(void) {
+    static const char joined[] = "\xF0\x9F\x91\xA8"
+                                 "\xE2\x80\x8D"
+                                 "\xF0\x9F\x91\xA9"
+                                 "\xE2\x80\x8D"
+                                 "\xF0\x9F\x91\xA7";
+
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text(joined));
+
+    CF_CHECK(typed.length == 18u, "the family lands whole: eighteen bytes, one character");
+
+    step(typed_text("z"));
+    step(key_down(CF_KEY_BACKSPACE));
+
+    CF_CHECK(typed.length == 18u, "the letter beside it goes on its own key");
+
+    step(key_down(CF_KEY_BACKSPACE));
+
+    CF_CHECK(typed.length == 0u, "and one more takes the joined pictures whole");
+
+    step(typed_text(joined));
+    step(shift_arrow(CF_KEY_LEFT));
+
+    CF_CHECK(typed.caret == 0u && typed.mark == 18u,
+             "shift+left holds the whole character, not the byte it ends on");
+
+    step(typed_text("Q"));
+
+    CF_CHECK(typed.length == 1u && typed_bytes[0] == 'Q', "and what is written replaces it");
+
+    end_session();
+}
+
+/*
  * The page's field over a sixty-four byte buffer: the run that would not fit whole
  * lands nowhere and is counted, which is the difference the reader sees between a field
  * that is full and a field that stopped answering.
@@ -1139,7 +1184,7 @@ static void the_two_modes_answer_the_same_keys_differently(void) {
 
     step(key_down(CF_KEY_UP));
 
-    CF_CHECK(memo.caret == 6u, "one arrow steps onto the row above, six scalars in");
+    CF_CHECK(memo.caret == 6u, "one arrow steps onto the row above, six characters in");
 
     step(shift_arrow(CF_KEY_DOWN));
 
@@ -2202,6 +2247,7 @@ int main(void) {
     CF_RUN(the_gallery_field_trades_bytes_with_the_host_it_names);
     CF_RUN(the_gallery_field_walks_its_own_typing_back);
     CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
+    CF_RUN(the_gallery_field_edits_a_joined_picture_as_one_character);
     CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
     CF_RUN(the_gallery_field_saves_on_enter_and_types_a_space);
     CF_RUN(the_gallery_page_hears_the_value_move_and_not_the_caret);
