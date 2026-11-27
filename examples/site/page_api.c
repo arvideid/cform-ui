@@ -233,6 +233,9 @@ static const api_symbol node_symbols[] = {
      "The topmost box whose rect holds a point, in paint order read backwards."},
     {"cf_focus", "void cf_focus(cf_ctx *ctx, uint32_t slot);",
      "Moves the keyboard by hand, refusing a box that declared it takes none."},
+    {"cf_report_change", "void cf_report_change(cf_ctx *ctx, cf_event *event);",
+     "Runs the node's own change handler with the event that moved its bytes, so a widget "
+     "reports a value without asking anything above it to look."},
     {"cf_hovered", "bool cf_hovered(const cf_ctx *ctx, uint32_t slot);",
      "Whether the pointer rests on this node."},
     {"cf_pressed", "bool cf_pressed(const cf_ctx *ctx, uint32_t slot);",

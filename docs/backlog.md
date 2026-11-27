@@ -5,7 +5,7 @@ row names the tier that would prove it closed — a plan nobody can check is a w
 Scores quoted here are the ones the suites print today; `ctest` is the authority
 and this file is the record.
 
-*Recorded at* `0.2.0`, commit `45cbdd3`. A row that closes gets deleted rather than
+*Recorded at* `0.2.0`, commit `1de38b7`. A row that closes gets deleted rather than
 crossed out, and the score beside it moves with the release that moved it — step 3 of
 [`releases.md`](releases.md).
 

@@ -45,7 +45,7 @@ ones a browser would infer.
 whole suite. The tier prints a per-suite table on every run, so `ctest -R yoga` is
 the check and this file is only the record.
 
-*Recorded at* `0.2.0`, commit `45cbdd3`, on a Windows desktop with MSYS2 UCRT64 GCC.
+*Recorded at* `0.2.0`, commit `1de38b7`, on a Windows desktop with MSYS2 UCRT64 GCC.
 A score with no version beside it is a number that can outlive the code that printed
 it, so step 3 of [`releases.md`](releases.md) re-runs the tier on a release build and
 updates the line above it.
