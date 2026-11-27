@@ -308,6 +308,54 @@ static void a_growth_that_moves_the_block_keeps_its_contents(void) {
     cf_ctx_free(&ctx);
 }
 
+/* The two ways a build reaches what the context owns without holding it: a name the
+ * context knows a string by, and bytes the next frame wipes. Both refuse the way every
+ * other boundary here does - a key that names nothing, a block that was not asked for. */
+static void the_context_answers_its_own_key_and_frame_bytes(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_frame_begin(&ctx);
+
+    const cf_name clicks = cf_ctx_key(&ctx, "clicks");
+    CF_CHECK(clicks != CF_NO_NAME, "a named string is given a key");
+    CF_CHECK(cf_ctx_key(&ctx, "clicks") == clicks,
+             "the same characters in the same context are one key");
+    CF_CHECK(cf_ctx_key(&ctx, "counts") != clicks, "and different characters are another");
+
+    CF_CHECK(cf_ctx_key(&ctx, "") == CF_NO_NAME, "an empty string names nothing");
+    CF_CHECK(cf_ctx_key(NULL, "clicks") == CF_NO_NAME,
+             "and a context that was not given answers no key");
+
+    /* The key is what cf_state is asked with, so the accessor has to answer the name the
+     * store keeps - a key that named nothing the frame after would retire a page's state. */
+    uint32_t *held = cf_state(&ctx, clicks, sizeof(uint32_t));
+    CF_CHECK(held != NULL, "the key the context gave opens a state block");
+
+    if (held != NULL) {
+        *held = 7u;
+        cf_frame_begin(&ctx);
+        const uint32_t *again = cf_state(&ctx, cf_ctx_key(&ctx, "clicks"), sizeof(uint32_t));
+        CF_CHECK(again != NULL && *again == 7u, "and a frame later the same word is still there");
+    }
+
+    float *box = cf_frame_alloc(&ctx, 4u * sizeof *box);
+    CF_CHECK(box != NULL, "the frame hands out the bytes it will wipe");
+    CF_CHECK(cf_frame_alloc(&ctx, 0u) == NULL, "a request for nothing is answered with nothing");
+    CF_CHECK(cf_frame_alloc(NULL, 16u) == NULL,
+             "and a context that was not given hands out nothing");
+
+    /* Past the frame's size the arena refuses rather than running off its end, which is the
+     * answer every build here already knows how to give. */
+    CF_CHECK(cf_frame_alloc(&ctx, 64u * 1024u) == NULL,
+             "a request larger than the context was sized for is refused");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node state\n");
 
@@ -322,6 +370,7 @@ int main(void) {
     CF_RUN(state_does_not_accrue_as_a_page_runs);
     CF_RUN(a_block_larger_than_the_context_starts_with_is_served);
     CF_RUN(a_nameless_request_is_refused);
+    CF_RUN(the_context_answers_its_own_key_and_frame_bytes);
 
     return CF_REPORT();
 }
