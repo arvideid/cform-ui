@@ -954,6 +954,46 @@ static void a_page_that_asks_leaves_after_the_frame_that_answers_it(void) {
     CF_CHECK(recorder.count == 1u, "the stream it left behind is the page's own fill");
 }
 
+/*
+ * The frame capacity is the host's to name, and 0 on that knob is the absence of a
+ * preference rather than a size no arena can start with: naming nothing has to paint the same
+ * page the shell's own number paints, and a number too small for the page is what the page
+ * gets cut to. Three runs of one device say it, because a refusal and a default look alike
+ * until the stream they left is compared with the one a roomy arena painted.
+ */
+static void the_capacity_the_host_names_is_the_one_the_page_is_cut_from(void) {
+    cf_recorder unnamed = {.arena = &store};
+    reset(build_then_quit, 3u);
+    cf_app_run(&(cf_app_config){.build = typed_page,
+                                .backend = driven_backend(&unnamed),
+                                .theme = NULL,
+                                .frame_bytes = 0u});
+    const uint32_t unnamed_count = unnamed.count;
+    const uint32_t unnamed_frames = frames_built;
+
+    cf_recorder roomy = {.arena = &store};
+    reset(build_then_quit, 3u);
+    cf_app_run(&(cf_app_config){.build = typed_page,
+                                .backend = driven_backend(&roomy),
+                                .theme = NULL,
+                                .frame_bytes = 1024u * 1024u});
+
+    CF_CHECK(unnamed_frames == 1u && frames_built == 1u, "both hosts got the frame they asked for");
+    CF_CHECK(unnamed_count == roomy.count && roomy.count > 0u,
+             "a capacity of no preference paints the page the shell's own capacity paints");
+
+    cf_recorder tight = {.arena = &store};
+    reset(build_then_quit, 3u);
+    cf_app_run(&(cf_app_config){.build = typed_page,
+                                .backend = driven_backend(&tight),
+                                .theme = NULL,
+                                .frame_bytes = 512u});
+
+    CF_CHECK(frames_built == 1u, "a tight capacity still runs the build it was handed");
+    CF_CHECK(tight.count < roomy.count,
+             "and hands over what its own capacity could hold rather than the whole page");
+}
+
 int main(void) {
     printf("app run\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -974,6 +1014,7 @@ int main(void) {
     CF_RUN(the_shell_tells_the_device_where_the_run_sits);
     CF_RUN(a_device_with_no_candidate_slot_still_runs);
     CF_RUN(a_page_that_asks_leaves_after_the_frame_that_answers_it);
+    CF_RUN(the_capacity_the_host_names_is_the_one_the_page_is_cut_from);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 
     cf_arena_free(&store);

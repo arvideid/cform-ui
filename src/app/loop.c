@@ -87,8 +87,11 @@ void cf_app_run(const cf_app_config *config) {
     }
 
     cf_ctx ctx;
+    /* 0 is the absence of a preference, not a capacity: an arena of no bytes cannot
+     * start, so a host that named nothing gets the shell's own number. */
+    const size_t frame_bytes = config->frame_bytes != 0u ? config->frame_bytes : APP_FRAME_BYTES;
 
-    if (!cf_ctx_init(&ctx, APP_FRAME_BYTES)) {
+    if (!cf_ctx_init(&ctx, frame_bytes)) {
         return;
     }
 
