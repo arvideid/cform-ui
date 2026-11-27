@@ -31,8 +31,11 @@ jobs:
 
       - name: Format
         run: |
+          # The example headers are part of the formatted set: a page shipped as a
+          # header (the gallery, the host loop) is read by the tiers that include it,
+          # and an unformatted one is a diff every later edit has to walk around.
           mapfile -t sources < <(git ls-files \
-            'include/cf/*.h' 'src/*/*.[ch]' 'tests/*/*.[ch]' 'examples/*.c' \
+            'include/cf/*.h' 'src/*/*.[ch]' 'tests/*/*.[ch]' 'examples/*.[ch]' \
             'examples/site/*.[ch]')
           clang-format --dry-run --Werror "${sources[@]}"
 
