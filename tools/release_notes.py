@@ -129,8 +129,13 @@ def abi_at(revision):
 
 
 def touched(revision_range, wanted):
-    """Whether a named file changed in the range."""
-    listing = git("diff", "--name-only", revision_range, "--", wanted)
+    """Whether a named file changed in the range.
+
+    `git log` rather than `git diff`: a range with no left side - the first tag, whose
+    notes cover the whole history - has no base to diff against, while the commits it
+    walks are exactly the ones whose files moved.
+    """
+    listing = git("log", "--name-only", "--pretty=format:", revision_range, "--", wanted)
     return bool(listing and listing.strip())
 
 
@@ -138,7 +143,15 @@ def notes_for(tag, previous, revision_range, url):
     """The release body: what a reader would ask in the order they would ask it."""
     listed = commits(revision_range)
     breaking = [one for one in listed if one["breaking"]]
-    abi_before, abi_after = abi_at(previous or tag + "^"), abi_at(tag)
+    # A dry run over commits no tag points at yet has no tagged tree to read, so the
+    # range's own tip stands in for the release commit.
+    after = tag if resolves(tag) else (git("rev-list", "-1", revision_range)
+                                       or "HEAD").strip()
+    # Compare the ABI against what the notes actually start from: the previous release
+    # when there is one, the left side of a hand-named range otherwise, and the tagged
+    # commit's parent when the range runs from the beginning of the history.
+    left = revision_range.split("..", 1)[0].strip() if ".." in revision_range else ""
+    abi_before, abi_after = abi_at(previous or left or after + "^"), abi_at(after)
 
     lines = ["cform-ui %s" % tag.lstrip("v"), ""]
 
@@ -178,15 +191,14 @@ def notes_for(tag, previous, revision_range, url):
         lines += ["## The backend ABI moved", "",
                   "`CF_BACKEND_ABI_VERSION` went from %s to %s. A driver built against "
                   "%s is refused before frame one rather than drawing something wrong; "
-                  "rebuild it, and read the slot the number added in docs/backend-abi.md."
+                  "rebuild it, and read what the added slots mean in docs/backend-abi.md."
                   % (abi_before, abi_after, abi_before), ""]
 
-    records = [what for path, what in RECORDS.items()
-               if previous and touched(revision_range, path)]
+    records = [what for path, what in RECORDS.items() if touched(revision_range, path)]
     if records:
         lines += ["## Records that moved", "",
-                  "These went up for release in the same range, so a number that changed "
-                  "can be traced to the commit that changed it:", ""]
+                  "These files changed in the range these notes cover, so a number that "
+                  "moved can be traced to the commit that moved it:", ""]
         lines += ["- " + what for what in records]
         lines.append("")
 
