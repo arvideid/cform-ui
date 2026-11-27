@@ -6,12 +6,18 @@
  * The states booked on the context, read by slot. A disabled box keeps its
  * bit whatever the pointer is doing - the resolver's variant order lets the
  * disabled paint win, so the states below it are still read, not masked.
+ * The switch a box carries is booked on the record rather than the pointer:
+ * it is what the build stated, not something the device is doing to it.
  */
 static uint32_t interact_of(const cf_ctx *ctx, const node_record *record, uint32_t slot) {
     uint32_t states = CF_INTERACT_NONE;
 
     if (record->disabled) {
         states |= (uint32_t)CF_INTERACT_DISABLED;
+    }
+
+    if (record->checked) {
+        states |= (uint32_t)CF_INTERACT_CHECKED;
     }
 
     if (slot_hovered(ctx, slot)) {

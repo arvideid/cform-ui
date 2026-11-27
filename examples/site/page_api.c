@@ -413,6 +413,11 @@ static const api_symbol widget_symbols[] = {
      "const cf_node *children, uint32_t child_count);",
      "A themed press target that fires on a click that ends inside it and on Enter or the space "
      "bar while it holds the focus."},
+    {"cf_checkbox",
+     "cf_node cf_checkbox(cf_ctx *ctx, const char *name, bool *checked, cf_on_press on_toggle, "
+     "void *user_data);",
+     "A switch that flips the bit the build handed it rather than a copy of its own, told through "
+     "the theme's checked variant and asked the same way a button is."},
     {"cf_field",
      "cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack "
      "*stack);",

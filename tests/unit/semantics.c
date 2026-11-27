@@ -143,7 +143,7 @@ static void a_page_deeper_than_a_line_still_exports(void) {
 
 /* cf_role is an enum but its numeric range is a caller's to send - a stale
  * id, a mismatched build - so role_name bounds-checks and falls back to the
- * box name. A walk past CF_ROLE_COUNT used to read one entry too far in
+ * box name. A walk past CF_ROLE_LIMIT used to read one entry too far in
  * role_names and could hand back a wild pointer. */
 static void a_role_the_theme_does_not_know_reads_as_a_box(void) {
     cf_ctx ctx;
@@ -157,7 +157,7 @@ static void a_role_the_theme_does_not_know_reads_as_a_box(void) {
     root.style.width = CF_PX(80.0f);
     root.style.height = CF_PX(40.0f);
 
-    cf_node odd = {.key = CF_NO_NAME, .role = (cf_role)(CF_ROLE_COUNT + 7)};
+    cf_node odd = {.key = CF_NO_NAME, .role = (cf_role)(CF_ROLE_LIMIT + 7)};
     odd.style = cf_style_default();
     odd.style.width = CF_PX(80.0f);
     odd.style.height = CF_PX(40.0f);

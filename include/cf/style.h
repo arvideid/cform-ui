@@ -331,20 +331,27 @@ bool cf_direction_is_row(cf_direction direction);
 /*
  * The interaction states a node styles across, one bit each so a resolver
  * reads one mask. The node layer books hovered, pressed and focused from
- * the pointer and the keyboard; disabled is the widget's own declaration.
+ * the pointer and the keyboard; disabled and checked are the widget's own
+ * declarations - the first is a switch the build set, the second the state
+ * of a switch it read.
  */
 typedef enum cf_interact {
     CF_INTERACT_NONE = 0,
     CF_INTERACT_HOVERED = 1 << 0,
     CF_INTERACT_PRESSED = 1 << 1,
     CF_INTERACT_FOCUSED = 1 << 2,
-    CF_INTERACT_DISABLED = 1 << 3
+    CF_INTERACT_DISABLED = 1 << 3,
+    CF_INTERACT_CHECKED = 1 << 4
 } cf_interact;
 
 /*
  * The widget family a node belongs to. The resolver reads it to pick the
  * theme's variant set; CF_ROLE_NONE means the declared style is the whole
  * truth and nothing resolves over it.
+ *
+ * A family is appended above the bound, so growing the list moves no
+ * member's number. The bound shipped as a member in the middle of the list,
+ * where every later family would have had to jump over it.
  */
 typedef enum cf_role {
     CF_ROLE_NONE,
@@ -353,7 +360,8 @@ typedef enum cf_role {
     CF_ROLE_LIST,
     CF_ROLE_SCROLL,
     CF_ROLE_IMAGE,
-    CF_ROLE_COUNT
+    CF_ROLE_CHECKBOX,
+    CF_ROLE_LIMIT /* one past the last family: the length of the theme's array */
 } cf_role;
 
 /*
@@ -372,10 +380,13 @@ typedef struct cf_variant {
 /*
  * One widget family's paint: the resting box a widget starts its
  * declaration from, and the differences each state applies over whatever
- * the declaration ended up stating.
+ * the declaration ended up stating. `checked` is applied first, so the
+ * pointer's and the keyboard's marks read over the switch's own fill rather
+ * than losing it.
  */
 typedef struct cf_variants {
     cf_style base;
+    cf_variant checked;
     cf_variant hovered;
     cf_variant pressed;
     cf_variant focused;
@@ -395,13 +406,15 @@ typedef struct cf_theme {
     cf_color ink;    /* the tone a body of text reads in */
     cf_color muted;  /* the tone secondary text reads in */
     cf_color on_ink; /* the tone text carries over the accent */
-    cf_variants variants[CF_ROLE_COUNT];
+    cf_variants variants[CF_ROLE_LIMIT];
 } cf_theme;
 
 /*
- * The base style with the states' differences applied over it, in enum
- * order so the later bits overwrite the earlier: a disabled box reads
- * disabled whatever else it is. A NULL variant set answers the base whole.
+ * The base style with the states' differences applied over it, in the order the
+ * variant fields are laid rather than the order of their bits: the switch is
+ * applied first and disabled last, so a box that is on keeps saying so under a
+ * hand and a disabled box reads disabled whatever else it is. A NULL variant
+ * set answers the base whole.
  */
 cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states);
 

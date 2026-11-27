@@ -49,6 +49,28 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
                   const cf_node *children, uint32_t child_count);
 
 /*
+ * A themed switch: the same box, on or off. `checked` is the build's bit, read when the
+ * box is declared and written back when a person flips it - the memory and its lifetime
+ * stay the caller's, exactly as a field's buffer does, so a page that decides to switch
+ * something off itself has only to move the bit before the next build. `on_toggle` may be
+ * NULL: the page that reads its own bit on the next frame needs nobody to tell it, and the
+ * one that saves as soon as a box changes does.
+ *
+ * The ask is the same from either door - the release that starts on the box and ends
+ * inside it, and Enter or the space bar while the box holds the focus - and the handler is
+ * not told which came. A switched-off box answers neither, which is the node layer's rule
+ * rather than this widget's. The theme's checked variant is what paints the difference, so
+ * a box that is on and a box that is off differ however the design system says they
+ * should; `cf_node.checked` is what a bridge announces, and `cf_semantic_visit` reports a
+ * box the build never named by no words at all, so a page gives the box its caption the
+ * way it gives a field one.
+ *
+ * A NULL context, name or bit answers a declaration that draws nothing and fires nothing.
+ */
+cf_node cf_checkbox(cf_ctx *ctx, const char *name, bool *checked, cf_on_press on_toggle,
+                    void *user_data);
+
+/*
  * A box that paints a texture the backend issued when the app uploaded it.
  * The content is borrowed: it must outlive the frame that declares the
  * image, which a static or a frame-arena block both do. The theme's resting

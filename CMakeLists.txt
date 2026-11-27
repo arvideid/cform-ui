@@ -137,6 +137,7 @@ target_link_libraries(cf_node PUBLIC cf_layout cf_paint)
 # and stays headless.
 add_library(cf_widget STATIC
     src/widget/button.c
+    src/widget/checkbox.c
     src/widget/field.c
     src/widget/image.c
     src/widget/label.c

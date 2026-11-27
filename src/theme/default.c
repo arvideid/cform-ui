@@ -127,6 +127,34 @@ static const cf_theme
                                                                .value = RGBA(229, 229, 229)},
                                                 .margin = MARGINS,
                                                 .flex_shrink = SHRINK}},
+                    /* A switch is a surface the accent fills: the card's own #fafafa behind a
+                     * hairline when it is off, and #171717 - the single accent the button wears -
+                     * when the caller says it is on. Nothing else on the page takes that
+                     * tone, so a glance says which boxes carry a decision without a shape
+                     * that needs a glyph the font may not have. The square is the family's
+                     * size, not the widget's: a denser theme moves it by stating its own. */
+                    [CF_ROLE_CHECKBOX] =
+                        {.base =
+                             {.width = PX(20.0f),
+                              .height = PX(20.0f),
+                              .background = {.present = true, .value = RGBA(250, 250, 250)},
+                              .border_color = {.present = true, .value = RGBA(212, 212, 212)},
+                              .border = {PX(1.0f), PX(1.0f), PX(1.0f), PX(1.0f)},
+                              .margin = MARGINS,
+                              .flex_shrink = SHRINK,
+                              .radius = 4.0f},
+                         .checked = {.background = {.present = true, .value = RGBA(23, 23, 23)},
+                                     .border_color = {.present = true, .value = RGBA(23, 23, 23)}},
+                         .hovered =
+                             {.border_color = {.present = true, .value = RGBA(163, 163, 163)}},
+                         .pressed = {.background = {.present = true, .value = RGBA(10, 10, 10)}},
+                         /* The same ring the field's focus edge wears: ink on the page's own
+                          * tone is 19:1, and the box has no fill of its own to hide behind
+                          * when it is off. */
+                         .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)}},
+                         .disabled =
+                             {.background = {.present = true, .value = RGBA(229, 229, 229)},
+                              .border_color = {.present = true, .value = RGBA(212, 212, 212)}}},
                 },
 };
 

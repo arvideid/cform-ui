@@ -44,8 +44,8 @@ typedef struct walk_stack {
 } walk_stack;
 
 /* What a change dirties: the style, the measure and handlers the build
- * attached, the family and switch the resolver reads, and the shape of the
- * child list. The measure's data is borrowed and unread, so it is none of
+ * attached, the family and the switch the resolver paints from, and the shape
+ * of the child list. The measure's data is borrowed and unread, so it is none of
  * the comparison's business, and the staging bytes start zeroed so the
  * alignment gaps ride the same hash every frame. */
 static uint32_t signature_of(const cf_node *decl) {
@@ -61,6 +61,7 @@ static uint32_t signature_of(const cf_node *decl) {
         cf_name controls;
         bool disabled;
         bool focusable;
+        bool checked;
     } declared;
 
     memset(&declared, 0, sizeof declared);
@@ -73,6 +74,7 @@ static uint32_t signature_of(const cf_node *decl) {
     declared.disabled = decl->disabled;
     declared.access = decl->access;
     declared.focusable = decl->focusable;
+    declared.checked = decl->checked;
     declared.announce = decl->announce;
     declared.described_by = decl->described_by;
     declared.controls = decl->controls;
@@ -303,6 +305,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->described_by = root->described_by;
     root_record->controls = root->controls;
     root_record->focusable = root->focusable;
+    root_record->checked = root->checked;
 
     const uint32_t root_signature = signature_of(root);
 
@@ -358,6 +361,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->described_by = decl->described_by;
         record->controls = decl->controls;
         record->focusable = decl->focusable;
+        record->checked = decl->checked;
 
         const uint32_t signature = signature_of(decl);
 

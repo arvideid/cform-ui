@@ -7,8 +7,8 @@
 #include <string.h>
 
 /* The names a semantic line speaks: the role families the theme styles. */
-static const char *const role_names[CF_ROLE_COUNT] = {"box",  "button", "field",
-                                                      "list", "scroll", "image"};
+static const char *const role_names[CF_ROLE_LIMIT] = {"box",    "button", "field",   "list",
+                                                      "scroll", "image",  "checkbox"};
 
 /* A line quotes a bounded excerpt: a label is one word, a field's buffer is
  * one line, and a dump that runs away helps nobody. */
@@ -60,7 +60,7 @@ static int excerpt(const cf_string text, char *out) {
 /* A role the theme never styled still names a box; reading the table at an
  * index past its end is not an answer anyone can trust. */
 static const char *role_name(cf_role role) {
-    return (unsigned)role < (unsigned)CF_ROLE_COUNT ? role_names[role] : role_names[CF_ROLE_NONE];
+    return (unsigned)role < (unsigned)CF_ROLE_LIMIT ? role_names[role] : role_names[CF_ROLE_NONE];
 }
 
 /* The indent can run wide and the excerpt a whole line, so the pieces are
@@ -245,6 +245,13 @@ static uint32_t states_of(const cf_ctx *ctx, const node_record *record, const cf
 
     if (record->access == CF_ACCESS_TEXT_BOX) {
         states |= (uint32_t)CF_SEMANTIC_EDITABLE;
+    }
+
+    /* The switch is the build's word, booked on the record the same way the painter
+     * reads it: a box that stated nothing and a box whose caller turned it off say the
+     * same thing here, which is what the page knows. */
+    if (record->checked) {
+        states |= (uint32_t)CF_SEMANTIC_CHECKED;
     }
 
     return states;

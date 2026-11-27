@@ -169,6 +169,9 @@ typedef struct gallery_host {
     char caption_bytes[96];
     char relate_bytes[96];
     char compose_bytes[128];
+    /* The switch chapter's line: what its boxes hold and how often one of them was
+     * asked for. */
+    char switch_bytes[128];
 } gallery_host;
 
 /*
@@ -268,6 +271,40 @@ static bool *dialog_box(cf_ctx *ctx) {
  * so the box that carries the relation is the same box on both sides of the press. */
 static bool *note_box(cf_ctx *ctx) {
     return cf_state(ctx, cf_ctx_key(ctx, "note"), sizeof(bool));
+}
+
+/* The bits the switch chapter's boxes are declared from. They live in the keyed block because the
+ * widget that flips one writes the caller's bool and nothing else: the box paints what the page
+ * holds, so a rebuild reads the same bit back. */
+static bool *switch_held(cf_ctx *ctx) {
+    return cf_state(ctx, cf_ctx_key(ctx, "switched"), sizeof(bool));
+}
+
+/* The second box's bit, moved by a hand and never reported: whether a control can be reached has
+ * nothing to do with whether anyone asked to be told. */
+static bool *switch_unasked(cf_ctx *ctx) {
+    return cf_state(ctx, cf_ctx_key(ctx, "unasked"), sizeof(bool));
+}
+
+/* The third box's bit. Nothing moves it - the build switches the box off every frame, and an
+ * off box is refused by the node layer before any handler of ours is reached. */
+static bool *switch_shut(cf_ctx *ctx) {
+    return cf_state(ctx, cf_ctx_key(ctx, "shut"), sizeof(bool));
+}
+
+/* How many asks reached the page from the one box that answers for them, which is the number the
+ * line under the row counts. */
+static uint32_t *switch_asks(cf_ctx *ctx) {
+    return cf_state(ctx, cf_ctx_key(ctx, "asks"), sizeof(uint32_t));
+}
+
+static void a_switch_answers(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
+    uint32_t *asks = switch_asks(ctx);
+
+    if (asks != NULL) {
+        (*asks)++;
+    }
 }
 
 /* The one tween the motion chapter runs, in the keyed block that outlives the
@@ -1497,10 +1534,62 @@ static cf_node make_composed_demo(gallery_host *host, cf_ctx *ctx) {
     return demo_column(ctx, 8.0f, (cf_node[]){holding, caption}, 2u);
 }
 
+/* A box and the words drawn beside it. The label is what an eye reads and the name stated on the
+ * box is what a bridge is handed; nothing on the page pairs the two, so the caption says the same
+ * words the name does rather than pointing at the square. */
+static cf_node make_switch_pair(gallery_host *host, cf_ctx *ctx, cf_node box, const char *caption) {
+    cf_style row = cf_style_default();
+    row.column_gap = CF_PX(8.0f);
+    row.align_items = CF_ALIGN_CENTER;
+
+    const cf_node label = cf_label(ctx, cf_string_of(caption), &host->body, host->theme->ink);
+
+    return cf_row(ctx, row, (cf_node[]){box, label}, 2u);
+}
+
+/* Chapter sixteen: a switch whose bit the page holds. Three squares, each saying something
+ * different about who owns a control's state - the one that reports the ask, the one that moves
+ * with nobody told, and the one the build switched off. */
+static cf_node make_switch_demo(gallery_host *host, cf_ctx *ctx) {
+    bool *const held = switch_held(ctx);
+    bool *const unheard = switch_unasked(ctx);
+    bool *const shut = switch_shut(ctx);
+    const uint32_t *const asked = switch_asks(ctx);
+
+    /* A field's caption is named rather than drawn for the same reason a switch's is: the widget
+     * paints its own face and nothing else. */
+    cf_node mail = cf_checkbox(ctx, "mail me", held, a_switch_answers, NULL);
+    mail.name = cf_string_of("Email me when a release lands");
+
+    cf_node quiet = cf_checkbox(ctx, "quiet", unheard, NULL, NULL);
+    quiet.name = cf_string_of("Moves with nobody told");
+
+    cf_node closed = cf_checkbox(ctx, "closed", shut, a_switch_answers, NULL);
+    closed.name = cf_string_of("A box the build switched off");
+    closed.disabled = true;
+
+    const uint32_t asks = asked != NULL ? *asked : 0u;
+    /* Kept short enough for one line: a label is capped to the line it has room for, so the
+     * sentence a person reads and the sentence the tier hunts for have to be the same one. */
+    const int length =
+        snprintf(host->switch_bytes, sizeof host->switch_bytes,
+                 "the page heard %u ask%s: %s, and %s unheard", asks, asks == 1u ? "" : "s",
+                 held != NULL && *held ? "on" : "off", unheard != NULL && *unheard ? "on" : "off");
+
+    const cf_node report = cf_label(ctx, (cf_string){host->switch_bytes, (uint32_t)length},
+                                    &host->body, host->theme->muted);
+
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){make_switch_pair(host, ctx, mail, "mail me"),
+                                   make_switch_pair(host, ctx, quiet, "quiet"),
+                                   make_switch_pair(host, ctx, closed, "closed"), report},
+                       4u);
+}
+
 static cf_node make_header(gallery_host *host, cf_ctx *ctx) {
     const cf_node name =
         cf_label(ctx, cf_string_of("cform gallery"), &host->title, host->theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("fifteen rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("sixteen rules, each with something to try"),
                                   &host->body, host->theme->muted);
 
     cf_style row = cf_style_default();
@@ -1777,6 +1866,26 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "the underline the page draws and the strip it lays under the run are the numbers a "
             "platform is handed, so a machine with no method on it can still see the rule hold.",
             make_composed_demo(host, ctx)),
+        make_chapter(
+            host, ctx, "16", "A switch the page holds",
+            "A control's state belongs to whoever built it, not to the control: the box is handed "
+            "a bit the page owns, reads when it declares itself and writes back when a hand flips "
+            "it. Nothing is asked of the box to find out what it is, so a rebuild paints the same "
+            "square and the page can change the bit with no message sent at all. What the theme "
+            "says about the bit is what a person sees - the off square is the card's own tone "
+            "behind a hairline and the on one wears the accent the buttons do - so the widget "
+            "states which of the two this is and never what it looks like, and no glyph has to be "
+            "drawn for the difference to be visible. Press the first: the release that starts and "
+            "ends inside the square flips it, and so do Enter and the space bar once the box holds "
+            "the keyboard through a Tab - the handler is not told which door brought the ask, and "
+            "the count under the row is all it knows. The second square moves just the same and "
+            "leaves that count where it was, because it was declared with nobody to tell: a "
+            "control is reachable before it is reportable. The third answers neither hand, and "
+            "that refusal is the node layer's rule rather than the widget's, so a page switching a "
+            "box off switches off its keys with it. A bridge hears all three as a checkbox, with "
+            "the name the build stated rather than the label beside it, and is offered the ask and "
+            "the state but never a value to write.",
+            make_switch_demo(host, ctx)),
         make_note(host, ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "

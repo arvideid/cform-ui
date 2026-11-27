@@ -66,6 +66,9 @@ typedef struct node_record {
     /* Booked from the declaration: the keyboard reaches the boxes that say so,
      * and neither the role nor a handler is the question. */
     bool focusable;
+    /* Booked from the declaration: a switch's own state, read by the resolver for the
+     * theme's checked variant and by the bridge walk for the state it announces. */
+    bool checked;
 } node_record;
 
 /* The record a store slot holds. Slots below the store's extent always

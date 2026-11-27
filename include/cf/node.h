@@ -53,14 +53,15 @@ typedef struct cf_handlers {
  */
 typedef enum cf_access {
     CF_ACCESS_NONE,
-    CF_ACCESS_GROUP,      /* a box that holds other boxes and means nothing alone */
-    CF_ACCESS_BUTTON,     /* a press that does a thing */
-    CF_ACCESS_TEXT_BOX,   /* a box whose bytes a person types into */
-    CF_ACCESS_LABEL,      /* text meant to be read, not edited */
-    CF_ACCESS_IMAGE,      /* a picture, named by the build or by nothing */
-    CF_ACCESS_LIST,       /* a scrollable run of items */
-    CF_ACCESS_ITEM,       /* one row of a list */
-    CF_ACCESS_SCROLL_AREA /* a box that scrolls its content */
+    CF_ACCESS_GROUP,       /* a box that holds other boxes and means nothing alone */
+    CF_ACCESS_BUTTON,      /* a press that does a thing */
+    CF_ACCESS_TEXT_BOX,    /* a box whose bytes a person types into */
+    CF_ACCESS_LABEL,       /* text meant to be read, not edited */
+    CF_ACCESS_IMAGE,       /* a picture, named by the build or by nothing */
+    CF_ACCESS_LIST,        /* a scrollable run of items */
+    CF_ACCESS_ITEM,        /* one row of a list */
+    CF_ACCESS_SCROLL_AREA, /* a box that scrolls its content */
+    CF_ACCESS_CHECKBOX     /* a box that is on or off, and answers a press either way */
 } cf_access;
 
 /*
@@ -144,6 +145,12 @@ typedef struct cf_node {
      * callers; Tab walks the boxes that say yes, a press lands on one only if it
      * does, and `cf_focus` refuses the ones that do not. */
     bool focusable;
+
+    /* Whether this box is on, as far as the build knows it: a switch's state is content rather
+     * than an interaction, so the widget reads the bit its caller holds and states it here for the
+     * painter and the bridge alike. Nothing a person can do to the box moves it on its own - the
+     * widget that owns the bit writes it back through the pointer it was handed. */
+    bool checked;
 
     const struct cf_node *children;
     uint32_t child_count;
@@ -614,7 +621,8 @@ typedef enum cf_semantic_state {
     CF_SEMANTIC_FOCUSED = 1 << 2,
     CF_SEMANTIC_PRESSED = 1 << 3,
     CF_SEMANTIC_HOVERED = 1 << 4,
-    CF_SEMANTIC_EDITABLE = 1 << 5 /* the bytes belong to a buffer a person types into */
+    CF_SEMANTIC_EDITABLE = 1 << 5, /* the bytes belong to a buffer a person types into */
+    CF_SEMANTIC_CHECKED = 1 << 6   /* the switch the box carries is on */
 } cf_semantic_state;
 
 /*
