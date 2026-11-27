@@ -702,25 +702,27 @@ static void the_box_holding_the_keyboard_is_the_one_announced_focused(void) {
     announce(&ctx);
     CF_CHECK(spoken_count == 3u, "three named boxes are announced");
 
-    /* Read the slots out once: `announce` rewrites the collected rows, and a bridge that meant to
-     * hold a slot would be holding a number this frame is free to hand someone else. */
+    /* Read the rows out once, both ways: `announce` rewrites the collected rows, so asking later
+     * means naming the box by the reference a bridge would keep and reading this frame's rect by
+     * the place the arrays hold it at. */
     const uint32_t first_slot = spoken[0].slot;
     const uint32_t second_slot = spoken[1].slot;
-    const uint32_t third_slot = spoken[2].slot;
+    const cf_id second_id = spoken[1].id;
+    const cf_id third_id = spoken[2].id;
     CF_CHECK((spoken[0].states & (uint32_t)CF_SEMANTIC_FOCUSED) == 0u,
              "a page nobody has tabbed through focuses nothing");
     CF_CHECK((spoken[2].states & (uint32_t)CF_SEMANTIC_FOCUSABLE) == 0u &&
                  (spoken[2].actions & (uint32_t)CF_SEMANTIC_SET_FOCUS) == 0u,
              "a box that takes no focus says so and offers no ask to move it");
 
-    cf_focus(&ctx, second_slot);
+    cf_focus(&ctx, second_id);
     announce(&ctx);
     CF_CHECK((spoken[1].states & (uint32_t)CF_SEMANTIC_FOCUSED) != 0u,
              "the box the keyboard stands on is announced focused");
     CF_CHECK((spoken[0].states & (uint32_t)CF_SEMANTIC_FOCUSED) == 0u,
              "and the one it left is not");
 
-    cf_focus(&ctx, third_slot);
+    cf_focus(&ctx, third_id);
     announce(&ctx);
     CF_CHECK((spoken[1].states & (uint32_t)CF_SEMANTIC_FOCUSED) != 0u,
              "a box that takes no focus cannot be moved onto, so the keyboard stays");

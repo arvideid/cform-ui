@@ -10,15 +10,15 @@
  */
 typedef struct clicks {
     int count;
-    uint32_t last_slot;
+    cf_id last_node;
     bool saw_ctx;
 } clicks;
 
-static void on_press(cf_ctx *ctx, uint32_t slot, void *user_data) {
+static void on_press(cf_ctx *ctx, cf_id node, void *user_data) {
     clicks *seen = user_data;
 
     seen->count++;
-    seen->last_slot = slot;
+    seen->last_node = node;
     seen->saw_ctx = ctx != NULL;
 }
 
@@ -108,18 +108,22 @@ static void a_click_fires_on_the_release_that_ends_inside(void) {
 
     const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
     const uint32_t label_slot = child_of(&ctx, button_slot, 0u);
+    const cf_id button = cf_node_id(&ctx, button_slot);
+    const cf_id label = cf_node_id(&ctx, label_slot);
 
     /* The label's rect starts at the button's padding, so the press lands on
      * the text and climbs to the button that owns it. */
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 20.0f, .y = 10.0f}});
 
-    CF_CHECK(cf_pressed(&ctx, button_slot) && !cf_pressed(&ctx, label_slot),
+    CF_CHECK(cf_pressed(&ctx, button) && !cf_pressed(&ctx, label),
              "the press books the button, not the label it started on");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 20.0f, .y = 10.0f}});
 
     CF_CHECK(seen.count == 1, "the click fires once");
-    CF_CHECK(seen.last_slot == button_slot, "the callback names the button's slot");
+    CF_CHECK(
+        cf_id_equal(seen.last_node, button),
+        "the callback hands over the button as a reference, not a place in this frame's arrays");
     CF_CHECK(seen.saw_ctx, "the callback carries the context");
 
     cf_ctx_free(&ctx);
@@ -138,18 +142,18 @@ static void a_release_off_the_button_leaves_the_click_unfired(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 20.0f, .y = 10.0f}});
     cf_input(&ctx,
              (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 150.0f, .y = 150.0f}});
 
-    CF_CHECK(cf_pressed(&ctx, button_slot), "the press outlives the pointer leaving the rect");
+    CF_CHECK(cf_pressed(&ctx, button), "the press outlives the pointer leaving the rect");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 150.0f, .y = 150.0f}});
 
     CF_CHECK(seen.count == 0, "the release off the rect is not a click");
-    CF_CHECK(!cf_pressed(&ctx, button_slot), "the press ends with the release all the same");
+    CF_CHECK(!cf_pressed(&ctx, button), "the press ends with the release all the same");
 
     cf_ctx_free(&ctx);
 }
@@ -171,7 +175,8 @@ static void a_disabled_button_neither_presses_nor_fires(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 20.0f, .y = 10.0f}});
 
     CF_CHECK(seen.count == 0, "a switched-off button fires nothing");
-    CF_CHECK(!cf_pressed(&ctx, child_of(&ctx, ctx.root_slot, 0u)), "and books no press");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u))),
+             "and books no press");
 
     cf_ctx_free(&ctx);
 }
@@ -194,17 +199,18 @@ static void the_focused_button_answers_the_keys_that_ask(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 
     CF_CHECK(seen.count == 0, "a button nobody focused fires on no key");
 
-    cf_focus(&ctx, button_slot);
+    cf_focus(&ctx, button);
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 
     CF_CHECK(seen.count == 1, "Enter on the focused button is the same ask as a click");
-    CF_CHECK(seen.last_slot == button_slot, "and it names the button, not the label inside it");
+    CF_CHECK(cf_id_equal(seen.last_node, button),
+             "and it names the button, not the label inside it");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_SPACE});
 
@@ -230,11 +236,11 @@ static void a_disabled_button_takes_no_focus_and_answers_no_key(void) {
 
     frame_of(&ctx, &seen, true);
 
-    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
-    cf_focus(&ctx, button_slot);
+    cf_focus(&ctx, button);
 
-    CF_CHECK(!cf_focused(&ctx, button_slot), "a switched-off button takes no focus");
+    CF_CHECK(!cf_focused(&ctx, button), "a switched-off button takes no focus");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 

@@ -17,12 +17,13 @@
  */
 
 /*
- * The ask a button answers: the slot the button kept this frame, so the
- * handler can read the interaction state and rects off the context, and the
- * user pointer the build handed the button. A click and a key are the same ask
- * here, and the callback is not told which one came.
+ * The ask a button answers: the node the button kept, handed as the reference that stays good
+ * across a rebuild, so the handler can read this frame's rect and interaction state off the
+ * context by `cf_node_slot` and ask the same box again in a later frame. The user pointer is the
+ * one the build handed the button. A click and a key are the same ask here, and the callback is not
+ * told which one came.
  */
-typedef void (*cf_on_press)(cf_ctx *ctx, uint32_t slot, void *user_data);
+typedef void (*cf_on_press)(cf_ctx *ctx, cf_id node, void *user_data);
 
 /*
  * One line of text, drawn through the fonts the build loaded and toned with

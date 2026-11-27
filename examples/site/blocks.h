@@ -227,11 +227,11 @@ typedef struct site_address {
     void (*open)(const char *url);
 } site_address;
 
-static inline void site_follow(cf_ctx *ctx, uint32_t slot, void *user_data) {
+static inline void site_follow(cf_ctx *ctx, cf_id node, void *user_data) {
     const site_address *address = user_data;
 
     (void)ctx;
-    (void)slot;
+    (void)node;
 
     if (address != NULL && address->open != NULL) {
         address->open(address->text);
@@ -261,11 +261,11 @@ typedef struct site_tab_pick {
     uint32_t index;
 } site_tab_pick;
 
-static inline void site_pick_tab(cf_ctx *ctx, uint32_t slot, void *user_data) {
+static inline void site_pick_tab(cf_ctx *ctx, cf_id node, void *user_data) {
     const site_tab_pick *pick = user_data;
     uint32_t *chosen = cf_state(ctx, cf_intern_text(&ctx->names, pick->name), sizeof *chosen);
 
-    (void)slot;
+    (void)node;
 
     if (chosen != NULL) {
         *chosen = pick->index;

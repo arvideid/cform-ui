@@ -250,7 +250,7 @@ static void tabbing_to_an_offscreen_control_scrolls_it_into_view(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_TAB});
 
-    CF_CHECK(cf_focused(&ctx, button), "the only focusable box takes the Tab");
+    CF_CHECK(cf_focused(&ctx, cf_node_id(&ctx, button)), "the only focusable box takes the Tab");
 
     reveal_frame(&ctx);
 

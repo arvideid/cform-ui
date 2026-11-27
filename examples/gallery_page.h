@@ -249,8 +249,8 @@ static char *submitted(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "submitted"), sizeof typed_bytes);
 }
 
-static void count_click(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)user_data;
+static void count_click(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
     uint32_t *clicks = click_count(ctx);
 
     if (clicks != NULL) {
@@ -289,8 +289,8 @@ static void note_change(cf_event *event, void *user_data) {
     }
 }
 
-static void clear_count(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)user_data;
+static void clear_count(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
     uint32_t *clicks = click_count(ctx);
 
     if (clicks != NULL) {
@@ -301,8 +301,8 @@ static void clear_count(cf_ctx *ctx, uint32_t slot, void *user_data) {
 /* One handler for every switch on the page: the block it turns over arrives as
  * the user pointer rather than as a name to look up. A state block lives in the
  * arena that outlives the frame, so it is a stable address to hand a button. */
-static void flip(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)ctx, (void)slot;
+static void flip(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)ctx, (void)node;
     bool *held = user_data;
 
     if (held != NULL) {
@@ -313,8 +313,8 @@ static void flip(cf_ctx *ctx, uint32_t slot, void *user_data) {
 /* The keyboard chapter's way in. It writes the flag instead of turning it because a
  * button's name is its key in the diff, and a box that renames itself is a box
  * retired: the opener has to keep standing there while the keyboard comes back to it. */
-static void open_box(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)ctx, (void)slot;
+static void open_box(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)ctx, (void)node;
     bool *held = user_data;
 
     if (held != NULL) {
@@ -324,8 +324,8 @@ static void open_box(cf_ctx *ctx, uint32_t slot, void *user_data) {
 
 /* The rule arrives as its index: a pointer wide enough for the number, so the
  * eight chips share one handler and the file keeps no table to look it up in. */
-static void pick_rule(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot;
+static void pick_rule(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node;
     uint32_t *rule = picked_rule(ctx);
 
     if (rule != NULL) {
@@ -333,8 +333,8 @@ static void pick_rule(cf_ctx *ctx, uint32_t slot, void *user_data) {
     }
 }
 
-static void pick_plan(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot;
+static void pick_plan(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node;
     uint32_t *plan = picked_plan(ctx);
 
     if (plan != NULL) {
@@ -343,8 +343,8 @@ static void pick_plan(cf_ctx *ctx, uint32_t slot, void *user_data) {
 }
 
 /* The chips carry the cf_ease ordinals, which are the numbers they select. */
-static void pick_ease(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot;
+static void pick_ease(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node;
     uint32_t *held = picked_ease(ctx);
 
     if (held != NULL) {
@@ -352,8 +352,8 @@ static void pick_ease(cf_ctx *ctx, uint32_t slot, void *user_data) {
     }
 }
 
-static void chip_answers(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot;
+static void chip_answers(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node;
     uint32_t *held = answered_chip(ctx);
 
     if (held != NULL) {
@@ -364,8 +364,8 @@ static void chip_answers(cf_ctx *ctx, uint32_t slot, void *user_data) {
 /* One press aims the tween at whichever end it is not already holding: the
  * target is the number the block carries, so the chapter keeps no second copy of
  * it to fall out of step with. */
-static void send_it(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)user_data;
+static void send_it(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
     cf_tween *tween = slide_tween(ctx);
     const uint32_t *held = picked_ease(ctx);
 
@@ -1192,8 +1192,8 @@ static cf_node make_keyboard_demo(cf_ctx *ctx) {
 /* The press the page's own ending rides on. It is handed the context, which is the
  * one thing a build owns, and that is where the ask goes: a page has no way to reach
  * the window it is drawn into and should not need one. */
-static void end_the_run(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)user_data;
+static void end_the_run(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
     cf_request_quit(ctx);
 }
 
@@ -1220,8 +1220,8 @@ static uint32_t *spoken_control(cf_ctx *ctx) {
 static const char *spoken_names[] = {"the one named on its face", "the one named by the build",
                                      "the one nobody named"};
 
-static void a_control_answers(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)ctx;
+static void a_control_answers(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)ctx;
     uint32_t *held = spoken_control(ctx);
 
     /* One above the index: the keyed block starts zeroed, and a page that has heard from nothing
@@ -1277,8 +1277,8 @@ static uint32_t *news_count(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "news"), sizeof(uint32_t));
 }
 
-static void make_the_news(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)slot, (void)user_data;
+static void make_the_news(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)node, (void)user_data;
     uint32_t *held = news_count(ctx);
 
     if (held != NULL) {

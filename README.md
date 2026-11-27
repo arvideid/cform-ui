@@ -317,8 +317,8 @@ static const cf_theme *theme;   /* the stock colors and spacing */
 static cf_font font;            /* one loaded typeface          */
 static cf_text_stack fonts;     /* the stack a walk reads it through */
 
-static void say_hello(cf_ctx *ctx, uint32_t slot, void *user_data) {
-    (void)ctx, (void)slot, (void)user_data;
+static void say_hello(cf_ctx *ctx, cf_id node, void *user_data) {
+    (void)ctx, (void)node, (void)user_data;
     printf("hello\n");
 }
 
@@ -392,7 +392,9 @@ Four steps, and each one can be used on its own:
 
 | Word | What it means here |
 | --- | --- |
-| **node** | One box in the tree. An integer, not a pointer, so an out-of-date handle fails safely. |
+| **node** | One box in the tree, named by a number rather than a pointer, so an out-of-date handle fails safely. Two numbers: see **slot** and **id**. |
+| **slot** | Where a box sits in this frame's arrays, and the number the rects and the view are addressed by. The store hands a retired one to the next box the build declares, so it is only good until the next rebuild. |
+| **id** | The reference a caller keeps: a slot plus a version, so it either still names the same box or names nothing. `cf_node_id` turns this frame's slot into one, `cf_node_slot` reads the place back. |
 | **ctx** | Everything a frame is allowed to keep: its memory, its state, its events. |
 | **arena** | Memory handed out in one block and thrown away in one block, so a frame cannot leak. [Region-based allocation](https://en.wikipedia.org/wiki/Region-based_memory_management). |
 | **state** | What a named box keeps across frames: a click count, a scroll offset, a typed buffer. It lives in `ctx`, not in your node, because your node is thrown away every frame. |

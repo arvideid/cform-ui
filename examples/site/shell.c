@@ -69,9 +69,9 @@ static void follow(const site_entry *entry) {
     cf_web_write_hash(route);
 }
 
-static void go_to(cf_ctx *ctx, uint32_t slot, void *user_data) {
+static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
     (void)ctx;
-    (void)slot;
+    (void)node;
 
     if (user_data != NULL) {
         follow(user_data);

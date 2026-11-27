@@ -14,15 +14,15 @@ static uint32_t interact_of(const cf_ctx *ctx, const node_record *record, uint32
         states |= (uint32_t)CF_INTERACT_DISABLED;
     }
 
-    if (cf_hovered(ctx, slot)) {
+    if (slot_hovered(ctx, slot)) {
         states |= (uint32_t)CF_INTERACT_HOVERED;
     }
 
-    if (cf_pressed(ctx, slot)) {
+    if (slot_pressed(ctx, slot)) {
         states |= (uint32_t)CF_INTERACT_PRESSED;
     }
 
-    if (cf_focused(ctx, slot)) {
+    if (slot_focused(ctx, slot)) {
         states |= (uint32_t)CF_INTERACT_FOCUSED;
     }
 

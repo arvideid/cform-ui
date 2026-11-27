@@ -440,7 +440,7 @@ static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
     CF_CHECK(cf_error_message(&ctx) != NULL, "the refusal names itself");
     CF_CHECK(list.count == 0u, "a refused frame emits no commands");
     CF_CHECK(ctx.rects == NULL, "no partial rect array reaches the walk");
-    CF_CHECK(cf_hit_test(&ctx, (cf_point){10.0f, 10.0f}) == CF_NO_LINK,
+    CF_CHECK(cf_id_is_none(cf_hit_test(&ctx, (cf_point){10.0f, 10.0f})),
              "a refused view answers no point");
 
     /* The context outlives the refusal: a fresh one that has enough scratch

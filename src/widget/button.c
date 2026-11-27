@@ -27,7 +27,7 @@ static void button_pointer(cf_event *event, void *user_data) {
         return;
     }
 
-    if (!cf_pressed(button->ctx, event->target)) {
+    if (!cf_pressed(button->ctx, cf_node_id(button->ctx, event->target))) {
         return;
     }
 
@@ -38,7 +38,7 @@ static void button_pointer(cf_event *event, void *user_data) {
         return;
     }
 
-    button->on_press(button->ctx, event->target, button->user_data);
+    button->on_press(button->ctx, cf_node_id(button->ctx, event->target), button->user_data);
 }
 
 /* The keyboard asks for the same thing a release inside the rect asks. No rect is
@@ -47,7 +47,7 @@ static void button_pointer(cf_event *event, void *user_data) {
 static void button_activate(cf_event *event, void *user_data) {
     button_data *button = user_data;
 
-    button->on_press(button->ctx, event->target, button->user_data);
+    button->on_press(button->ctx, cf_node_id(button->ctx, event->target), button->user_data);
 }
 
 cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *user_data,

@@ -240,18 +240,26 @@ static const api_symbol node_symbols[] = {
     {"cf_input", "void cf_input(cf_ctx *ctx, cf_event event);",
      "Dispatches one event to the node under it, climbing through the parents until a handler "
      "stops it."},
-    {"cf_hit_test", "uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);",
-     "The topmost box whose rect holds a point, in paint order read backwards."},
-    {"cf_focus", "void cf_focus(cf_ctx *ctx, uint32_t slot);",
+    {"cf_node_id", "cf_id cf_node_id(const cf_ctx *ctx, uint32_t slot);",
+     "The number to keep: the node a frame's array slot holds, which stops naming a box the moment "
+     "the tree lets it go instead of naming whoever got the slot."},
+    {"cf_node_slot", "uint32_t cf_node_slot(const cf_ctx *ctx, cf_id id);",
+     "This frame's place for a node, for reading its rect; no place at all when the reference "
+     "names "
+     "a box the page no longer has."},
+    {"cf_hit_test", "cf_id cf_hit_test(const cf_ctx *ctx, cf_point position);",
+     "The topmost box whose rect holds a point, in paint order read backwards, as the reference a "
+     "caller may hold on to."},
+    {"cf_focus", "void cf_focus(cf_ctx *ctx, cf_id node);",
      "Moves the keyboard by hand, refusing a box that declared it takes none."},
     {"cf_report_change", "void cf_report_change(cf_ctx *ctx, cf_event *event);",
      "Runs the node's own change handler with the event that moved its bytes, so a widget "
      "reports a value without asking anything above it to look."},
-    {"cf_hovered", "bool cf_hovered(const cf_ctx *ctx, uint32_t slot);",
+    {"cf_hovered", "bool cf_hovered(const cf_ctx *ctx, cf_id node);",
      "Whether the pointer rests on this node."},
-    {"cf_pressed", "bool cf_pressed(const cf_ctx *ctx, uint32_t slot);",
+    {"cf_pressed", "bool cf_pressed(const cf_ctx *ctx, cf_id node);",
      "Whether a press began here and has not ended."},
-    {"cf_focused", "bool cf_focused(const cf_ctx *ctx, uint32_t slot);",
+    {"cf_focused", "bool cf_focused(const cf_ctx *ctx, cf_id node);",
      "Whether this node holds the keyboard."},
     {"cf_frame_cursor", "cf_cursor cf_frame_cursor(const cf_ctx *ctx);",
      "The cursor the hovered node asks for, which a shell hands to its backend once per frame."},

@@ -132,6 +132,12 @@ static uint32_t child_slot(const cf_ctx *ctx, uint32_t index) {
     return child_of(ctx, ctx->root_slot, index);
 }
 
+/* The box under that index, as the reference a caller keeps: the number that still names the
+ * same node after the next rebuild, which is what the interaction asks are answered with. */
+static cf_id child_id(const cf_ctx *ctx, uint32_t index) {
+    return cf_node_id(ctx, child_slot(ctx, index));
+}
+
 static void a_move_hovers_the_topmost_child_at_the_point(void) {
     cf_ctx ctx;
 
@@ -154,19 +160,21 @@ static void a_move_hovers_the_topmost_child_at_the_point(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t left = child_slot(&ctx, 0u);
-    const uint32_t right = child_slot(&ctx, 1u);
+    const cf_id left = child_id(&ctx, 0u);
+    const cf_id right = child_id(&ctx, 1u);
     const cf_point at = {.x = 60.0f, .y = 10.0f};
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = at});
 
-    CF_CHECK(cf_hit_test(&ctx, at) == right, "the topmost node answers the point");
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, at), right), "the topmost node answers the point");
     CF_CHECK(cf_hovered(&ctx, right), "the move hovers the child under the pointer");
     CF_CHECK(!cf_hovered(&ctx, left), "the child beside it stays out");
-    CF_CHECK(!cf_hovered(&ctx, ctx.root_slot), "the container behind it stays out");
+    CF_CHECK(!cf_hovered(&ctx, cf_node_id(&ctx, ctx.root_slot)),
+             "the container behind it stays out");
     CF_CHECK(second.moves == 1 && first.moves == 0 && root_log.moves == 1,
              "the move runs the hovered node's handler and bubbles");
-    CF_CHECK(second.last_target == right, "the event names the node whose handler ran");
+    CF_CHECK(cf_id_equal(cf_node_id(&ctx, second.last_target), right),
+             "the event names the node whose handler ran");
 
     cf_ctx_free(&ctx);
 }
@@ -193,7 +201,7 @@ static void the_cursor_names_the_pointer_only_over_a_handler(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "a box that acts on nothing books no hover");
+    CF_CHECK(!cf_hovered(&ctx, child_id(&ctx, 0u)), "a box that acts on nothing books no hover");
     CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "no handler, no pointer cursor");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
@@ -230,8 +238,8 @@ static void only_a_reachable_field_asks_for_written_text(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t field = child_slot(&ctx, 0u);
-    const uint32_t button = child_slot(&ctx, 1u);
+    const cf_id field = child_id(&ctx, 0u);
+    const cf_id button = child_id(&ctx, 1u);
 
     CF_CHECK(!cf_frame_takes_text(NULL), "no context asks the device for nothing");
     CF_CHECK(!cf_frame_takes_text(&ctx), "a page the keyboard has not reached wants no text");
@@ -303,13 +311,13 @@ static void a_press_marks_and_focuses_the_node_it_hit(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t child = child_slot(&ctx, 0u);
+    const cf_id child = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
     CF_CHECK(cf_pressed(&ctx, child), "the press lands on the child");
     CF_CHECK(cf_focused(&ctx, child), "focus follows the press");
-    CF_CHECK(!cf_pressed(&ctx, ctx.root_slot), "the container is not pressed");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, ctx.root_slot)), "the container is not pressed");
     CF_CHECK(child_log.downs == 1 && root_log.downs == 1,
              "the press reaches the child and bubbles to the container");
 
@@ -350,7 +358,7 @@ static void a_release_off_the_pressed_node_still_reaches_it(void) {
 
     CF_CHECK(first.ups == 1, "the release reaches the node the press landed on");
     CF_CHECK(second.ups == 0, "the node under the release does not take it");
-    CF_CHECK(cf_hovered(&ctx, child_slot(&ctx, 1u)), "the hover follows the pointer again");
+    CF_CHECK(cf_hovered(&ctx, child_id(&ctx, 1u)), "the hover follows the pointer again");
 
     cf_ctx_free(&ctx);
 }
@@ -418,14 +426,15 @@ static void a_press_on_a_plain_child_lands_on_the_button_around_it(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(cf_pressed(&ctx, button_slot), "the press lands on the button the label sits in");
-    CF_CHECK(!cf_pressed(&ctx, label_slot), "the label itself holds none of it");
+    CF_CHECK(cf_pressed(&ctx, cf_node_id(&ctx, button_slot)),
+             "the press lands on the button the label sits in");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, label_slot)), "the label itself holds none of it");
     CF_CHECK(button_log.downs == 1 && button_log.last_target == button_slot,
              "the button's handler still sees the press the label took");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(!cf_pressed(&ctx, button_slot), "the release clears the press");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, button_slot)), "the release clears the press");
     CF_CHECK(button_log.ups == 1, "the release reaches the button too");
 
     cf_ctx_free(&ctx);
@@ -457,11 +466,11 @@ static void a_disabled_button_takes_no_press_and_silences_its_handlers(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
     CF_CHECK(button_log.downs == 0, "a switched-off node runs no handler");
-    CF_CHECK(!cf_pressed(&ctx, child_slot(&ctx, 0u)), "the press books nothing on it");
+    CF_CHECK(!cf_pressed(&ctx, child_id(&ctx, 0u)), "the press books nothing on it");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "the hover skips it as well");
+    CF_CHECK(!cf_hovered(&ctx, child_id(&ctx, 0u)), "the hover skips it as well");
     CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "and asks for no pointer cursor");
 
     cf_ctx_free(&ctx);
@@ -494,8 +503,9 @@ static void a_role_stops_the_climb_where_a_handler_would(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
 
-    CF_CHECK(cf_hovered(&ctx, row_slot), "the themed family holds the hover for its states");
-    CF_CHECK(!cf_hovered(&ctx, leaf_slot), "the leaf inside holds none of it");
+    CF_CHECK(cf_hovered(&ctx, cf_node_id(&ctx, row_slot)),
+             "the themed family holds the hover for its states");
+    CF_CHECK(!cf_hovered(&ctx, cf_node_id(&ctx, leaf_slot)), "the leaf inside holds none of it");
     CF_CHECK(cf_frame_cursor(&ctx) == CF_CURSOR_DEFAULT, "no handler, no pointer cursor");
 
     cf_ctx_free(&ctx);
@@ -567,7 +577,7 @@ static void a_captured_pointer_keeps_its_events_until_the_release(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t left = child_slot(&ctx, 0u);
+    const cf_id left = child_id(&ctx, 0u);
 
     first.capture = true;
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
@@ -591,7 +601,7 @@ static void a_captured_pointer_keeps_its_events_until_the_release(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 60.0f, .y = 10.0f}});
 
-    CF_CHECK(cf_hovered(&ctx, child_slot(&ctx, 1u)), "hit testing resumes once the hold ends");
+    CF_CHECK(cf_hovered(&ctx, child_id(&ctx, 1u)), "hit testing resumes once the hold ends");
 
     cf_ctx_free(&ctx);
 }
@@ -621,7 +631,7 @@ static void a_cancellation_ends_the_hold_a_release_would_have_ended(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t left = child_slot(&ctx, 0u);
+    const cf_id left = child_id(&ctx, 0u);
 
     first.capture = true;
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
@@ -667,7 +677,7 @@ static void a_cancellation_clicks_nothing_where_a_release_would(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t child = child_slot(&ctx, 0u);
+    const cf_id child = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
@@ -709,7 +719,7 @@ static void a_cancellation_with_nothing_held_reaches_no_handler(void) {
 
     CF_CHECK(child_log.cancels == 0 && root_log.cancels == 0,
              "a cancellation with no press in flight reaches no handler");
-    CF_CHECK(!cf_hovered(&ctx, child_slot(&ctx, 0u)), "and the hover it ends is the one it took");
+    CF_CHECK(!cf_hovered(&ctx, child_id(&ctx, 0u)), "and the hover it ends is the one it took");
 
     cf_ctx_free(&ctx);
 }
@@ -736,14 +746,15 @@ static void a_key_reaches_the_focused_node_and_bubbles(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t child = child_slot(&ctx, 0u);
+    const cf_id child = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 41u});
 
     CF_CHECK(child_log.keys == 1 && root_log.keys == 1,
              "the key runs the focused node's handler and bubbles");
-    CF_CHECK(child_log.last_target == child, "the event names the focused node");
+    CF_CHECK(cf_id_equal(cf_node_id(&ctx, child_log.last_target), child),
+             "the event names the focused node");
 
     child_log.stop = true;
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_UP, .key = 41u});
@@ -776,14 +787,15 @@ static void what_the_keyboard_wrote_goes_to_whoever_holds_focus(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t child = child_slot(&ctx, 0u);
+    const cf_id child = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_TEXT, .text = {.chars = "hi", .length = 2u}});
 
     CF_CHECK(child_log.keys == 1 && root_log.keys == 1,
              "a written run reaches the focused node and bubbles like a key does");
-    CF_CHECK(child_log.last_target == child, "the run names the focused node");
+    CF_CHECK(cf_id_equal(cf_node_id(&ctx, child_log.last_target), child),
+             "the run names the focused node");
 
     cf_ctx_free(&ctx);
 }
@@ -813,17 +825,17 @@ static void focus_set_by_hand_reaches_a_node_no_press_touched(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t right = child_slot(&ctx, 1u);
+    const cf_id right = child_id(&ctx, 1u);
 
     cf_focus(&ctx, right);
 
     CF_CHECK(cf_focused(&ctx, right), "the focus lands where it was set");
-    CF_CHECK(!cf_focused(&ctx, child_slot(&ctx, 0u)), "the sibling stays out");
-    CF_CHECK(!cf_focused(&ctx, ctx.root_slot), "the container stays out");
+    CF_CHECK(!cf_focused(&ctx, child_id(&ctx, 0u)), "the sibling stays out");
+    CF_CHECK(!cf_focused(&ctx, cf_node_id(&ctx, ctx.root_slot)), "the container stays out");
 
-    cf_focus(&ctx, CF_NO_LINK);
+    cf_focus(&ctx, CF_NO_ID);
 
-    CF_CHECK(cf_focused(&ctx, right), "a slot that names no node is refused");
+    CF_CHECK(cf_focused(&ctx, right), "a reference that names no node is refused");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 41u});
 
@@ -850,8 +862,9 @@ static void a_recycled_slot_reads_as_nothing(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t child = child_slot(&ctx, 0u);
-    const uint32_t child_generation = cf_store_id(&ctx.nodes, child).generation;
+    const cf_id child = child_id(&ctx, 0u);
+    const uint32_t held_slot = cf_node_slot(&ctx, child);
+    const uint32_t child_generation = cf_store_id(&ctx.nodes, held_slot).generation;
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
@@ -865,7 +878,7 @@ static void a_recycled_slot_reads_as_nothing(void) {
 
     CF_CHECK(!cf_hovered(&ctx, child) && !cf_pressed(&ctx, child) && !cf_focused(&ctx, child),
              "a retired node keeps none of it");
-    CF_CHECK(cf_store_id(&ctx.nodes, child).generation != child_generation,
+    CF_CHECK(cf_store_id(&ctx.nodes, held_slot).generation != child_generation,
              "retirement turns the slot's identity over");
 
     /* A fresh build reclaims the store's slots; whatever lands where, the
@@ -880,7 +893,7 @@ static void a_recycled_slot_reads_as_nothing(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
-    const uint32_t fresh = child_slot(&ctx, 0u);
+    const cf_id fresh = child_id(&ctx, 0u);
 
     CF_CHECK(cf_hovered(&ctx, fresh) && cf_pressed(&ctx, fresh) && cf_focused(&ctx, fresh),
              "the new node answers for itself");
@@ -905,14 +918,14 @@ static void dispatch_before_a_layout_hits_nothing(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
 
-    const uint32_t child = child_slot(&ctx, 0u);
+    const cf_id child = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 1.0f}});
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 41u});
 
-    CF_CHECK(cf_hit_test(&ctx, (cf_point){.x = 10.0f, .y = 10.0f}) == CF_NO_LINK,
+    CF_CHECK(cf_id_is_none(cf_hit_test(&ctx, (cf_point){.x = 10.0f, .y = 10.0f})),
              "nothing answers a point before the rects exist");
     CF_CHECK(!cf_hovered(&ctx, child) && !cf_pressed(&ctx, child) && !cf_focused(&ctx, child),
              "no state settles before the rects exist");
@@ -971,17 +984,17 @@ static void a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out(void) {
     lay_out(&ctx, 200.0f, 200.0f);
 
     const uint32_t scroller_slot = child_slot(&ctx, 0u);
-    const uint32_t first = child_of(&ctx, scroller_slot, 0u);
-    const uint32_t third = child_of(&ctx, scroller_slot, 2u);
+    const cf_id first = cf_node_id(&ctx, child_of(&ctx, scroller_slot, 0u));
+    const cf_id third = cf_node_id(&ctx, child_of(&ctx, scroller_slot, 2u));
 
     const cf_point over_visible = {.x = 25.0f, .y = 50.0f};
     const cf_point over_hidden = {.x = 125.0f, .y = 50.0f};
 
-    CF_CHECK(cf_hit_test(&ctx, over_visible) == first,
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, over_visible), first),
              "a child still inside the clip answers the point");
-    CF_CHECK(cf_hit_test(&ctx, over_hidden) != third,
+    CF_CHECK(!cf_id_equal(cf_hit_test(&ctx, over_hidden), third),
              "a child cut out by the clip no longer answers it");
-    CF_CHECK(cf_hit_test(&ctx, over_hidden) == ctx.root_slot,
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, over_hidden), cf_node_id(&ctx, ctx.root_slot)),
              "the point falls through to what shows beside the scroller");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = over_hidden});
@@ -1034,12 +1047,12 @@ static void a_point_past_an_overflow_axis_uses_the_same_rule(void) {
     lay_out(&ctx, 200.0f, 200.0f);
 
     const uint32_t rail_slot = child_slot(&ctx, 0u);
-    const uint32_t first = child_of(&ctx, rail_slot, 0u);
-    const uint32_t second = child_of(&ctx, rail_slot, 1u);
+    const cf_id first = cf_node_id(&ctx, child_of(&ctx, rail_slot, 0u));
+    const cf_id second = cf_node_id(&ctx, child_of(&ctx, rail_slot, 1u));
 
-    CF_CHECK(cf_hit_test(&ctx, (cf_point){25.0f, 50.0f}) == first,
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, (cf_point){25.0f, 50.0f}), first),
              "the child inside the axis clip answers the point");
-    CF_CHECK(cf_hit_test(&ctx, (cf_point){75.0f, 50.0f}) != second,
+    CF_CHECK(!cf_id_equal(cf_hit_test(&ctx, (cf_point){75.0f, 50.0f}), second),
              "the child past the axis clip does not");
 
     cf_ctx_free(&ctx);
@@ -1081,10 +1094,11 @@ static void a_hidden_box_takes_no_input_and_yields_its_place(void) {
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at});
 
-    CF_CHECK(cf_hit_test(&ctx, at) == visible_slot,
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, at), cf_node_id(&ctx, visible_slot)),
              "the hidden box yields its slot to the visible one");
-    CF_CHECK(cf_pressed(&ctx, visible_slot), "the press lands on the visible box");
-    CF_CHECK(!cf_pressed(&ctx, hidden_slot), "the hidden box books nothing");
+    CF_CHECK(cf_pressed(&ctx, cf_node_id(&ctx, visible_slot)),
+             "the press lands on the visible box");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, hidden_slot)), "the hidden box books nothing");
     CF_CHECK(visible_log.downs == 1 && hidden_log.downs == 0,
              "only the visible box's handler runs");
 
@@ -1128,14 +1142,15 @@ static void tab_walks_the_boxes_that_take_focus_in_document_order(void) {
     lay_out(&ctx, 200.0f, 200.0f);
 
     const uint32_t group_slot = child_slot(&ctx, 0u);
-    const uint32_t a = child_of(&ctx, group_slot, 0u);
-    const uint32_t b = child_of(&ctx, group_slot, 1u);
-    const uint32_t c = child_slot(&ctx, 1u);
+    const cf_id a = cf_node_id(&ctx, child_of(&ctx, group_slot, 0u));
+    const cf_id b = cf_node_id(&ctx, child_of(&ctx, group_slot, 1u));
+    const cf_id c = child_id(&ctx, 1u);
 
     tab(&ctx, false);
 
     CF_CHECK(cf_focused(&ctx, a), "the first Tab enters at the first box in the tree");
-    CF_CHECK(!cf_focused(&ctx, group_slot), "a container that took no focus is passed over");
+    CF_CHECK(!cf_focused(&ctx, cf_node_id(&ctx, group_slot)),
+             "a container that took no focus is passed over");
 
     tab(&ctx, false);
     CF_CHECK(cf_focused(&ctx, b), "Tab goes on to the box declared inside the same container");
@@ -1197,7 +1212,7 @@ static void tab_skips_the_boxes_the_keyboard_cannot_use(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t reachable = child_slot(&ctx, 4u);
+    const cf_id reachable = child_id(&ctx, 4u);
 
     tab(&ctx, false);
 
@@ -1211,9 +1226,9 @@ static void tab_skips_the_boxes_the_keyboard_cannot_use(void) {
     tab(&ctx, true);
     CF_CHECK(cf_focused(&ctx, reachable), "and reverse from it stays there too");
 
-    cf_focus(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u));
+    cf_focus(&ctx, cf_node_id(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u)));
 
-    CF_CHECK(!cf_focused(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u)),
+    CF_CHECK(!cf_focused(&ctx, cf_node_id(&ctx, child_of(&ctx, child_slot(&ctx, 1u), 0u))),
              "a box inside a switched-off container is refused by hand as well");
 
     cf_ctx_free(&ctx);
@@ -1244,8 +1259,8 @@ static void a_press_on_a_box_that_takes_no_focus_leaves_the_keyboard_alone(void)
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t control = child_slot(&ctx, 0u);
-    const uint32_t plain = child_slot(&ctx, 1u);
+    const cf_id control = child_id(&ctx, 0u);
+    const cf_id plain = child_id(&ctx, 1u);
 
     cf_focus(&ctx, plain);
 
@@ -1295,8 +1310,8 @@ static void a_box_that_answers_tab_keeps_the_move_to_itself(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t first = child_slot(&ctx, 0u);
-    const uint32_t second = child_slot(&ctx, 1u);
+    const cf_id first = child_id(&ctx, 0u);
+    const cf_id second = child_id(&ctx, 1u);
 
     cf_focus(&ctx, first);
 
@@ -1339,7 +1354,7 @@ static void a_ring_that_empties_loses_the_focus(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t only = child_slot(&ctx, 0u);
+    const cf_id only = child_id(&ctx, 0u);
 
     cf_focus(&ctx, only);
 
@@ -1398,8 +1413,8 @@ static void the_box_that_leaves_hands_the_keyboard_back(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t holder = child_slot(&ctx, 0u);
-    const uint32_t dialog = child_slot(&ctx, 1u);
+    const cf_id holder = child_id(&ctx, 0u);
+    const cf_id dialog = child_id(&ctx, 1u);
 
     cf_focus(&ctx, holder);
     tab(&ctx, false);
@@ -1453,8 +1468,8 @@ static void a_box_the_page_hides_hands_the_keyboard_back(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t holder = child_slot(&ctx, 0u);
-    const uint32_t panel = child_slot(&ctx, 1u);
+    const cf_id holder = child_id(&ctx, 0u);
+    const cf_id panel = child_id(&ctx, 1u);
 
     cf_focus(&ctx, holder);
     tab(&ctx, false);
@@ -1528,9 +1543,9 @@ static void the_keyboard_is_handed_back_once(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t first = child_slot(&ctx, 0u);
-    const uint32_t second = child_slot(&ctx, 1u);
-    const uint32_t third = child_slot(&ctx, 2u);
+    const cf_id first = child_id(&ctx, 0u);
+    const cf_id second = child_id(&ctx, 1u);
+    const cf_id third = child_id(&ctx, 2u);
 
     cf_focus(&ctx, first);
     tab(&ctx, false);
@@ -1586,8 +1601,8 @@ static void a_press_that_moves_nothing_keeps_where_it_came_from(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t holder = child_slot(&ctx, 0u);
-    const uint32_t panel = child_slot(&ctx, 1u);
+    const cf_id holder = child_id(&ctx, 0u);
+    const cf_id panel = child_id(&ctx, 1u);
 
     cf_focus(&ctx, holder);
     tab(&ctx, false);
@@ -1640,8 +1655,8 @@ static void a_keyboard_with_nowhere_to_go_is_dropped(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t holder = child_slot(&ctx, 0u);
-    const uint32_t panel = child_slot(&ctx, 1u);
+    const cf_id holder = child_id(&ctx, 0u);
+    const cf_id panel = child_id(&ctx, 1u);
 
     cf_focus(&ctx, holder);
     tab(&ctx, false);
@@ -1690,8 +1705,8 @@ static void a_box_that_cannot_be_returned_to_hands_the_keyboard_to_no_one(void) 
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t first = child_slot(&ctx, 0u);
-    const uint32_t second = child_slot(&ctx, 1u);
+    const cf_id first = child_id(&ctx, 0u);
+    const cf_id second = child_id(&ctx, 1u);
 
     cf_focus(&ctx, first);
     tab(&ctx, false);
@@ -1742,8 +1757,8 @@ static void nothing_becomes_focused_by_itself(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t first = child_slot(&ctx, 0u);
-    const uint32_t second = child_slot(&ctx, 1u);
+    const cf_id first = child_id(&ctx, 0u);
+    const cf_id second = child_id(&ctx, 1u);
 
     cf_focus(&ctx, first);
     tab(&ctx, false);
@@ -1810,7 +1825,7 @@ static void the_focused_box_is_the_one_the_key_asks(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t a = child_slot(&ctx, 0u);
+    const cf_id a = child_id(&ctx, 0u);
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 
@@ -1822,7 +1837,8 @@ static void the_focused_box_is_the_one_the_key_asks(void) {
 
     CF_CHECK(first.keys == 1, "the focused box is handed the key");
     CF_CHECK(first.activates == 1, "and then asked to do its job");
-    CF_CHECK(first.last_target == a, "the event names the box being asked");
+    CF_CHECK(cf_id_equal(cf_node_id(&ctx, first.last_target), a),
+             "the event names the box being asked");
     CF_CHECK(second.activates == 0, "the box ahead of it on the ring is not asked");
     CF_CHECK(container.activates == 0, "and the ask does not climb to the container");
 
@@ -1931,14 +1947,15 @@ static void a_report_asks_the_door_the_node_declared(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    const uint32_t a = child_slot(&ctx, 0u);
-    const uint32_t b = child_slot(&ctx, 1u);
+    const cf_id a = child_id(&ctx, 0u);
+    const cf_id b = child_id(&ctx, 1u);
 
     cf_focus(&ctx, a);
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = 'a'});
 
     CF_CHECK(typed.keys == 1 && typed.changes == 1, "the edit reports through its own door");
-    CF_CHECK(typed.last_target == a, "on the event that named the node");
+    CF_CHECK(cf_id_equal(cf_node_id(&ctx, typed.last_target), a),
+             "on the event that named the node");
     CF_CHECK(page.changes == 0, "and the container above is not asked as well");
 
     /* The box with no door: the report is the widget's habit, not a question it has to
@@ -1956,7 +1973,7 @@ static void a_report_asks_the_door_the_node_declared(void) {
     cf_diff(&ctx, &root);
     lay_out(&ctx, 200.0f, 200.0f);
 
-    cf_report_change(&ctx, &(cf_event){.target = a});
+    cf_report_change(&ctx, &(cf_event){.target = cf_node_slot(&ctx, a)});
 
     CF_CHECK(typed.changes == 1 && page.changes == 0, "a node switched off reports nothing");
 
@@ -1964,7 +1981,7 @@ static void a_report_asks_the_door_the_node_declared(void) {
      * behind it: both are the no-op the API promises. */
     cf_report_change(&ctx, &(cf_event){.target = 4096u});
     cf_report_change(&ctx, NULL);
-    cf_report_change(NULL, &(cf_event){.target = a});
+    cf_report_change(NULL, &(cf_event){.target = cf_node_slot(&ctx, a)});
 
     CF_CHECK(typed.changes == 1 && bare.changes == 0 && page.changes == 0,
              "a report nobody can answer changes nothing");

@@ -141,6 +141,15 @@ bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared);
 void cf_focus_repair(cf_ctx *ctx);
 
 /*
+ * The booked interaction state, read by this frame's array slot. The resolver walks every node of
+ * the view and asks about each in turn, so it reads the state where it is held instead of turning
+ * each slot into a reference on the way past; anyone outside the frame asks the public query by id.
+ */
+bool slot_hovered(const cf_ctx *ctx, uint32_t slot);
+bool slot_pressed(const cf_ctx *ctx, uint32_t slot);
+bool slot_focused(const cf_ctx *ctx, uint32_t slot);
+
+/*
  * One state block, addressed by store slot. The block's bytes are the heap's and
  * the entry owns them: retiring the record hands the bytes back, and the store
  * gives the slot to the next request.

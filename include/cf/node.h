@@ -386,6 +386,9 @@ bool cf_quit_requested(const cf_ctx *ctx);
  * or not anything read it. The bytes behind measure_data are borrowed and
  * unread, so a change behind them is the callback's to report, by changing
  * what it answers rather than by setting bits.
+ *
+ * Asked of this frame's slot, the way a build reads the view it just made: the
+ * slot is only good until the next diff, which is what `cf_node_id` is for.
  */
 bool cf_dirty(const cf_ctx *ctx, uint32_t slot);
 
@@ -519,8 +522,9 @@ typedef enum cf_semantic_action {
  */
 typedef struct cf_semantic {
     cf_id id;
-    /* This frame's dispatch handle, valid for the visit: `cf_focus` and `cf_input` read a slot,
-     * not an id. Nothing a bridge keeps past the frame should be this number. */
+    /* This frame's array slot, valid for the visit alone: it is the number the rects are indexed
+     * by, not the box. Anything kept past the frame is `id`, which stops naming a node the moment
+     * the box leaves the tree instead of naming whoever took the slot. */
     uint32_t slot;
     cf_access access;
     cf_string name;
@@ -571,11 +575,28 @@ void cf_semantic_visit(const cf_ctx *ctx, void (*visit)(const cf_semantic *node,
                        void *user_data);
 
 /*
- * The topmost node whose rect holds the position - later siblings above
- * earlier ones, children above the parent, paint order read backwards.
- * CF_NO_LINK before cf_frame_layout has run this frame.
+ * The reference to keep: the node this frame's array slot holds, or CF_NO_ID when the slot names
+ * none. A slot is a place in this frame's arrays, and the store hands a retired one to the next
+ * node the build declares, so a number carried across a rebuild can just as well read the box
+ * that took it. Values that leave the frame - what a callback hands over, what a bridge stores,
+ * what focus moves with - are the id, which either still names the same node or names nothing.
  */
-uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
+cf_id cf_node_id(const cf_ctx *ctx, uint32_t slot);
+
+/*
+ * The slot this frame indexes a node by, or CF_NO_LINK when the id names a box the tree has let
+ * go. The rects and the view's arrays are addressed by slot, so a caller holding a reference and
+ * wanting this frame's geometry asks here; a handler handed the node in dispatch already has it.
+ */
+uint32_t cf_node_slot(const cf_ctx *ctx, cf_id id);
+
+/*
+ * The topmost node whose rect holds the position - later siblings above
+ * earlier ones, children above the parent, paint order read backwards - as the
+ * reference a caller may keep. CF_NO_ID when no box lies under the point or
+ * cf_frame_layout has not run this frame.
+ */
+cf_id cf_hit_test(const cf_ctx *ctx, cf_point position);
 
 /*
  * Dispatches one event into the tree. A pointer event goes to the node the
@@ -599,14 +620,13 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position);
  */
 void cf_input(cf_ctx *ctx, cf_event event);
 
-/* Focus follows the press onto a box that takes it; this moves focus by hand. A
- * slot that is not live names no node, and a live box that declares no focus is
- * refused - the same rule Tab walks, so a host cannot land focus somewhere the
- * keyboard could not reach. The box the keyboard leaves is the one it comes back to
- * when the newcomer goes away, which is what lets a dialog close without leaving the
- * page holding a keyboard nobody can answer.
+/* Focus follows the press onto a box that takes it; this moves focus by hand. An id that names no
+ * live node names no box, and a live box that declares no focus is refused - the same rule Tab
+ * walks, so a host cannot land focus somewhere the keyboard could not reach. The box the keyboard
+ * leaves is the one it comes back to when the newcomer goes away, which is what lets a dialog
+ * close without leaving the page holding a keyboard nobody can answer.
  */
-void cf_focus(cf_ctx *ctx, uint32_t slot);
+void cf_focus(cf_ctx *ctx, cf_id node);
 
 /*
  * The ask a widget hands back when it has changed the value its node holds: the node's
@@ -619,13 +639,14 @@ void cf_focus(cf_ctx *ctx, uint32_t slot);
 void cf_report_change(cf_ctx *ctx, cf_event *event);
 
 /*
- * The node's interaction state, asked by slot. Each answer is false for a
- * slot that is not live or not the one the state is held on, which is how a
- * stale id reads as nothing.
+ * The node's interaction state, asked by reference. An id the store no longer holds answers false
+ * for every state, and an id that names a different box than the one a state sits on answers false
+ * for that one: a page that retired its button reads it as unfocused rather than as whoever was
+ * given its slot.
  */
-bool cf_hovered(const cf_ctx *ctx, uint32_t slot);
-bool cf_pressed(const cf_ctx *ctx, uint32_t slot);
-bool cf_focused(const cf_ctx *ctx, uint32_t slot);
+bool cf_hovered(const cf_ctx *ctx, cf_id node);
+bool cf_pressed(const cf_ctx *ctx, cf_id node);
+bool cf_focused(const cf_ctx *ctx, cf_id node);
 
 /*
  * The cursor the hovered node asks for: the pointer hand over a node that acts

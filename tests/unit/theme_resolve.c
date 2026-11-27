@@ -166,7 +166,7 @@ static void a_focused_node_resolves_its_focused_variant(void) {
     CF_CHECK(root_slot != CF_NO_LINK, "the diff claims the declaration");
 
     const uint32_t slot = 1u;
-    cf_focus(&ctx, slot);
+    cf_focus(&ctx, cf_node_id(&ctx, slot));
 
     cf_frame_resolve(&ctx);
 
@@ -339,7 +339,7 @@ static void a_state_change_between_frames_changes_the_variant(void) {
 
     cf_frame_begin(&ctx);
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
-    cf_focus(&ctx, 1u);
+    cf_focus(&ctx, cf_node_id(&ctx, 1u));
     cf_frame_resolve(&ctx);
     CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 10), "the focused field reads ink");
 
@@ -347,7 +347,7 @@ static void a_state_change_between_frames_changes_the_variant(void) {
      * a control takes it, which is how a dialog hands it back. */
     cf_frame_begin(&ctx);
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the rebuild keeps the slot");
-    cf_focus(&ctx, 2u);
+    cf_focus(&ctx, cf_node_id(&ctx, 2u));
     cf_frame_resolve(&ctx);
     CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 212),
              "the blurred field reads the hairline again");

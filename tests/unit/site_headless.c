@@ -107,9 +107,9 @@ static const site_entry *showing;
  * and the one thing about a press a tier with no browser can still read back. */
 static char chosen[64];
 
-static void go_to(cf_ctx *ctx, uint32_t slot, void *user_data) {
+static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
     (void)ctx;
-    (void)slot;
+    (void)node;
 
     const site_entry *entry = user_data;
 

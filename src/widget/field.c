@@ -1182,7 +1182,7 @@ static void field_pointer(cf_event *event, void *user_data) {
 
     /* Only a move that comes out of a press on this field selects: hovering a
      * field must not move anyone's caret. */
-    if (event->type == CF_EVENT_POINTER_MOVE && cf_pressed(ctx, event->target)) {
+    if (event->type == CF_EVENT_POINTER_MOVE && cf_pressed(ctx, cf_node_id(ctx, event->target))) {
         place_at(ctx, field, event->target, event->position, true);
         cf_stop(event);
     }

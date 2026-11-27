@@ -225,7 +225,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
 
     frame_of(&ctx, &text, false);
 
-    const uint32_t field = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id field = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
@@ -347,7 +347,7 @@ static void a_disabled_field_neither_focuses_nor_edits(void) {
 
     frame_of(&ctx, &text, true);
 
-    const uint32_t field = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id field = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
     type(&ctx, "x", 1u);
@@ -2677,8 +2677,8 @@ static void a_run_goes_back_when_the_keyboard_changes_hands(void) {
     ctx.theme = cf_theme_default();
     frame_pair(&ctx, &first, &second);
 
-    const uint32_t a = child_of(&ctx, ctx.root_slot, 0u);
-    const uint32_t b = child_of(&ctx, ctx.root_slot, 1u);
+    const cf_id a = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id b = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 1u));
 
     press(&ctx, 10.0f, 10.0f);
     lift(&ctx, 10.0f, 10.0f);
@@ -2722,7 +2722,7 @@ static void a_run_goes_back_when_the_box_that_held_it_leaves(void) {
     ctx.theme = cf_theme_default();
     frame_pair(&ctx, &first, &second);
 
-    const uint32_t a = child_of(&ctx, ctx.root_slot, 0u);
+    const cf_id a = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
 
     /* Where the keyboard came from is what the repair hands it back to, so the box below is
      * pressed first and the one that takes the run second. */

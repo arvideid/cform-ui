@@ -27,6 +27,26 @@ static bool holds_slot(const cf_ctx *ctx, cf_id id, uint32_t slot) {
            cf_store_get(&ctx->nodes, id) != NULL;
 }
 
+/* Whether a booked state sits on the node a reference names: an id the store has let go names
+ * none, so a box that left the tree reads as unfocused rather than as whoever took its slot. */
+static bool holds_id(const cf_ctx *ctx, cf_id held, cf_id asked) {
+    return cf_id_equal(held, asked) && cf_store_get(&ctx->nodes, asked) != NULL;
+}
+
+cf_id cf_node_id(const cf_ctx *ctx, uint32_t slot) {
+    if (ctx == NULL) {
+        return CF_NO_ID;
+    }
+
+    const cf_id id = cf_store_id(&ctx->nodes, slot);
+
+    return cf_store_get(&ctx->nodes, id) != NULL ? id : CF_NO_ID;
+}
+
+uint32_t cf_node_slot(const cf_ctx *ctx, cf_id id) {
+    return ctx == NULL ? CF_NO_LINK : live_slot(ctx, id);
+}
+
 /*
  * The node an interaction books its state on: the nearest record that acts on
  * the pointer - its own handler, or a themed family the resolver paints by
@@ -103,7 +123,9 @@ static uint32_t hit_walk(const cf_ctx *ctx, uint32_t slot, cf_point position, cf
     return slot;
 }
 
-uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
+/* The slot the point lands on, for dispatch, which works in this frame's arrays
+ * and never keeps the number past the event it came from. */
+static uint32_t hit_slot(const cf_ctx *ctx, cf_point position) {
     if (ctx == NULL || ctx->rects == NULL || ctx->root_slot == CF_NO_LINK) {
         return CF_NO_LINK;
     }
@@ -112,6 +134,12 @@ uint32_t cf_hit_test(const cf_ctx *ctx, cf_point position) {
      * so a box off-screen cannot hold it, and only a clips_content ancestor
      * narrows the region a click is allowed to land in. */
     return hit_walk(ctx, ctx->root_slot, position, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f}, false);
+}
+
+cf_id cf_hit_test(const cf_ctx *ctx, cf_point position) {
+    const uint32_t found = hit_slot(ctx, position);
+
+    return found != CF_NO_LINK ? cf_node_id(ctx, found) : CF_NO_ID;
 }
 
 /* Whether the box is hidden from every system that reads the view: the same
@@ -397,7 +425,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             return;
         }
 
-        const uint32_t hit = cf_hit_test(ctx, event.position);
+        const uint32_t hit = hit_slot(ctx, event.position);
 
         /* A move over nothing leaves the pointer hovering nothing. */
         const uint32_t hover = hit != CF_NO_LINK ? interactive_of(ctx, hit) : CF_NO_LINK;
@@ -417,7 +445,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             return;
         }
 
-        const uint32_t hit = cf_hit_test(ctx, event.position);
+        const uint32_t hit = hit_slot(ctx, event.position);
 
         if (hit == CF_NO_LINK) {
             return;
@@ -461,7 +489,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
         ctx->capture_id = CF_NO_ID;
         ctx->press_id = CF_NO_ID;
 
-        const uint32_t hit = cf_hit_test(ctx, event.position);
+        const uint32_t hit = hit_slot(ctx, event.position);
         const uint32_t hover = hit != CF_NO_LINK ? interactive_of(ctx, hit) : CF_NO_LINK;
 
         ctx->hover_id = hover != CF_NO_LINK ? cf_store_id(&ctx->nodes, hover) : CF_NO_ID;
@@ -504,7 +532,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
          * hand is knowable without a move having booked a hover first: the
          * notch that comes the moment a window takes focus, with the cursor
          * already resting inside it, has no move ahead of it to lean on. */
-        const uint32_t target = hovered != CF_NO_LINK ? hovered : cf_hit_test(ctx, event.position);
+        const uint32_t target = hovered != CF_NO_LINK ? hovered : hit_slot(ctx, event.position);
 
         if (target != CF_NO_LINK) {
             deliver(ctx, &event, true, target);
@@ -593,18 +621,37 @@ void cf_input(cf_ctx *ctx, cf_event event) {
     }
 }
 
-void cf_focus(cf_ctx *ctx, uint32_t slot) {
-    if (ctx == NULL || !holds_slot(ctx, cf_store_id(&ctx->nodes, slot), slot) ||
-        !takes_focus(ctx, slot)) {
+void cf_focus(cf_ctx *ctx, cf_id node) {
+    if (ctx == NULL) {
         return;
     }
 
-    move_focus(ctx, cf_store_id(&ctx->nodes, slot));
+    const uint32_t slot = live_slot(ctx, node);
+
+    if (slot == CF_NO_LINK || !takes_focus(ctx, slot)) {
+        return;
+    }
+
+    move_focus(ctx, node);
     reveal_slot(ctx, slot);
 }
 
-bool cf_hovered(const cf_ctx *ctx, uint32_t slot) {
-    return ctx != NULL && holds_slot(ctx, ctx->hover_id, slot);
+bool cf_hovered(const cf_ctx *ctx, cf_id node) {
+    return ctx != NULL && holds_id(ctx, ctx->hover_id, node);
+}
+
+/* The same three asks read by array slot, for the resolver, which walks every node of the frame
+ * and has no need to turn each slot into a reference on the way past. */
+bool slot_hovered(const cf_ctx *ctx, uint32_t slot) {
+    return holds_slot(ctx, ctx->hover_id, slot);
+}
+
+bool slot_pressed(const cf_ctx *ctx, uint32_t slot) {
+    return holds_slot(ctx, ctx->press_id, slot);
+}
+
+bool slot_focused(const cf_ctx *ctx, uint32_t slot) {
+    return holds_slot(ctx, ctx->focus_id, slot);
 }
 
 /*
@@ -628,12 +675,12 @@ void cf_report_change(cf_ctx *ctx, cf_event *event) {
     record->handlers.change(event, record->handlers.change_data);
 }
 
-bool cf_pressed(const cf_ctx *ctx, uint32_t slot) {
-    return ctx != NULL && holds_slot(ctx, ctx->press_id, slot);
+bool cf_pressed(const cf_ctx *ctx, cf_id node) {
+    return ctx != NULL && holds_id(ctx, ctx->press_id, node);
 }
 
-bool cf_focused(const cf_ctx *ctx, uint32_t slot) {
-    return ctx != NULL && holds_slot(ctx, ctx->focus_id, slot);
+bool cf_focused(const cf_ctx *ctx, cf_id node) {
+    return ctx != NULL && holds_id(ctx, ctx->focus_id, node);
 }
 
 cf_cursor cf_frame_cursor(const cf_ctx *ctx) {
