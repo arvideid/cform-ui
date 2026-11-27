@@ -268,13 +268,18 @@ static uint32_t focus_neighbor(const cf_ctx *ctx, uint32_t from, bool backward) 
  * the one the key fired in. Only a CF_ROLE_SCROLL ancestor qualifies - the
  * widget guarantees the block under its key is a cf_scroll, so the walk never
  * grows state some nameless node owns.
+ *
+ * A pane that moved is a page in motion the shell cannot see from an event, so the walk asks
+ * for the frame that will show it: a keyboard reveal is already woken by its own key, and a
+ * reveal honoured at the end of a layout pass has nothing else to wake the run.
  */
-static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
+void cf_reveal_slot(cf_ctx *ctx, uint32_t slot) {
     if (ctx->rects == NULL || slot == CF_NO_LINK) {
         return;
     }
 
     const cf_rect target = ctx->rects[slot];
+    bool moved = false;
 
     for (uint32_t at = record_of(ctx, slot)->parent; at != CF_NO_LINK;
          at = record_of(ctx, at)->parent) {
@@ -294,7 +299,8 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
         const cf_rect view = ctx->rects[at];
         const float top = target.y - view.y;
         const float bottom = top + target.height;
-        float walked = held->offset;
+        const float before = held->offset;
+        float walked = before;
 
         /* The shortest nudge in. A box taller than its pane can never sit
          * wholly inside, so it is brought to the top - where its reading
@@ -306,7 +312,42 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
         }
 
         held->offset = cf_scroll_clamp(walked, view.height, ctx->rects[content].height);
+        moved = moved || held->offset != before;
     }
+
+    if (moved) {
+        cf_request_frame(ctx);
+    }
+}
+
+bool cf_reveal(cf_ctx *ctx, uint32_t slot) {
+    if (ctx == NULL || slot == CF_NO_LINK || !slot_is_live(ctx, slot)) {
+        return false;
+    }
+
+    /* Between frames, where an event's handler stands, the last layout is still measured: the box
+     * can be brought in now and the next build draws it there. */
+    if (ctx->rects != NULL) {
+        ctx->reveal_key = CF_NO_NAME;
+        cf_reveal_slot(ctx, slot);
+
+        return true;
+    }
+
+    /* Mid-build, which is where a page noticing something outside its own frames has to act: no
+     * box has been measured yet this frame, so the ask waits for the pass that will measure it.
+     * It is held as the key rather than the slot, because the diff running in between matches a
+     * declaration onto whatever slot the identity lands on. A box with no key cannot be found
+     * again, and an ask that cannot be honoured is not one the caller succeeded in making. */
+    const cf_name key = record_of(ctx, slot)->key;
+
+    if (key == CF_NO_NAME) {
+        return false;
+    }
+
+    ctx->reveal_key = key;
+
+    return true;
 }
 
 /*
@@ -573,7 +614,7 @@ void cf_input(cf_ctx *ctx, cf_event event) {
             /* The new focus is only worth having if the eye can find it, so the
              * page that hides it moves out of the way. */
             if (next != CF_NO_LINK) {
-                reveal_slot(ctx, next);
+                cf_reveal_slot(ctx, next);
             }
         }
 
@@ -641,7 +682,7 @@ void cf_focus(cf_ctx *ctx, cf_id node) {
     }
 
     move_focus(ctx, node);
-    reveal_slot(ctx, slot);
+    cf_reveal_slot(ctx, slot);
 }
 
 bool cf_hovered(const cf_ctx *ctx, cf_id node) {

@@ -79,6 +79,9 @@ void cf_frame_begin(cf_ctx *ctx) {
      * arena just cleared. */
     ctx->rejection = NULL;
     ctx->rects = NULL;
+    /* So does an ask: a build that wanted a box seen and never got a layout pass
+     * for it is not owed a move two frames later. */
+    ctx->reveal_key = CF_NO_NAME;
 
     /* The dirty bits answer one frame's changes; the coming build's diff
      * sets them again where the declaration moved. */
@@ -125,6 +128,26 @@ const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot) {
     }
 
     return &ctx->rects[slot];
+}
+
+uint32_t cf_slot_named(const cf_ctx *ctx, cf_name name) {
+    if (ctx == NULL || name == CF_NO_NAME) {
+        return CF_NO_LINK;
+    }
+
+    /* The store, not this frame's view: a build asks while it is still declaring, and the boxes
+     * it can name are the ones the frame before it left behind. A slot the store has let go is
+     * not answered even though its bytes are still addressable, so a key from a page nobody is
+     * showing reads as absent rather than as a slot someone else now holds. */
+    for (uint32_t slot = 0u; slot < ctx->nodes.extent; ++slot) {
+        const node_record *record = record_of(ctx, slot);
+
+        if (record != NULL && record->key == name && slot_is_live(ctx, slot)) {
+            return slot;
+        }
+    }
+
+    return CF_NO_LINK;
 }
 
 void cf_use_theme(cf_ctx *ctx, const cf_theme *theme) {
@@ -183,6 +206,18 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin) {
     }
 
     ctx->rects = rects;
+
+    /* The first moment this frame's boxes have places to be, which is when a reveal asked for
+     * during the build can be measured. Finding the box by key rather than holding the slot is
+     * what makes this safe: the diff between the ask and here may have moved it. */
+    if (ctx->reveal_key != CF_NO_NAME) {
+        const uint32_t asked = cf_slot_named(ctx, ctx->reveal_key);
+        ctx->reveal_key = CF_NO_NAME;
+
+        if (asked != CF_NO_LINK) {
+            cf_reveal_slot(ctx, asked);
+        }
+    }
 }
 
 const char *cf_error_message(const cf_ctx *ctx) {

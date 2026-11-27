@@ -133,6 +133,14 @@ typedef struct claim_entry {
 bool tree_rebuild(cf_ctx *ctx, const claim_entry *flat, uint32_t declared);
 
 /*
+ * Brings the box at this slot inside every scrolling pane above it, measured against the rects
+ * the frame last laid out. The keyboard's walk calls it where it lands, and the layout pass
+ * honours a reveal a build asked for with it. The rects have to exist: cf_reveal is the public
+ * door that waits for them.
+ */
+void cf_reveal_slot(cf_ctx *ctx, uint32_t slot);
+
+/*
  * Puts the keyboard back where it came from when the box holding it left the view -
  * retired, hidden or switched off - so a diff that ends a dialog does not end the
  * page's ability to answer a key. Called once the new view exists, because the

@@ -249,6 +249,12 @@ static const api_symbol node_symbols[] = {
     {"cf_frame_rect", "const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot);",
      "Where this frame laid a box, or NULL when the frame laid nothing and for a slot it never "
      "declared - so a stale number reads as no box rather than as someone else's rectangle."},
+    {"cf_slot_named", "uint32_t cf_slot_named(const cf_ctx *ctx, cf_name name);",
+     "The box a key names: the slot the retained tree holds it at, which is how an address's "
+     "fragment or a dialog's title reaches the box it was written for."},
+    {"cf_reveal", "bool cf_reveal(cf_ctx *ctx, uint32_t slot);",
+     "Brings a box inside the panes that scroll it, asking of the frame that measures it when a "
+     "build has nothing measured yet - the move a deep link and the Tab key share."},
     {"cf_frame_resolve", "void cf_frame_resolve(cf_ctx *ctx);",
      "Applies the theme to the view, between the diff that built it and the layout that reads it."},
     {"cf_frame_layout",

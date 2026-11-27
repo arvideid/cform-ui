@@ -230,6 +230,13 @@ typedef struct cf_ctx {
     bool layout_ready;
     /* Absolute rects, or nothing before cf_frame_layout ran this frame. */
     cf_rect *rects;
+    /*
+     * The key of a box a build asked to see before this frame had been measured, or CF_NO_NAME.
+     * The layout pass at the end of that same frame brings it in, which is the first moment there
+     * are numbers to measure it against: the ask is kept by key rather than by slot because the
+     * diff running between the two is free to hand the slot to another box.
+     */
+    cf_name reveal_key;
 } cf_ctx;
 
 bool cf_ctx_init(cf_ctx *ctx, size_t frame_bytes);
@@ -489,6 +496,35 @@ uint32_t cf_frame_root(const cf_ctx *ctx);
  * instead of as someone else's rectangle.
  */
 const cf_rect *cf_frame_rect(const cf_ctx *ctx, uint32_t slot);
+
+/*
+ * The slot the retained tree carries a box keyed `name` at, or CF_NO_LINK when no live box is
+ * keyed that way - the way back from a word a caller owns (an address's fragment, a chapter
+ * number, the title of a dialog) to the box that word named. A key is what the build interned
+ * with cf_ctx_key and declared on a node, and the tree this reads is the store's rather than one
+ * frame's, so a box the build before this one declared is found here even while the coming frame
+ * is still being written. A box the last diff retired answers none: the store stops handing out
+ * its slot, so a key some page held and no longer declares reads as absent instead of as
+ * wherever that page left it. Several boxes can carry one key - a page lists a row and the pager
+ * beside it names the same route - and the answer is then the slot the store hands out first.
+ */
+uint32_t cf_slot_named(const cf_ctx *ctx, cf_name name);
+
+/*
+ * Brings the box at `slot` inside every pane that scrolls it, the way a wheel does and the way
+ * the Tab key does when it walks onto a control the reader cannot see. Answers false for a slot
+ * the tree holds nothing at, and for a keyless box the frame has not measured yet - there is
+ * nothing to find it by again; true when the box is in view, or has been asked of the frame that
+ * measures it.
+ *
+ * The move is measured against a laid-out frame, and a build runs before this frame has been
+ * measured, so an ask made from one is kept until the end of this frame's layout pass - the first
+ * moment the numbers exist. The scrolled offset is read back by the build after that pass, so a
+ * box reached from a build is shown by the frame after the one that asked, and the ask is what
+ * calls for that frame. Nothing moves for a box no scrolling ancestor holds: it is already
+ * wherever the document put it.
+ */
+bool cf_reveal(cf_ctx *ctx, uint32_t slot);
 
 /*
  * Applies the theme to this frame's view: a node that declares a role reads
