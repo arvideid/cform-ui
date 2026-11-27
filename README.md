@@ -94,8 +94,10 @@ The things this repository is trying to do, in the order it tries them:
 2. **A screen that costs nothing at rest.** The shell notices when nothing moved
    and skips the frame whole: nothing laid out, emitted or allocated. That saving
    is `cf_app_run`'s idle test, not the pipeline's - call `cf_frame_run` on an
-   unchanged screen and it runs the full build-diff-layout-paint. Numbers, not a
-   claim: [bench.md](docs/bench.md).
+   unchanged screen and it runs the full build-diff-layout-paint. A host that owns
+   its loop makes that test for itself, which is what
+   [`examples/host_loop.c`](examples/host_loop.c) is for. Numbers, not a claim:
+   [bench.md](docs/bench.md).
 3. **Readable end to end.** C17, no templates, no code generation, no reflection.
    Every layer is a CMake target you can open and finish reading.
 4. **Runs where C runs**, including a browser tab through WebAssembly.
@@ -279,7 +281,7 @@ and a C17 compiler ([GCC](https://gcc.gnu.org/) or
 ```sh
 cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON   # set up a Debug build
 cmake --build --preset dev                        # compile everything
-ctest --preset dev                                # run the 37 tiers and the 4 benches
+ctest --preset dev                                # run the 38 tiers and the 4 benches
 build/dev/bin/gallery                             # open the demo window
 ```
 
@@ -368,8 +370,13 @@ same button from one frame to the next, so the count of clicks, the scroll
 position and the keyboard focus survive a rebuild.
 
 [`examples/gallery.c`](examples/gallery.c) is the same API stretched over every
-widget, and [`examples/layout_only.c`](examples/layout_only.c) is the layout
-engine as a program that links nothing else.
+widget, [`examples/layout_only.c`](examples/layout_only.c) is the layout engine as
+a program that links nothing else, and
+[`examples/host_loop.c`](examples/host_loop.c) is the framework without the
+framework's loop: the program keeps its own `cf_ctx`, fills `cf_backend` with its own
+submit, present, surface and service answers, and calls `cf_frame_run` when it decides
+a frame is worth running. That route opens no window and reads no font file, so it
+builds and is asserted over (`host_loop_headless`) wherever the library does.
 
 > `cf_font_sdl` takes a path to a `.ttf` you actually have. A file that won't open
 > measures nothing — logged once on `CF_LOG_BACKEND` — so the window, the button
@@ -454,8 +461,8 @@ SDL itself.
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 35 checks, 37 once the SDL backend is on |
-| `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `layout_only`, and beside the SDL backend `gallery` and `site` |
+| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 36 checks, 38 once the SDL backend is on |
+| `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `layout_only` and `host_loop`, and beside the SDL backend `gallery` and `site` |
 | `CFORM_WITH_SDL_BACKEND` | `OFF` | the SDL window backend, and the SDL download |
 | `CFORM_WITH_SANITIZERS` | `OFF` | memory and undefined-behaviour checkers |
 
