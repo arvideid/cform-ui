@@ -835,6 +835,87 @@ static void a_press_below_the_rows_the_field_holds_stands_on_the_last_one(void) 
     cf_ctx_free(&ctx);
 }
 
+/*
+ * A multiline field with the same value, pushed `above` points down the page by a box of its own.
+ * The row tests need this because the page they were written on had the field at its top, where the
+ * box's own origin and the page's agree and a walk that counted the distance from both lands on the
+ * same row anyway.
+ */
+static void frame_tall_of(cf_ctx *ctx, cf_text_edit *text, float above) {
+    cf_frame_begin(ctx);
+
+    const cf_text_stack stack = {.fonts = &mono, .count = 1u};
+    cf_node field = cf_field(ctx, "entry", text, &stack, CF_FIELD_MULTILINE);
+
+    cf_node gap = {.style = cf_style_default()};
+    gap.style.height = CF_PX(above);
+
+    const cf_node roots[] = {gap, field};
+    cf_node root = {.style = cf_style_default()};
+    root.style.direction = CF_DIRECTION_COLUMN;
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(400.0f);
+    root.children = roots;
+    root.child_count = 2u;
+
+    cf_diff(ctx, &root);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(400.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+/*
+ * Where a click lands is a question about the box it landed in. A walk that measured the press from
+ * the page and then from the box as well would answer one row higher for every point the box sat
+ * lower - which is what a field at the top of a page cannot show, and what the multiline box in the
+ * middle of a real page hits on the first click.
+ */
+static void a_press_lands_on_the_row_of_the_box_rather_than_the_row_of_the_page(void) {
+    static const char value[] = "abc\ndef\nghi\njkl\nmno\npqr\nstu\nvwx\nyz0\n123\n456\n789";
+
+    char near_bytes[64];
+    char far_bytes[64];
+    memset(near_bytes, 0, sizeof near_bytes);
+    memset(far_bytes, 0, sizeof far_bytes);
+    memcpy(near_bytes, value, sizeof value - 1u);
+    memcpy(far_bytes, value, sizeof value - 1u);
+
+    cf_text_edit near = {
+        .chars = near_bytes, .length = sizeof value - 1u, .capacity = sizeof near_bytes};
+    cf_text_edit far = {
+        .chars = far_bytes, .length = sizeof value - 1u, .capacity = sizeof far_bytes};
+
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+
+    /* The box at the top of the page, and a press one hundred and thirty points down it. */
+    frame_tall_of(&ctx, &near, 0.0f);
+    press(&ctx, 10.0f, 130.0f);
+
+    const uint32_t stood_on = near.caret;
+
+    CF_CHECK(stood_on != 0u && stood_on < 28u,
+             "a press down the rows of a box at the top of the page stands in one of them");
+
+    /* The same box a hundred points further down the page, pressed a hundred points further down -
+     * the same place in the box, named from where the page is. */
+    far.caret = 0u;
+    far.mark = 0u;
+    frame_tall_of(&ctx, &far, 100.0f);
+    press(&ctx, 10.0f, 230.0f);
+
+    CF_CHECK(far.caret == stood_on,
+             "and the same place in a box the page carried lower lands in the same row");
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_key_that_carries_no_text_edits_nothing(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
@@ -2716,6 +2797,7 @@ int main(void) {
     CF_RUN(the_edit_keys_cut_the_selection_or_the_character_they_name);
     CF_RUN(a_press_places_the_caret_and_a_drag_selects_to_where_it_went);
     CF_RUN(a_press_below_the_rows_the_field_holds_stands_on_the_last_one);
+    CF_RUN(a_press_lands_on_the_row_of_the_box_rather_than_the_row_of_the_page);
     CF_RUN(copy_puts_the_selection_where_the_host_keeps_bytes);
     CF_RUN(cut_offers_the_bytes_before_it_drops_them);
     CF_RUN(a_refused_write_leaves_the_range_selected);

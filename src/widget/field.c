@@ -1131,7 +1131,10 @@ static bool offset_at(const cf_ctx *ctx, const field_data *field, uint32_t slot,
 
     const cf_point slide =
         cf_text_scroll(&walk.content, walk.lines, walk.rows, (cf_size){walk.wrap, walk.visible});
-    const float y = where.y - (walk.box.y + walk.origin.y - slide.y);
+    /* `origin` is already a point on the page - the box's own corner plus its insets - so adding
+     * the box again would move the answer a row higher for every row the page carried the box
+     * down. The paint reads the same origin, which is what makes the caret land under the glyph. */
+    const float y = where.y - (walk.origin.y - slide.y);
     uint32_t row = walk.line_height > 0.0f && y > 0.0f ? (uint32_t)(y / walk.line_height) : 0u;
 
     if (row >= walk.rows) {
