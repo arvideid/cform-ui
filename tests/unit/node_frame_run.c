@@ -17,8 +17,9 @@ static bool context_of(cf_ctx *ctx) {
 }
 
 /* A leaf build: the answer is a value, so nothing here needs the arena. */
-static cf_node one_box(cf_ctx *ctx) {
+static cf_node one_box(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
 
     cf_node root = {0};
     root.style = cf_style_default();
@@ -29,8 +30,9 @@ static cf_node one_box(cf_ctx *ctx) {
     return root;
 }
 
-static cf_node nothing(cf_ctx *ctx) {
+static cf_node nothing(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
     return (cf_node){0};
 }
 
@@ -38,11 +40,49 @@ static cf_node nothing(cf_ctx *ctx) {
  * handed rather than what it did with it. */
 static float seconds_seen;
 
-static cf_node ticking(cf_ctx *ctx) {
+static cf_node ticking(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     seconds_seen = cf_frame_seconds(ctx);
     cf_request_frame(ctx);
 
-    return one_box(ctx);
+    return one_box(ctx, user_data);
+}
+
+/* What a build was shown beside its context. The pipeline's whole job with the
+ * pointer is to hand it across: the page that reads its own state off the host's
+ * struct is why the argument exists, and a run that kept a pointer of its own
+ * would be a second owner of data it cannot see. */
+static const void *handed_over;
+
+static cf_node reaching(cf_ctx *ctx, void *user_data) {
+    handed_over = user_data;
+
+    return one_box(ctx, user_data);
+}
+
+static void the_build_is_handed_what_the_host_kept(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    int kept = 5;
+    cf_command_list list = {0};
+    handed_over = NULL;
+    cf_frame_run(&ctx, reaching, &kept, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+
+    CF_CHECK(handed_over == &kept, "the number the host kept is the one the build was shown");
+    CF_CHECK(list.count == 1u, "and the page it declared was painted");
+
+    /* The next frame states its own host: a run handed nothing shows nothing, so a
+     * caller stepping the pipeline twice cannot read the first one's data through the
+     * second one's page. */
+    cf_frame_run(&ctx, reaching, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    CF_CHECK(handed_over == NULL, "a host that keeps nothing hands NULL, not the last pointer");
+    CF_CHECK(list.count == 1u, "and the page still arrives without one");
+
+    cf_ctx_free(&ctx);
 }
 
 static void a_frame_runs_the_whole_pipeline_in_one_call(void) {
@@ -53,7 +93,7 @@ static void a_frame_runs_the_whole_pipeline_in_one_call(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(cf_frame_tree(&ctx) != NULL, "the diff built a view");
     CF_CHECK(list.count == 1u, "the box's fill is the whole stream");
@@ -74,7 +114,7 @@ static void a_build_that_answers_nothing_paints_nothing(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, nothing, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(list.count == 0u, "a page that states nothing paints nothing");
     CF_CHECK(cf_error_message(&ctx) == NULL, "declaring nothing is not a refusal");
@@ -90,11 +130,11 @@ static void a_run_without_a_build_or_a_list_is_a_no_op(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, NULL, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(list.count == 0u && cf_frame_tree(&ctx) == NULL, "no build declares nothing");
 
-    cf_frame_run(NULL, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, NULL);
+    cf_frame_run(NULL, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, NULL);
     CF_CHECK(list.count == 0u && cf_frame_tree(&ctx) == NULL, "the guards sit idle");
 
     cf_ctx_free(&ctx);
@@ -109,14 +149,14 @@ static void a_frame_carries_its_seconds_and_may_ask_for_another(void) {
 
     cf_command_list list = {0};
     seconds_seen = -1.0f;
-    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, 0.25f, &list);
+    cf_frame_run(&ctx, ticking, NULL, (cf_size){200.0f, 100.0f}, 0.25f, &list);
 
     CF_NEAR(seconds_seen, 0.25f);
     CF_CHECK(cf_frame_requested(&ctx), "the ask outlives the build that made it");
 
     /* The ask is one frame's answer rather than a switch a build leaves on: the
      * next begin clears it, so a page that stops moving stops being drawn for. */
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(!cf_frame_requested(&ctx), "a build that never asked leaves no ask standing");
     CF_CHECK(cf_frame_seconds(&ctx) == 0.0f, "a frame handed no interval covers none");
 
@@ -129,10 +169,11 @@ static void a_frame_carries_its_seconds_and_may_ask_for_another(void) {
 /* The other ask a build makes is not one frame's business: wanting out does not
  * wear off, so a host that reads the answer when it feels like it cannot miss the
  * frame that asked. */
-static cf_node leaving(cf_ctx *ctx) {
+static cf_node leaving(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     cf_request_quit(ctx);
 
-    return one_box(ctx);
+    return one_box(ctx, user_data);
 }
 
 static void an_ask_to_leave_stands_across_the_frames_after_it(void) {
@@ -145,11 +186,11 @@ static void an_ask_to_leave_stands_across_the_frames_after_it(void) {
     cf_command_list list = {0};
     CF_CHECK(!cf_quit_requested(&ctx), "a context that never asked has asked for nothing");
 
-    cf_frame_run(&ctx, leaving, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, leaving, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(cf_quit_requested(&ctx), "the ask is readable once the frame is run");
     CF_CHECK(list.count == 1u, "and the frame that asked still painted its page");
 
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(cf_quit_requested(&ctx), "a later frame did not wipe the ask out");
 
     CF_CHECK(!cf_quit_requested(NULL), "no context asked for nothing");
@@ -169,13 +210,13 @@ static void a_reused_list_is_replaced_not_appended(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(list.count == 1u, "the first run paints one fill");
 
-    cf_frame_run(&ctx, one_box, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, one_box, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(list.count == 1u, "the second run on the same list still paints one fill");
 
-    cf_frame_run(&ctx, nothing, (cf_size){200.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, nothing, NULL, (cf_size){200.0f, 100.0f}, 0.0f, &list);
     CF_CHECK(list.count == 0u, "a run that paints nothing empties the reused list");
 
     cf_ctx_free(&ctx);
@@ -192,8 +233,9 @@ static void a_reused_list_is_replaced_not_appended(void) {
 
 static uint32_t leaves_wanted;
 
-static cf_node leaves_build(cf_ctx *ctx) {
+static cf_node leaves_build(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
 
     static cf_node leaves[SHRINK_LEAVES];
     static cf_style leaf_styles[SHRINK_LEAVES];
@@ -226,13 +268,13 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
 
     leaves_wanted = SHRINK_LEAVES;
     cf_command_list big_list = {0};
-    cf_frame_run(&ctx, leaves_build, (cf_size){200.0f, 200.0f}, 0.0f, &big_list);
+    cf_frame_run(&ctx, leaves_build, NULL, (cf_size){200.0f, 200.0f}, 0.0f, &big_list);
 
     const uint32_t peak = (uint32_t)ctx.nodes.extent;
 
     leaves_wanted = 2u;
     cf_command_list small_list = {0};
-    cf_frame_run(&ctx, leaves_build, (cf_size){200.0f, 200.0f}, 0.0f, &small_list);
+    cf_frame_run(&ctx, leaves_build, NULL, (cf_size){200.0f, 200.0f}, 0.0f, &small_list);
 
     CF_CHECK(peak > 2u, "the big tree pushed the store past the small one");
     CF_CHECK(ctx.layout.node_count == peak, "the view covers the store, not just the live slots");
@@ -286,7 +328,7 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
 
     leaves_wanted = 2u;
     cf_command_list fresh_list = {0};
-    cf_frame_run(&fresh, leaves_build, (cf_size){200.0f, 200.0f}, 0.0f, &fresh_list);
+    cf_frame_run(&fresh, leaves_build, NULL, (cf_size){200.0f, 200.0f}, 0.0f, &fresh_list);
 
     CF_CHECK(small_list.count == fresh_list.count, "a shrunk view paints the same stream");
 
@@ -314,12 +356,12 @@ static void a_negative_or_nan_interval_clamps_to_zero(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, -1.0f, &list);
+    cf_frame_run(&ctx, ticking, NULL, (cf_size){200.0f, 100.0f}, -1.0f, &list);
     CF_NEAR(seconds_seen, 0.0f);
 
     /* IEEE-754 NaN: !(NaN >= 0.0f) is true, so the clamp catches it. */
     const float nan = 0.0f / 0.0f;
-    cf_frame_run(&ctx, ticking, (cf_size){200.0f, 100.0f}, nan, &list);
+    cf_frame_run(&ctx, ticking, NULL, (cf_size){200.0f, 100.0f}, nan, &list);
     CF_NEAR(seconds_seen, 0.0f);
 
     cf_ctx_free(&ctx);
@@ -329,8 +371,9 @@ static void a_negative_or_nan_interval_clamps_to_zero(void) {
  * A `display: none` box and its whole subtree leave the paint stream: only the
  * container and the one child that stayed visible come back as fills.
  */
-static cf_node hidden_page(cf_ctx *ctx) {
+static cf_node hidden_page(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
 
     static cf_node deep_child;
     static cf_node hidden_child;
@@ -373,7 +416,7 @@ static void a_hidden_subtree_paints_nothing(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, hidden_page, (cf_size){200.0f, 200.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, hidden_page, NULL, (cf_size){200.0f, 200.0f}, 0.0f, &list);
 
     CF_CHECK(list.count == 2u, "the hidden box and its filled child paint no fills");
 
@@ -394,8 +437,9 @@ static void a_hidden_subtree_paints_nothing(void) {
  */
 #define REFUSAL_LEAVES 32u
 
-static cf_node wide_page(cf_ctx *ctx) {
+static cf_node wide_page(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
 
     static cf_node leaves[REFUSAL_LEAVES];
     static cf_node kids[REFUSAL_LEAVES];
@@ -435,7 +479,7 @@ static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, wide_page, (cf_size){100.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, wide_page, NULL, (cf_size){100.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(cf_error_message(&ctx) != NULL, "the refusal names itself");
     CF_CHECK(list.count == 0u, "a refused frame emits no commands");
@@ -454,7 +498,7 @@ static void a_scratch_that_refuses_a_wide_layout_paints_no_stale_box(void) {
     }
 
     cf_command_list plenty_list = {0};
-    cf_frame_run(&plenty, wide_page, (cf_size){2000.0f, 2000.0f}, 0.0f, &plenty_list);
+    cf_frame_run(&plenty, wide_page, NULL, (cf_size){2000.0f, 2000.0f}, 0.0f, &plenty_list);
 
     CF_CHECK(cf_error_message(&plenty) == NULL, "a scratch that fits completes the pass");
     CF_CHECK(plenty_list.count == REFUSAL_LEAVES + 1u,
@@ -470,6 +514,7 @@ int main(void) {
     CF_RUN(a_build_that_answers_nothing_paints_nothing);
     CF_RUN(a_run_without_a_build_or_a_list_is_a_no_op);
     CF_RUN(a_frame_carries_its_seconds_and_may_ask_for_another);
+    CF_RUN(the_build_is_handed_what_the_host_kept);
     CF_RUN(an_ask_to_leave_stands_across_the_frames_after_it);
     CF_RUN(a_reused_list_is_replaced_not_appended);
     CF_RUN(a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind);

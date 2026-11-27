@@ -94,7 +94,8 @@ static cf_image_content loaded;
  * once the page that built it has returned, so the children ride the frame
  * arena beside it rather than the builder's stack.
  */
-static cf_node declare_loaded(cf_ctx *ctx) {
+static cf_node declare_loaded(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     const cf_node image = cf_image(ctx, "hero", &loaded);
     cf_node *children = cf_alloc(&ctx->frame, sizeof *children);
     cf_node root = {.style = cf_style_default()};
@@ -142,7 +143,7 @@ static void a_loaded_image_paints_the_texture_and_the_extent_the_loader_answered
              "the loader answers a texture and an extent");
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, declare_loaded, (cf_size){100.0f, 100.0f}, 0.016f, &list);
+    cf_frame_run(&ctx, declare_loaded, NULL, (cf_size){100.0f, 100.0f}, 0.016f, &list);
 
     const cf_command *image = NULL;
 

@@ -56,9 +56,10 @@ static const cf_font broad_font = {.handle = &fake_font_handle, .ops = &broad_op
 static const cf_font split_fonts[] = {narrow_font, broad_font};
 static const cf_text_stack split_fonts_stack = {.fonts = split_fonts, .count = 2u};
 
-static cf_node counting_box(cf_ctx *ctx) {
-    frames_built++;
+static cf_node counting_box(cf_ctx *ctx, void *user_data) {
     (void)ctx;
+    (void)user_data;
+    frames_built++;
 
     cf_node root = {0};
     root.style = cf_style_default();
@@ -75,8 +76,9 @@ static void noting_pointer(cf_event *event, void *user_data) {
     (void)event, (void)user_data;
 }
 
-static cf_node clickable_box(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node clickable_box(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     root.handlers.pointer = noting_pointer;
 
     return root;
@@ -84,8 +86,9 @@ static cf_node clickable_box(cf_ctx *ctx) {
 
 /* A control the build named: the box a bridge would announce, and the one the panel
  * has words to print once the keyboard stands on it. */
-static cf_node named_button(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node named_button(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     cf_node box = {0};
 
     box.style = cf_style_default();
@@ -106,8 +109,9 @@ static cf_node named_button(cf_ctx *ctx) {
  * takes the keyboard without ever wanting a keyboard drawn for it. The pair is what
  * makes the shell's answer worth counting - a page of fields alone could be answered
  * by a port that never shuts the service off. */
-static cf_node typed_page(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node typed_page(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     cf_node field = {0};
     cf_node button = {0};
 
@@ -143,8 +147,9 @@ static char other_bytes[32];
 static cf_text_edit composed;
 static cf_text_edit other;
 
-static cf_node composing_page(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node composing_page(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     cf_node field = cf_field(ctx, "entry", &composed, &fake_fonts, CF_FIELD_SINGLE);
     cf_node next = cf_field(ctx, "other", &other, &fake_fonts, CF_FIELD_SINGLE);
 
@@ -167,8 +172,9 @@ static cf_node composing_page(cf_ctx *ctx) {
 static const char mixed_value[] = "a\xe6\x97\xa5"
                                   "b";
 
-static cf_node mixed_page(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node mixed_page(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     cf_node label = cf_label(ctx, cf_string_of(mixed_value), &split_fonts_stack, CF_COLOR(1, 2, 3));
 
     const cf_node children[] = {label};
@@ -189,8 +195,9 @@ static void press_leaves(cf_event *event, void *user_data) {
     }
 }
 
-static cf_node leaving_box(cf_ctx *ctx) {
-    cf_node root = counting_box(ctx);
+static cf_node leaving_box(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
+    cf_node root = counting_box(ctx, user_data);
     root.handlers.pointer = press_leaves;
     root.handlers.pointer_data = ctx;
 
@@ -199,10 +206,11 @@ static cf_node leaving_box(cf_ctx *ctx) {
 
 /* A page mid-motion asks for the frame after this one, the only way a build
  * can keep running once the device stops handing events. */
-static cf_node animating_box(cf_ctx *ctx) {
+static cf_node animating_box(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     cf_request_frame(ctx);
 
-    return counting_box(ctx);
+    return counting_box(ctx, user_data);
 }
 
 /*
@@ -222,12 +230,24 @@ static bool silent_write(void *user_data, cf_string utf8) {
     return false;
 }
 
-static cf_node noting_board(cf_ctx *ctx) {
+static cf_node noting_board(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     if (ctx->clipboard != NULL) {
         boards_seen++;
     }
 
-    return counting_box(ctx);
+    return counting_box(ctx, user_data);
+}
+
+/* What the page was shown beside its context, and the page that says so. The shell
+ * reads the host's pointer once per frame and keeps none of it, so the value a build
+ * reports is the whole of what the run carries on the host's behalf. */
+static const void *handed_to_build;
+
+static cf_node reaching(cf_ctx *ctx, void *user_data) {
+    handed_to_build = user_data;
+
+    return counting_box(ctx, user_data);
 }
 
 typedef struct fake_hand {
@@ -463,6 +483,40 @@ static void the_shell_runs_until_the_device_quits(void) {
     CF_CHECK(recorder.count == 1u, "the frame's stream is the one the backend holds");
     CF_CHECK(recorder.count == 1u && recorder.commands[0].kind == CF_COMMAND_FILL,
              "the box's fill arrived");
+}
+
+/* A page's own state belongs to the host that opened the window, and the shell is the
+ * only door it has: what a run hands the build is what the page reaches, so an adoption
+ * example declares from a struct of its own rather than from a variable in the file.
+ * The second run is the half that matters - a shell that remembered the first host's
+ * pointer would draw a page out of a window that has already gone. */
+static void the_shell_hands_the_build_what_the_host_kept(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {70.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+
+    int kept = 7;
+    reset(hands, 4u);
+    handed_to_build = NULL;
+
+    cf_app_run(&(cf_app_config){
+        .build = reaching, .build_user_data = &kept, .backend = backend, .theme = NULL});
+
+    CF_CHECK(handed_to_build == &kept, "the page was shown the pointer the host kept");
+    CF_CHECK(frames_built == 1u, "and the frame that showed it was built");
+
+    reset(hands, 4u);
+
+    cf_app_run(&(cf_app_config){.build = reaching, .backend = backend, .theme = NULL});
+
+    CF_CHECK(handed_to_build == NULL,
+             "a config that keeps nothing hands NULL and not the last run's pointer");
+    CF_CHECK(frames_built == 1u, "and the page still arrives without one");
 }
 
 static void the_shell_skips_undamaged_frames(void) {
@@ -905,6 +959,7 @@ int main(void) {
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
 
     CF_RUN(the_shell_runs_until_the_device_quits);
+    CF_RUN(the_shell_hands_the_build_what_the_host_kept);
     CF_RUN(the_shell_skips_undamaged_frames);
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);

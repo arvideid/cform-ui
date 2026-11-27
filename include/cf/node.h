@@ -442,16 +442,26 @@ void cf_frame_layout(cf_ctx *ctx, cf_available available, cf_point origin);
  * `cf_children` builds a container's children there. A page with no children
  * and a style that paints nothing is what a build says when it has nothing to
  * declare.
+ *
+ * `user_data` is the host's pointer, read once and handed back unchanged every
+ * frame. It is where a driver keeps what the window owns - the faces it opened,
+ * the asset tables, the counters between frames - so a page declares from what
+ * it was handed rather than from a file-scope variable a second context in the
+ * same process would have to share. A build that needs nothing is handed NULL
+ * and must work with it, which is the same rule every other user_data in the
+ * API follows.
  */
-typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
+typedef cf_node (*cf_build_fn)(cf_ctx *ctx, void *user_data);
 
 /*
  * One frame, end to end: begins the frame, runs the build with `seconds` as
- * the interval it may read, diffs its declaration in the scope the build
- * declared it in, resolves the theme over the view, lays it out into the
- * offer's points, and paints the commands into `out`. A build that answers a
- * page that paints nothing, or an offer of nothing, empties the list instead
- * of painting it.
+ * the interval it may read and `user_data` as the pointer the host kept for it,
+ * diffs its declaration in the scope the build declared it in, resolves the
+ * theme over the view, lays it out into the offer's points, and paints the
+ * commands into `out`. A build that answers a page that paints nothing, or an
+ * offer of nothing, empties the list instead of painting it. `user_data` is
+ * passed through unread, so NULL is what a host that keeps nothing outside the
+ * frame hands a build.
  *
  * Failure: when the frame arena cannot hold the declared tree, `cf_diff`
  * refuses, the layout reads no view, and paint writes no commands — `out`
@@ -460,7 +470,7 @@ typedef cf_node (*cf_build_fn)(cf_ctx *ctx);
  * arena, starts clean. No output is presented as complete when the arena
  * said no.
  */
-void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
+void cf_frame_run(cf_ctx *ctx, cf_build_fn build, void *user_data, cf_size offer, float seconds,
                   cf_command_list *out);
 
 /*

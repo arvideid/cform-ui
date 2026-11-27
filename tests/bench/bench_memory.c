@@ -49,7 +49,8 @@ static void build_page(cf_interner *names) {
     page.child_count = ROWS;
 }
 
-static cf_node declare(cf_ctx *ctx) {
+static cf_node declare(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     (void)ctx;
 
     return page;
@@ -92,12 +93,12 @@ int main(void) {
      * a page of this size costs, and it is charged once per frame rather than
      * accrued across them. */
     cf_command_list list = {0};
-    cf_frame_run(&ctx, declare, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
+    cf_frame_run(&ctx, declare, NULL, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
 
     /* The second frame, not the first, is the one a page at rest repeats: the
      * first builds the tree the second's diff has to index, so it reaches bytes
      * the steady state never asks for again. */
-    cf_frame_run(&ctx, declare, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
+    cf_frame_run(&ctx, declare, NULL, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
     const size_t steady_used = ctx.frame.used;
     const size_t steady_peak = ctx.frame.peak;
 
@@ -107,7 +108,7 @@ int main(void) {
     bool flat = true;
 
     for (uint32_t i = 2u; i < IDLE_FRAMES; ++i) {
-        cf_frame_run(&ctx, declare, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
+        cf_frame_run(&ctx, declare, NULL, (cf_size){1280.0f, 720.0f}, 0.016f, &list);
 
         if (ctx.frame.used != steady_used || ctx.frame.peak != steady_peak) {
             flat = false;

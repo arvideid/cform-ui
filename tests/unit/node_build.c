@@ -45,7 +45,8 @@ static cf_command *command_at(const cf_command_list *list, uint32_t index) {
 
 /* A column of two rows' worth: the row's children sit side by side, the
  * column's stack, and the container boxes themselves paint nothing. */
-static cf_node page_of(cf_ctx *ctx) {
+static cf_node page_of(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     return CF_COL(ctx, cf_style_default(), CF_ROW(ctx, cf_style_default(), leaf(), leaf()), leaf());
 }
 
@@ -57,7 +58,7 @@ static void the_macros_count_children_and_state_direction(void) {
     }
 
     cf_command_list list = {0};
-    cf_frame_run(&ctx, page_of, (cf_size){100.0f, 100.0f}, 0.0f, &list);
+    cf_frame_run(&ctx, page_of, NULL, (cf_size){100.0f, 100.0f}, 0.0f, &list);
 
     CF_CHECK(list.count == 3u, "three leaves fill, two containers paint nothing");
     CF_CHECK(command_at(&list, 0u) != NULL && command_at(&list, 0u)->rect.x == 0.0f &&

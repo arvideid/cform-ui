@@ -9,9 +9,11 @@
  *
  * The interval is handed in rather than read: measuring the wall belongs to
  * whoever waited on it, so the shell reports what passed between its frames and
- * a caller stepping the pipeline itself states what a frame covers.
+ * a caller stepping the pipeline itself states what a frame covers. The build's
+ * pointer is handed through for the same reason - the frame knows the context it
+ * declares into, and only the host knows what else its page reaches.
  */
-void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
+void cf_frame_run(cf_ctx *ctx, cf_build_fn build, void *user_data, cf_size offer, float seconds,
                   cf_command_list *out) {
     if (ctx == NULL || build == NULL || out == NULL) {
         return;
@@ -33,7 +35,7 @@ void cf_frame_run(cf_ctx *ctx, cf_build_fn build, cf_size offer, float seconds,
     *out = (cf_command_list){0};
     /* The begin clears it, so the run is the one that states it. */
     ctx->frame_seconds = seconds;
-    const cf_node root = build(ctx);
+    const cf_node root = build(ctx, user_data);
     const uint32_t root_slot = cf_diff(ctx, &root);
     cf_frame_resolve(ctx);
     cf_frame_layout(ctx, (cf_available){.width = CF_PX(offer.width), .height = CF_PX(offer.height)},

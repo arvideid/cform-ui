@@ -1468,7 +1468,8 @@ static cf_node make_page(cf_ctx *ctx, const cf_node *chapters, uint32_t count) {
     return page;
 }
 
-static cf_node build(cf_ctx *ctx) {
+static cf_node build(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     const cf_node chapters[] = {
         make_header(ctx),
         make_chapter(

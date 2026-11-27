@@ -174,7 +174,7 @@ void cf_app_run(const cf_app_config *config) {
          * rather than by a guess at the display's rate. */
         const float seconds = frame_interval(&last, &started);
         last = started;
-        cf_frame_run(&ctx, config->build, offer, seconds, &list);
+        cf_frame_run(&ctx, config->build, config->build_user_data, offer, seconds, &list);
         timespec_get(&finished, TIME_UTC);
         const uint32_t frame_us = elapsed_us(&started, &finished);
         painted = true;

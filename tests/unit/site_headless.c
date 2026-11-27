@@ -118,7 +118,8 @@ static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
     }
 }
 
-static cf_node build(cf_ctx *ctx) {
+static cf_node build(cf_ctx *ctx, void *user_data) {
+    (void)user_data;
     return site_document(ctx, &view, showing, showing->page(ctx, &view), go_to);
 }
 
@@ -230,7 +231,7 @@ static void start(cf_size size) {
     viewport = (cf_rect){0.0f, 0.0f, size.width, size.height};
 
     cf_command_list list = {0};
-    cf_frame_run(&session, build, size, 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, NULL, size, 1.0f / 60.0f, &list);
     check_stream(list.commands, list.count, viewport);
 
     recorder.count = 0u;
@@ -254,7 +255,8 @@ static void end(void) {
  * next build is the thing which turns into a moved page. */
 static void frame(void) {
     cf_command_list list = {0};
-    cf_frame_run(&session, build, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, NULL, (cf_size){viewport.width, viewport.height}, 1.0f / 60.0f,
+                 &list);
     check_stream(list.commands, list.count, viewport);
 
     recorder.count = 0u;

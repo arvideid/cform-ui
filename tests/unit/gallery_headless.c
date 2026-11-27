@@ -446,7 +446,7 @@ static void flush_frames(void) {
 
     while (cf_frame_requested(&session) && guard < 1000u) {
         cf_command_list list = {0};
-        cf_frame_run(&session, build, size, step, &list);
+        cf_frame_run(&session, build, NULL, size, step, &list);
         record_frame(&list);
         ++guard;
     }
@@ -467,7 +467,7 @@ static void step(cf_event event) {
      * disabled a button would leave it still enabled to the very last
      * event of the batch. */
     cf_command_list list = {0};
-    cf_frame_run(&session, build, (cf_size){current_viewport.width, current_viewport.height},
+    cf_frame_run(&session, build, NULL, (cf_size){current_viewport.width, current_viewport.height},
                  1.0f / 60.0f, &list);
     record_frame(&list);
     flush_frames();
@@ -520,7 +520,7 @@ static void start_session(cf_size size) {
     current_viewport = (cf_rect){0.0f, 0.0f, size.width, size.height};
 
     cf_command_list list = {0};
-    cf_frame_run(&session, build, size, 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, NULL, size, 1.0f / 60.0f, &list);
     record_frame(&list);
     session_open = true;
 }
@@ -643,7 +643,7 @@ static bool page_scroll_to(float offset) {
     held->offset = offset;
 
     cf_command_list list = {0};
-    cf_frame_run(&session, build, current_size(), 1.0f / 60.0f, &list);
+    cf_frame_run(&session, build, NULL, current_size(), 1.0f / 60.0f, &list);
     record_frame(&list);
     return true;
 }
