@@ -54,17 +54,24 @@ ABI = re.compile(r"#define\s+CF_BACKEND_ABI_VERSION\s+(\d+)u?")
 # struct's slots; anything else in the file is documentation prose.
 STRUCT = re.compile(r"typedef struct cf_backend \{(.*?)\n\} cf_backend;", re.S)
 
+# Counted up to twenty: a sentence about a struct with more than a dozen slots is
+# unlikely, and the day it happens is the day this table has to grow with it.
 WORD_NUMBERS = {
     "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
-    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "nine": 9, "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13,
+    "fourteen": 14, "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20,
 }
 
 NUMBER_WORD = {number: word for word, number in WORD_NUMBERS.items()}
 
-# "ten functions", "8 slots", "ABI 11" - the shapes a stale sentence takes.
+# "ten functions", "8 slots", "ABI 11", "CF_BACKEND_ABI_VERSION is 11" - the shapes a
+# stale sentence takes. Both the spoken count and the macro's own number are claims: a
+# document that quotes the constant by name still states a number a reader believes.
 FUNCTION_CLAIM = re.compile(
-    r"\b(" + "|".join(WORD_NUMBERS) + r"|\d+)\s+(?:public\s+|backend\s+)?functions?\b")
+    r"\b(" + "|".join(WORD_NUMBERS) + r"|\d+)\s+(?:public\s+|backend\s+)?(functions?|slots?)\b")
 ABI_CLAIM = re.compile(r"\bABI\s+(\d+)\b")
+ABI_MACRO_CLAIM = re.compile(r"CF_BACKEND_ABI_VERSION`?\s+(?:is|=|equals)\s+(\d+)\b")
 
 
 def backend_facts():
@@ -103,12 +110,17 @@ def check_numbers(slots, abi):
                 stated = WORD_NUMBERS.get(stated.lower(), None) or int(stated)
 
                 if stated != count:
-                    fail(where, f"says a backend fills {claim.group(1)} functions; the header "
-                         f"declares {honest} ({', '.join(slots)})")
+                    fail(where, f"says a backend fills {claim.group(1)} {claim.group(2)}; "
+                         f"the header declares {honest} ({', '.join(slots)})")
 
             for claim in ABI_CLAIM.finditer(line):
                 if int(claim.group(1)) != abi:
                     fail(where, f"says the backend contract is at ABI {claim.group(1)}; "
+                         f"the header says {abi}")
+
+            for claim in ABI_MACRO_CLAIM.finditer(line):
+                if int(claim.group(1)) != abi:
+                    fail(where, f"says CF_BACKEND_ABI_VERSION is {claim.group(1)}; "
                          f"the header says {abi}")
 
 
