@@ -102,6 +102,10 @@ static void bind_view(void) {
  * scroller. Driving a bare page would measure it against a window it never gets. */
 static const site_entry *showing;
 
+/* The address the reader is on, fragment and all. Left unset, a case is on the page's own route -
+ * the bare address a press writes - and only the deep-link case names a section in it. */
+static const char *address;
+
 /* Where a press was aimed. This build has no address bar to write to, so the route the
  * row carries is recorded instead - which is the whole of what pressing a row is owed,
  * and the one thing about a press a tier with no browser can still read back. */
@@ -120,7 +124,9 @@ static void go_to(cf_ctx *ctx, cf_id node, void *user_data) {
 
 static cf_node build(cf_ctx *ctx, void *user_data) {
     (void)user_data;
-    return site_document(ctx, &view, showing, showing->page(ctx, &view), go_to);
+
+    return site_document(ctx, &view, showing, showing->page(ctx, &view), go_to,
+                         address != NULL ? address : showing->route);
 }
 
 /* ---------- the recorder, and what the last frame submitted ------------------ */
@@ -272,7 +278,7 @@ static void step(cf_event event) {
 
 /* The document's own offset, or NULL for a build that stopped carrying a scroller. */
 static cf_scroll *document_scroll(void) {
-    return cf_scroll_of(&session, cf_ctx_key(&session, "page"));
+    return cf_scroll_of(&session, cf_ctx_key(&session, SITE_PAGE_KEY));
 }
 
 /* ---------- reading the last frame back ------------------------------------- */
@@ -764,6 +770,113 @@ static void a_tab_past_the_fold_moves_the_page(void) {
     end();
 }
 
+/*
+ * The deep link, which is the one move a page makes for a reader who has touched nothing: a URL
+ * copied out of the bar names a section by the slug its heading carries, and landing on the page
+ * with the heading below the fold is the rule nobody questions in a browser and the rule this
+ * site could only state in words while the tree had no way back from a name to a box.
+ *
+ * Three frames are the whole of it, and they are the framework's rather than the page's trick:
+ * the first declares the headings without being able to find them, the second finds the box, asks
+ * for it and is honoured by its own layout pass, and the third is the build that reads the moved
+ * offset back and paints the heading where the reader asked for it.
+ */
+static void an_address_naming_a_section_walks_the_page_to_it(void) {
+    /* The address decides both halves of where the reader is, so it is asked of the table whole:
+     * a fragment that were read as part of the page would name no row at all, and the reader
+     * would be sent to the first page in the table instead of the one they linked to. */
+    showing = site_entry_for_route(SITE_PREFIX "api#backend");
+    CF_CHECK(showing != NULL, "a section is a place in a page, not a page of its own");
+
+    if (showing == NULL) {
+        address = NULL;
+
+        return;
+    }
+
+    address = SITE_PREFIX "api#backend";
+    start(surfaces[0]);
+
+    CF_CHECK(!text_in_view("Backends"), "the heading the address names starts below the fold");
+
+    frame();
+
+    CF_CHECK(cf_frame_requested(&session),
+             "the frame that moved the page asked for the one that shows it");
+
+    frame();
+
+    const cf_scroll *held = document_scroll();
+
+    CF_CHECK(held != NULL && held->offset > 0.0f,
+             "the document walked to the section it was named");
+    CF_CHECK(text_in_view("Backends"), "and the heading is where the window can read it");
+    CF_CHECK(!cf_frame_requested(&session),
+             "and it stops there: an address already walked asks for no more frames");
+
+    /* The reader takes the wheel back. A page that re-walked its own address on every rebuild
+     * would drag the heading under their hand again with the next frame, which is the difference
+     * between a deep link and a page that will not let go of one. */
+    const float walked_to = held != NULL ? held->offset : 0.0f;
+
+    step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = -2.0f}});
+    frame();
+
+    held = document_scroll();
+
+    CF_CHECK(held != NULL && held->offset < walked_to, "and the reader is allowed to walk away");
+
+    end();
+    address = NULL;
+}
+
+/*
+ * The other half of the same address: a fragment the page holds no heading for is a section this
+ * site does not have, and the page has to be left where it is. Chasing a name nothing answers
+ * would be a build every frame forever - the idle rule is the whole point of the shell, and a
+ * dead link is the one thing a reader can type into a bar.
+ */
+static void an_address_naming_no_section_leaves_the_page_alone(void) {
+    showing = site_entry_for_route(SITE_PREFIX "api");
+    address = SITE_PREFIX "api#nowhere";
+    start(surfaces[0]);
+
+    CF_CHECK(cf_frame_requested(&session), "a heading not yet declared is worth one more frame");
+
+    frame();
+
+    const cf_scroll *held = document_scroll();
+
+    CF_CHECK(!cf_frame_requested(&session), "a heading the standing page does not have is not");
+    CF_CHECK(held != NULL && held->offset == 0.0f, "and the document is left where it was");
+
+    end();
+    address = NULL;
+}
+
+/*
+ * The address read as two halves: the page the table holds and the place inside it to stand at.
+ * Only the bytes after the first `#` are the second, and a fragment that could not be a slug the
+ * pages spell is no place at all - which is what keeps a mistyped link from being read as a
+ * section nobody wrote.
+ */
+static void an_address_names_a_section_only_past_its_hash(void) {
+    char slug[SITE_SLUG_BYTES];
+
+    CF_CHECK(!site_section_of(NULL, slug, sizeof slug), "no address names no section");
+    CF_CHECK(!site_section_of(SITE_PREFIX "api", slug, sizeof slug),
+             "a bare route is a page rather than a place in one");
+    CF_CHECK(!site_section_of(SITE_PREFIX "api#", slug, sizeof slug),
+             "a hash with nothing after it names nothing");
+    CF_CHECK(site_section_of(SITE_PREFIX "api#base", slug, sizeof slug) &&
+                 strcmp(slug, "base") == 0,
+             "the bytes after the hash are the section, in the words the page keyed it with");
+    CF_CHECK(!site_section_of(
+                 "#/too-long-to-be-any-slug-the-documentation-pages-spell-and-so-it-names-nothing",
+                 slug, sizeof slug),
+             "and a fragment no slug could be is no section either");
+}
+
 /* The accessible tree exists as data on every route, which is the mitigation the site
  * makes for being a drawing: whoever writes the ARIA host adapter has the page's own
  * headings to read out of the same build. */
@@ -823,6 +936,9 @@ int main(void) {
     CF_RUN(a_row_in_the_list_names_the_page_it_holds);
     CF_RUN(a_wheel_walks_the_document_wherever_it_lands);
     CF_RUN(a_tab_past_the_fold_moves_the_page);
+    CF_RUN(an_address_naming_a_section_walks_the_page_to_it);
+    CF_RUN(an_address_naming_no_section_leaves_the_page_alone);
+    CF_RUN(an_address_names_a_section_only_past_its_hash);
     CF_RUN(the_semantic_tree_names_each_page);
 
     end();
