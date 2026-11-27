@@ -364,7 +364,12 @@ page, and an offset the shell invented would be wrong for a widget inside anothe
 2. `submit`: clear, walk front to back, map each kind onto your fill / stroke /
    glyph-run / textured-quad call, scaled by pixel density, each one under the
    scissor its `clip` names.
-3. `present`: your device's swap. Don't collect input here.
+3. `present`: your device's swap. Don't collect input here. It can also be asked for
+   with no `submit` since the last one: a loop that keeps an idle rule shows the frame
+   it already drew rather than laying out a new one, which is what `cf_app_run` does on
+   a page at rest and what a host running `cf_frame_run` itself decides for itself
+   (`examples/host_loop.c`). Nothing in the struct says which kind of call it is, so a
+   device that cannot swap twice in a row has to count its own submits to know.
 4. `surface`: the size, in points.
 5. `poll_event`: translate input; swallow events that have no `cf_event` meaning.
 6. `create_texture`: only when you want images. Return 0 on a failed upload and

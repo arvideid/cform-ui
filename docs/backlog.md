@@ -97,5 +97,4 @@ Also worth deciding while the surface is still soft:
 - whether `cf_style` is passed by value forever (it is now, and it is getting
   large enough to notice);
 - whether a widget may own a `cf_ctx` pointer, which `field_data` does today and a
-  node with no context cannot otherwise measure its own text;
-- whether `present` without a `submit` in between is a backend's duty or a loop's.
+  node with no context cannot otherwise measure its own text.
