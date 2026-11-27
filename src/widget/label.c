@@ -7,7 +7,7 @@ cf_node cf_label(cf_ctx *ctx, cf_string text, const cf_text_stack *stack, cf_col
         return node;
     }
 
-    cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
+    cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);
 
     if (content == NULL) {
         return node;

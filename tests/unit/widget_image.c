@@ -97,7 +97,7 @@ static cf_image_content loaded;
 static cf_node declare_loaded(cf_ctx *ctx, void *user_data) {
     (void)user_data;
     const cf_node image = cf_image(ctx, "hero", &loaded);
-    cf_node *children = cf_alloc(&ctx->frame, sizeof *children);
+    cf_node *children = cf_frame_alloc(ctx, sizeof *children);
     cf_node root = {.style = cf_style_default()};
 
     if (children == NULL) {

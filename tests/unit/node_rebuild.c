@@ -164,10 +164,9 @@ static bool check_frame(cf_ctx *ctx, const cf_tree *tree, uint32_t root_slot,
 
 static bool drive_frames(cf_ctx *ctx, unsigned long long seed, uint32_t same_percent,
                          uint32_t empty_percent) {
-    const cf_name keys[] = {
-        cf_intern_text(&ctx->names, "alpha"), cf_intern_text(&ctx->names, "beta"),
-        cf_intern_text(&ctx->names, "gamma"), cf_intern_text(&ctx->names, "delta"),
-        cf_intern_text(&ctx->names, "epsilon")};
+    const cf_name keys[] = {cf_ctx_key(ctx, "alpha"), cf_ctx_key(ctx, "beta"),
+                            cf_ctx_key(ctx, "gamma"), cf_ctx_key(ctx, "delta"),
+                            cf_ctx_key(ctx, "epsilon")};
     gen_tree generated = {0};
     uint64_t rng = seed;
 

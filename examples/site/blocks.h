@@ -34,7 +34,7 @@
  * frame that declares them. */
 static inline cf_node site_text(cf_ctx *ctx, const site_view *view, site_face face, cf_color ink,
                                 const char *chars) {
-    cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
+    cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);
 
     if (content == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -69,7 +69,7 @@ static inline cf_node site_eyebrow(cf_ctx *ctx, const site_view *view, const cha
 static inline cf_node site_title(cf_ctx *ctx, const site_view *view, const char *chars,
                                  const char *slug) {
     cf_node title = site_text(ctx, view, SITE_FACE_TITLE, view->prose, chars);
-    title.key = cf_intern_text(&ctx->names, slug);
+    title.key = cf_ctx_key(ctx, slug);
 
     return title;
 }
@@ -77,7 +77,7 @@ static inline cf_node site_title(cf_ctx *ctx, const site_view *view, const char 
 static inline cf_node site_head(cf_ctx *ctx, const site_view *view, const char *chars,
                                 const char *slug) {
     cf_node head = site_text(ctx, view, SITE_FACE_HEAD, view->prose, chars);
-    head.key = cf_intern_text(&ctx->names, slug);
+    head.key = cf_ctx_key(ctx, slug);
 
     return head;
 }
@@ -124,7 +124,7 @@ static inline cf_node site_panel(cf_ctx *ctx, const site_view *view, const char 
      * thread is given is not a budget a page should be sized against. The
      * container copies what it is handed, so nothing here outlives the
      * declaration it is building. */
-    cf_node *rows = cf_alloc(&ctx->frame, (size_t)count * sizeof *rows);
+    cf_node *rows = cf_frame_alloc(ctx, (size_t)count * sizeof *rows);
 
     if (rows == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -240,7 +240,7 @@ static inline void site_follow(cf_ctx *ctx, cf_id node, void *user_data) {
 
 static inline cf_node site_link(cf_ctx *ctx, const site_view *view, const char *name,
                                 const char *label, const char *url) {
-    site_address *address = cf_alloc(&ctx->frame, sizeof *address);
+    site_address *address = cf_frame_alloc(ctx, sizeof *address);
 
     if (address == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -263,7 +263,7 @@ typedef struct site_tab_pick {
 
 static inline void site_pick_tab(cf_ctx *ctx, cf_id node, void *user_data) {
     const site_tab_pick *pick = user_data;
-    uint32_t *chosen = cf_state(ctx, cf_intern_text(&ctx->names, pick->name), sizeof *chosen);
+    uint32_t *chosen = cf_state(ctx, cf_ctx_key(ctx, pick->name), sizeof *chosen);
 
     (void)node;
 
@@ -283,7 +283,7 @@ static inline void site_pick_tab(cf_ctx *ctx, cf_id node, void *user_data) {
 static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *name,
                                 const char *const *labels, uint32_t count, const cf_node *panels,
                                 uint32_t panel_count) {
-    uint32_t *chosen = cf_state(ctx, cf_intern_text(&ctx->names, name), sizeof *chosen);
+    uint32_t *chosen = cf_state(ctx, cf_ctx_key(ctx, name), sizeof *chosen);
     const uint32_t taken = count < SITE_TAB_COUNT ? count : SITE_TAB_COUNT;
     const uint32_t picked = chosen != NULL && *chosen < taken ? *chosen : 0u;
     cf_node tabs[SITE_TAB_COUNT];
@@ -291,7 +291,7 @@ static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *
     for (uint32_t i = 0u; i < taken; ++i) {
         /* The pick travels with the button that asks for it, in the arena that
          * holds the frame the dispatch reads it back from. */
-        site_tab_pick *pick = cf_alloc(&ctx->frame, sizeof *pick);
+        site_tab_pick *pick = cf_frame_alloc(ctx, sizeof *pick);
 
         if (pick == NULL) {
             tabs[i] = (cf_node){.style = cf_style_default()};
@@ -335,7 +335,7 @@ static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *
  */
 static inline cf_node site_section(cf_ctx *ctx, const site_view *view, const char *heading,
                                    const char *slug, const cf_node *blocks, uint32_t count) {
-    cf_node *rows = cf_alloc(&ctx->frame, (size_t)(count + 1u) * sizeof *rows);
+    cf_node *rows = cf_frame_alloc(ctx, (size_t)(count + 1u) * sizeof *rows);
 
     if (rows == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -379,7 +379,7 @@ static inline cf_node site_page(cf_ctx *ctx, const site_view *view, const char *
                            site_aside(ctx, view, lede)},
                3u);
 
-    cf_node *rows = cf_alloc(&ctx->frame, (size_t)(count + 1u) * sizeof *rows);
+    cf_node *rows = cf_frame_alloc(ctx, (size_t)(count + 1u) * sizeof *rows);
 
     if (rows == NULL) {
         return opening;
@@ -423,7 +423,7 @@ static inline cf_node site_strip(cf_ctx *ctx, const cf_node *items, uint32_t cou
 static inline cf_node site_card(cf_ctx *ctx, const site_view *view, const char *slug,
                                 const char *title, const char *prose, const cf_node *footer) {
     const uint32_t count = footer != NULL ? 3u : 2u;
-    cf_node *rows = cf_alloc(&ctx->frame, (size_t)count * sizeof *rows);
+    cf_node *rows = cf_frame_alloc(ctx, (size_t)count * sizeof *rows);
 
     if (rows == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -487,7 +487,7 @@ static inline cf_node site_pair(cf_ctx *ctx, const site_view *view, const char *
 /* The table, from an array of the pairs. */
 static inline cf_node site_pairs(cf_ctx *ctx, const site_view *view, const char *const *words,
                                  const char *const *meanings, uint32_t count, float word_width) {
-    cf_node *rows = cf_alloc(&ctx->frame, (size_t)count * sizeof *rows);
+    cf_node *rows = cf_frame_alloc(ctx, (size_t)count * sizeof *rows);
 
     if (rows == NULL) {
         return (cf_node){.style = cf_style_default()};

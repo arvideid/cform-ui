@@ -7,7 +7,7 @@ cf_node cf_image(cf_ctx *ctx, const char *name, const cf_image_content *content)
         return node;
     }
 
-    node.key = cf_intern_text(&ctx->names, name);
+    node.key = cf_ctx_key(ctx, name);
     node.measure = cf_image_measure;
     /* The tree hands the content back to the paint walk, which reads it as
      * const; the declaration type keeps one pointer for every measure. */

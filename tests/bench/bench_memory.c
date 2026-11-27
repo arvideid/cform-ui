@@ -65,7 +65,7 @@ static size_t run_round(cf_ctx *ctx, uint32_t round) {
     for (uint32_t i = 0u; i < ROUND_KEYS; ++i) {
         char name[16];
         snprintf(name, sizeof name, "r%u-%u", round, i);
-        cf_state(ctx, cf_intern_text(&ctx->names, name), KEY_BYTES);
+        cf_state(ctx, cf_ctx_key(ctx, name), KEY_BYTES);
     }
 
     return cf_state_bytes(ctx);

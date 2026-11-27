@@ -54,16 +54,16 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
         return node;
     }
 
-    list_data *data = cf_alloc(&ctx->frame, sizeof *data);
-    cf_node *content = cf_alloc(&ctx->frame, sizeof *content);
-    cf_node *viewport_children = cf_alloc(&ctx->frame, sizeof *viewport_children);
+    list_data *data = cf_frame_alloc(ctx, sizeof *data);
+    cf_node *content = cf_frame_alloc(ctx, sizeof *content);
+    cf_node *viewport_children = cf_frame_alloc(ctx, sizeof *viewport_children);
 
     if (data == NULL || content == NULL || viewport_children == NULL) {
         return node;
     }
 
     *data = (list_data){.ctx = ctx,
-                        .key = cf_intern_text(&ctx->names, name),
+                        .key = cf_ctx_key(ctx, name),
                         .row_height = row_height,
                         .content_height = (float)row_count * row_height};
 
@@ -82,7 +82,7 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
     cf_node *rows = NULL;
 
     if (shown > 0u) {
-        rows = cf_alloc(&ctx->frame, (size_t)shown * sizeof *rows);
+        rows = cf_frame_alloc(ctx, (size_t)shown * sizeof *rows);
 
         if (rows == NULL) {
             return node;
@@ -105,7 +105,7 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
                 ++name_len;
             }
             (void)snprintf(text, sizeof text, "%.*s/%u", name_len, name, index);
-            rows[i].key = cf_intern_text(&ctx->names, text);
+            rows[i].key = cf_ctx_key(ctx, text);
         }
     }
 

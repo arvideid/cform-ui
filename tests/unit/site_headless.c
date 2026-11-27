@@ -272,7 +272,7 @@ static void step(cf_event event) {
 
 /* The document's own offset, or NULL for a build that stopped carrying a scroller. */
 static cf_scroll *document_scroll(void) {
-    return cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+    return cf_scroll_of(&session, cf_ctx_key(&session, "page"));
 }
 
 /* ---------- reading the last frame back ------------------------------------- */

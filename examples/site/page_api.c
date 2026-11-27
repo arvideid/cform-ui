@@ -221,6 +221,12 @@ static const api_symbol node_symbols[] = {
     {"cf_frame_begin", "void cf_frame_begin(cf_ctx *ctx);",
      "Starts a frame: the arena is emptied and the counter advances, so a node the build does not "
      "redeclare is one the diff retires."},
+    {"cf_ctx_key", "cf_name cf_ctx_key(cf_ctx *ctx, const char *chars);",
+     "The name this context knows a string by, so the same characters asked twice are one state "
+     "block rather than two."},
+    {"cf_frame_alloc", "void *cf_frame_alloc(cf_ctx *ctx, size_t size);",
+     "Bytes the frame owns and the next cf_frame_begin wipes, or NULL when the frame has taken "
+     "more than it was sized for."},
     {"cf_diff", "uint32_t cf_diff(cf_ctx *ctx, const cf_node *root);",
      "Reconciles a declaration against the retained tree and answers the root's slot."},
     {"cf_frame_tree", "const cf_tree *cf_frame_tree(const cf_ctx *ctx);",
@@ -508,9 +514,9 @@ static const api_group groups[] = {
  * lines the names up on one edge. */
 static cf_node api_group_block(cf_ctx *ctx, const site_view *view, const api_group *group) {
     const uint32_t count = group->count;
-    const char **lines = cf_alloc(&ctx->frame, (size_t)count * sizeof *lines);
-    const char **names = cf_alloc(&ctx->frame, (size_t)count * sizeof *names);
-    const char **contracts = cf_alloc(&ctx->frame, (size_t)count * sizeof *contracts);
+    const char **lines = cf_frame_alloc(ctx, (size_t)count * sizeof *lines);
+    const char **names = cf_frame_alloc(ctx, (size_t)count * sizeof *names);
+    const char **contracts = cf_frame_alloc(ctx, (size_t)count * sizeof *contracts);
 
     if (lines == NULL || names == NULL || contracts == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -532,8 +538,8 @@ static cf_node api_group_block(cf_ctx *ctx, const site_view *view, const api_gro
 }
 
 cf_node site_page_api(cf_ctx *ctx, const site_view *view) {
-    cf_node *sections = cf_alloc(&ctx->frame, SITE_COUNT(groups) * sizeof *sections);
-    cf_node *blocks = cf_alloc(&ctx->frame, (SITE_COUNT(groups) + 2u) * sizeof *blocks);
+    cf_node *sections = cf_frame_alloc(ctx, SITE_COUNT(groups) * sizeof *sections);
+    cf_node *blocks = cf_frame_alloc(ctx, (SITE_COUNT(groups) + 2u) * sizeof *blocks);
 
     if (sections == NULL || blocks == NULL) {
         return site_page(ctx, view, SITE_GROUP_DOCS, "API reference", "api",

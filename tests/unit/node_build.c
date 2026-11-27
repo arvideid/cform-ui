@@ -138,7 +138,7 @@ static void an_arena_without_room_drops_the_children(void) {
     }
 
     cf_frame_begin(&ctx);
-    (void)cf_alloc(&ctx.frame, 1000u);
+    (void)cf_frame_alloc(&ctx, 1000u);
 
     const cf_node column = cf_col(&ctx, filled(10.0f, 10.0f), (cf_node[]){leaf(), leaf()}, 2u);
 

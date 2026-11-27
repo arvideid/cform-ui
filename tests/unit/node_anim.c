@@ -19,7 +19,7 @@ static void a_fresh_tween_answers_its_start(void) {
 
     cf_frame_begin(&ctx);
 
-    const cf_name width = cf_intern_text(&ctx.names, "width");
+    const cf_name width = cf_ctx_key(&ctx, "width");
     cf_tween *tween = cf_tween_of(&ctx, width);
 
     CF_CHECK(tween != NULL, "the block is served");
@@ -46,7 +46,7 @@ static void a_linear_tween_moves_by_the_share_of_time(void) {
 
     cf_frame_begin(&ctx);
 
-    cf_tween *tween = cf_tween_of(&ctx, cf_intern_text(&ctx.names, "width"));
+    cf_tween *tween = cf_tween_of(&ctx, cf_ctx_key(&ctx, "width"));
 
     if (tween == NULL) {
         CF_CHECK(false, "the block is served");
@@ -71,7 +71,7 @@ static void an_ease_out_settles_into_the_target(void) {
 
     cf_frame_begin(&ctx);
 
-    cf_tween *tween = cf_tween_of(&ctx, cf_intern_text(&ctx.names, "width"));
+    cf_tween *tween = cf_tween_of(&ctx, cf_ctx_key(&ctx, "width"));
 
     if (tween == NULL) {
         CF_CHECK(false, "the block is served");
@@ -97,7 +97,7 @@ static void an_aim_while_running_restarts_from_where_it_sits(void) {
 
     cf_frame_begin(&ctx);
 
-    cf_tween *tween = cf_tween_of(&ctx, cf_intern_text(&ctx.names, "width"));
+    cf_tween *tween = cf_tween_of(&ctx, cf_ctx_key(&ctx, "width"));
 
     if (tween == NULL) {
         CF_CHECK(false, "the block is served");
@@ -123,7 +123,7 @@ static void a_finished_tween_keeps_answering_its_end(void) {
 
     cf_frame_begin(&ctx);
 
-    cf_tween *tween = cf_tween_of(&ctx, cf_intern_text(&ctx.names, "width"));
+    cf_tween *tween = cf_tween_of(&ctx, cf_ctx_key(&ctx, "width"));
 
     if (tween == NULL) {
         CF_CHECK(false, "the block is served");
@@ -145,7 +145,7 @@ static void a_block_survives_rebuilds_under_its_name(void) {
         return;
     }
 
-    const cf_name width = cf_intern_text(&ctx.names, "width");
+    const cf_name width = cf_ctx_key(&ctx, "width");
     const cf_node widget = {.key = width};
     cf_tween *tween = NULL;
 

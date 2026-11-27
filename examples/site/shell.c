@@ -64,7 +64,7 @@
 #define ROUTE_KEY "cf/site/route"
 
 static char *route_of(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, ROUTE_KEY), ROUTE_BYTES);
+    return cf_state(ctx, cf_ctx_key(ctx, ROUTE_KEY), ROUTE_BYTES);
 }
 
 /* The one write a navigation makes: the shell's record, then the bar that is the

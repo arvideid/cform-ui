@@ -58,7 +58,7 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
         return node;
     }
 
-    button_data *data = cf_alloc(&ctx->frame, sizeof *data);
+    button_data *data = cf_frame_alloc(ctx, sizeof *data);
 
     if (data == NULL) {
         return node;
@@ -71,7 +71,7 @@ cf_node cf_button(cf_ctx *ctx, const char *name, cf_on_press on_press, void *use
      * from the family's base. */
     node.style =
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_BUTTON].base : cf_style_default();
-    node.key = cf_intern_text(&ctx->names, name);
+    node.key = cf_ctx_key(ctx, name);
     node.role = CF_ROLE_BUTTON;
     /* The family above is what the painter reads; this is what a bridge calls the box. */
     node.access = CF_ACCESS_BUTTON;

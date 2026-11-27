@@ -241,6 +241,28 @@ void cf_ctx_free(cf_ctx *ctx);
 void cf_frame_begin(cf_ctx *ctx);
 
 /*
+ * The name this context knows a string by. A key is what cf_state, cf_scroll_of and
+ * cf_tween_of are asked with, and what a declaration names a box by, so the same
+ * characters answered by the same context are the same number: a page that asks for
+ * "clicks" in every frame is asking for one block throughout. Names are kept for the
+ * life of the context rather than the frame, because a number handed to a stored
+ * record has to outlive the call that made it.
+ *
+ * CF_NO_NAME answers a context that was not given, an empty string, or an interner
+ * the heap refused.
+ */
+cf_name cf_ctx_key(cf_ctx *ctx, const char *chars);
+
+/*
+ * Bytes the frame owns: a declaration's payload, a view's array, anything the next
+ * cf_frame_begin wipes. The arena is the context's, so the caller never holds it, and
+ * a frame that has taken more than it was sized for gets NULL rather than a pointer
+ * past its end - the same refusal every allocator here gives, which a build answers
+ * by saying less rather than by failing the frame.
+ */
+void *cf_frame_alloc(cf_ctx *ctx, size_t size);
+
+/*
  * A block of build state keyed by an interned name. Every request under the
  * same name answers the same memory, whatever the declaration around it
  * does, and the block starts zeroed. A request larger than the one before

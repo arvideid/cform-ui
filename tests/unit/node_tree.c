@@ -65,8 +65,8 @@ static void a_declaration_becomes_a_tree(void) {
         return;
     }
 
-    const cf_name alpha = cf_intern_text(&ctx.names, "alpha");
-    const cf_name beta = cf_intern_text(&ctx.names, "beta");
+    const cf_name alpha = cf_ctx_key(&ctx, "alpha");
+    const cf_name beta = cf_ctx_key(&ctx, "beta");
     const cf_node leaves[] = {node_of(alpha, 10.0f, NULL, 0u), node_of(beta, 20.0f, NULL, 0u)};
     const cf_node root = node_of(CF_NO_NAME, 30.0f, leaves, 2u);
 
@@ -99,7 +99,7 @@ static void an_unchanged_declaration_keeps_its_slots(void) {
         return;
     }
 
-    const cf_name alpha = cf_intern_text(&ctx.names, "alpha");
+    const cf_name alpha = cf_ctx_key(&ctx, "alpha");
     const cf_node leaves[] = {node_of(alpha, 10.0f, NULL, 0u)};
     const cf_node root = node_of(CF_NO_NAME, 30.0f, leaves, 1u);
 
@@ -124,8 +124,8 @@ static void a_keyed_child_keeps_its_slot_when_siblings_swap(void) {
         return;
     }
 
-    const cf_name alpha = cf_intern_text(&ctx.names, "alpha");
-    const cf_name beta = cf_intern_text(&ctx.names, "beta");
+    const cf_name alpha = cf_ctx_key(&ctx, "alpha");
+    const cf_name beta = cf_ctx_key(&ctx, "beta");
     const cf_node before[] = {node_of(alpha, 10.0f, NULL, 0u), node_of(beta, 20.0f, NULL, 0u)};
     const cf_node after[] = {node_of(beta, 20.0f, NULL, 0u), node_of(alpha, 10.0f, NULL, 0u)};
     const cf_node first = node_of(CF_NO_NAME, 30.0f, before, 2u);
@@ -156,9 +156,9 @@ static void a_keyed_child_keeps_its_slot_when_it_moves_to_another_parent(void) {
         return;
     }
 
-    const cf_name left = cf_intern_text(&ctx.names, "left");
-    const cf_name right = cf_intern_text(&ctx.names, "right");
-    const cf_name moved = cf_intern_text(&ctx.names, "moved");
+    const cf_name left = cf_ctx_key(&ctx, "left");
+    const cf_name right = cf_ctx_key(&ctx, "right");
+    const cf_name moved = cf_ctx_key(&ctx, "moved");
     const cf_node under_left[] = {node_of(moved, 10.0f, NULL, 0u)};
     const cf_node under_right[] = {node_of(moved, 10.0f, NULL, 0u)};
     const cf_node before[] = {node_of(left, 30.0f, under_left, 1u),
@@ -190,7 +190,7 @@ static void a_vanished_node_frees_its_slot_for_the_next_one(void) {
         return;
     }
 
-    const cf_name alpha = cf_intern_text(&ctx.names, "alpha");
+    const cf_name alpha = cf_ctx_key(&ctx, "alpha");
     const cf_node two[] = {node_of(alpha, 10.0f, NULL, 0u), node_of(CF_NO_NAME, 20.0f, NULL, 0u)};
     const cf_node one[] = {node_of(alpha, 10.0f, NULL, 0u)};
     const cf_node with_replacement[] = {node_of(alpha, 10.0f, NULL, 0u),
@@ -253,7 +253,7 @@ static void a_duplicate_key_becomes_a_second_node(void) {
         return;
     }
 
-    const cf_name shared = cf_intern_text(&ctx.names, "shared");
+    const cf_name shared = cf_ctx_key(&ctx, "shared");
     const cf_node children[] = {node_of(shared, 10.0f, NULL, 0u), node_of(shared, 20.0f, NULL, 0u)};
     const cf_node root = node_of(CF_NO_NAME, 30.0f, children, 2u);
 
@@ -309,7 +309,7 @@ static void an_undeclared_frame_yields_no_view(void) {
         return;
     }
 
-    const cf_name alpha = cf_intern_text(&ctx.names, "alpha");
+    const cf_name alpha = cf_ctx_key(&ctx, "alpha");
     const cf_node children[] = {node_of(alpha, 10.0f, NULL, 0u)};
     const cf_node root = node_of(CF_NO_NAME, 30.0f, children, 1u);
 
@@ -336,7 +336,7 @@ static void layout_reads_the_diffed_tree(void) {
         return;
     }
 
-    const cf_name box = cf_intern_text(&ctx.names, "box");
+    const cf_name box = cf_ctx_key(&ctx, "box");
     cf_node children[] = {node_of(box, 10.0f, NULL, 0u)};
     children[0].measure = fixed_measure;
     /* The measure answers only an auto axis; a declared width settles first. */

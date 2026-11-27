@@ -223,57 +223,57 @@ static const char *const rule_names[] = {"row",    "column", "wrap",  "gap",
 /* The state each chapter reads back: keyed blocks in the arena that outlives
  * the frame, so a rebuild cannot lose what a click wrote. */
 static uint32_t *click_count(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "clicks"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "clicks"), sizeof(uint32_t));
 }
 
 static bool *switch_off(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "off"), sizeof(bool));
+    return cf_state(ctx, cf_ctx_key(ctx, "off"), sizeof(bool));
 }
 
 static bool *narrow_text(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "narrow"), sizeof(bool));
+    return cf_state(ctx, cf_ctx_key(ctx, "narrow"), sizeof(bool));
 }
 
 static bool *badge_in_flow(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "flow"), sizeof(bool));
+    return cf_state(ctx, cf_ctx_key(ctx, "flow"), sizeof(bool));
 }
 
 static uint32_t *picked_rule(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "rule"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "rule"), sizeof(uint32_t));
 }
 
 static uint32_t *picked_plan(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "plan"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "plan"), sizeof(uint32_t));
 }
 
 static uint32_t *picked_ease(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "ease"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "ease"), sizeof(uint32_t));
 }
 
 /* Which chip the keyboard chapter's row last answered. The number is what the
  * press carries, so the one handler behind the pointer and the key has nothing
  * to look the name up in. */
 static uint32_t *answered_chip(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "answered"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "answered"), sizeof(uint32_t));
 }
 
 /* Whether the keyboard chapter has a second control in its row. One press adds it
  * and one press takes it away, which is the whole of a dialog as far as the
  * keyboard is concerned: the box that held the focus stops being declared. */
 static bool *dialog_box(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "dialog"), sizeof(bool));
+    return cf_state(ctx, cf_ctx_key(ctx, "dialog"), sizeof(bool));
 }
 
 /* Whether the relation chapter declares its note this frame. The button's own name never changes,
  * so the box that carries the relation is the same box on both sides of the press. */
 static bool *note_box(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "note"), sizeof(bool));
+    return cf_state(ctx, cf_ctx_key(ctx, "note"), sizeof(bool));
 }
 
 /* The one tween the motion chapter runs, in the keyed block that outlives the
  * frame it was aimed in. */
 static cf_tween *slide_tween(cf_ctx *ctx) {
-    return cf_tween_of(ctx, cf_intern_text(&ctx->names, "slide"));
+    return cf_tween_of(ctx, cf_ctx_key(ctx, "slide"));
 }
 
 /* Which end the tween is aimed at: the block carries the answer, so neither the
@@ -285,14 +285,14 @@ static bool aimed_far(const cf_tween *tween) {
 /* How many rows the list's factory was asked for this frame, read back under
  * the list as the virtualization it is meant to show. */
 static uint32_t *rows_built(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "built"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "built"), sizeof(uint32_t));
 }
 
 /* What the field held the last time Enter asked that it be done with. The bytes go
  * into the keyed block rather than into the frame: the ask happens in a dispatch and
  * the line that says so is written by whichever build comes after it. */
 static char *submitted(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "submitted"), TYPED_BYTES);
+    return cf_state(ctx, cf_ctx_key(ctx, "submitted"), TYPED_BYTES);
 }
 
 static void count_click(cf_ctx *ctx, cf_id node, void *user_data) {
@@ -329,7 +329,7 @@ static void submit_entry(cf_event *event, void *user_data) {
  * not the ones that moved the caret, which is the difference a page that validates as you
  * type lives on: it re-reads the value here rather than on every arrow key. */
 static uint32_t *change_count(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "changes"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "changes"), sizeof(uint32_t));
 }
 
 static void note_change(cf_event *event, void *user_data) {
@@ -441,7 +441,7 @@ static cf_scrollbar panel_bar(void) {
 }
 
 static cf_scroll *panel_scroll(cf_ctx *ctx) {
-    return cf_scroll_of(ctx, cf_intern_text(&ctx->names, "panel"));
+    return cf_scroll_of(ctx, cf_ctx_key(ctx, "panel"));
 }
 
 /* The thumb holds the pointer from its press to its release, so the drag keeps
@@ -449,7 +449,7 @@ static cf_scroll *panel_scroll(cf_ctx *ctx) {
 static void drag_thumb(cf_event *event, void *user_data) {
     cf_ctx *ctx = user_data;
     cf_scroll *held = panel_scroll(ctx);
-    thumb_drag *drag = cf_state(ctx, cf_intern_text(&ctx->names, "thumb"), sizeof *drag);
+    thumb_drag *drag = cf_state(ctx, cf_ctx_key(ctx, "thumb"), sizeof *drag);
 
     if (held == NULL || drag == NULL) {
         return;
@@ -512,7 +512,7 @@ static cf_style wrap_row(float gap) {
 /* One line of text that takes the width its container gives it and breaks as
  * often as that width asks - the measure, not a guess, sizes the box. */
 static cf_node make_prose(gallery_host *host, cf_ctx *ctx, const char *chars, cf_color ink) {
-    cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
+    cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);
 
     if (content == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -530,7 +530,7 @@ static cf_node make_prose(gallery_host *host, cf_ctx *ctx, const char *chars, cf
  * the paint walk closes the last one with the ellipsis it asked for. */
 static cf_node make_capped(gallery_host *host, cf_ctx *ctx, const char *chars, uint32_t lines,
                            cf_color ink) {
-    cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
+    cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);
 
     if (content == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -1045,7 +1045,7 @@ static cf_node make_grid_demo(gallery_host *host, cf_ctx *ctx) {
      * the pass runs. That pass is not this function's: an array riding this
      * stack leaves the grid sizing whatever the pointer reached once the frame
      * unwound, so both arrays come out of the arena the pass still reads. */
-    cf_track *tracks = cf_alloc(&ctx->frame, (GRID_COLUMNS + GRID_ROWS) * sizeof *tracks);
+    cf_track *tracks = cf_frame_alloc(ctx, (GRID_COLUMNS + GRID_ROWS) * sizeof *tracks);
 
     if (tracks == NULL) {
         return (cf_node){.style = cf_style_default()};
@@ -1282,7 +1282,7 @@ static cf_node make_leaving_demo(gallery_host *host, cf_ctx *ctx) {
 /* Which of the announced controls the page last heard from, so the line under the row can say
  * that a box with no name anywhere is still a working control. */
 static uint32_t *spoken_control(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "spoken"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "spoken"), sizeof(uint32_t));
 }
 
 static const char *const spoken_names[] = {"the one named on its face",
@@ -1342,7 +1342,7 @@ static cf_node make_words_demo(gallery_host *host, cf_ctx *ctx) {
 /* How many times the page has made news since it opened, which is the number the live region below
  * is rewritten from. */
 static uint32_t *news_count(cf_ctx *ctx) {
-    return cf_state(ctx, cf_intern_text(&ctx->names, "news"), sizeof(uint32_t));
+    return cf_state(ctx, cf_ctx_key(ctx, "news"), sizeof(uint32_t));
 }
 
 static void make_the_news(cf_ctx *ctx, cf_id node, void *user_data) {
@@ -1406,13 +1406,13 @@ static cf_node make_related_demo(gallery_host *host, cf_ctx *ctx) {
 
     cf_node caption = cf_label(ctx, (cf_string){host->caption_bytes, (uint32_t)caption_length},
                                &host->body, host->theme->muted);
-    caption.key = cf_intern_text(&ctx->names, "signature-caption");
+    caption.key = cf_ctx_key(ctx, "signature-caption");
     entry.described_by = caption.key;
 
     cf_node opener = make_button(host, ctx, "toggle the note", flip, shown);
     /* The key of the box the press writes in and out of the page. Nothing is stored behind it: the
      * walk looks the name up in the tree it is already walking, so the answer follows the frame. */
-    opener.controls = cf_intern_text(&ctx->names, "signature-note");
+    opener.controls = cf_ctx_key(ctx, "signature-note");
 
     const int relate_length = snprintf(host->relate_bytes, sizeof host->relate_bytes,
                                        "the note the button controls is %s",

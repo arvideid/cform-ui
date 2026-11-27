@@ -23,7 +23,7 @@ static void a_requested_block_starts_zeroed(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
 
@@ -41,7 +41,7 @@ static void the_same_key_answers_the_same_memory(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
 
@@ -59,7 +59,7 @@ static void a_block_survives_rebuilds(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
     int *block = cf_state(&ctx, tab, sizeof(int));
@@ -87,7 +87,7 @@ static void a_block_outlives_the_node_that_requested_it(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
     const cf_node with_it = node_of(tab);
 
     cf_frame_begin(&ctx);
@@ -118,7 +118,7 @@ static void an_unrequested_block_retires(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
     int *block = cf_state(&ctx, tab, sizeof(int));
@@ -149,7 +149,7 @@ static void a_grown_block_keeps_its_contents(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
     int *small = cf_state(&ctx, tab, sizeof(int));
@@ -174,8 +174,8 @@ static void a_retired_block_returns_its_bytes(void) {
         return;
     }
 
-    const cf_name first = cf_intern_text(&ctx.names, "first");
-    const cf_name second = cf_intern_text(&ctx.names, "second");
+    const cf_name first = cf_ctx_key(&ctx, "first");
+    const cf_name second = cf_ctx_key(&ctx, "second");
 
     cf_frame_begin(&ctx);
     CF_CHECK(cf_state(&ctx, first, 256u) != NULL, "the first block is served");
@@ -216,7 +216,7 @@ static void state_does_not_accrue_as_a_page_runs(void) {
             char name[16];
             snprintf(name, sizeof name, "r%u-%u", round, i);
 
-            if (cf_state(&ctx, cf_intern_text(&ctx.names, name), 64u) == NULL) {
+            if (cf_state(&ctx, cf_ctx_key(&ctx, name), 64u) == NULL) {
                 served = false;
             }
         }
@@ -248,7 +248,7 @@ static void a_block_larger_than_the_context_starts_with_is_served(void) {
     }
 
     cf_frame_begin(&ctx);
-    char *block = cf_state(&ctx, cf_intern_text(&ctx.names, "buffer"), 1024u * 1024u);
+    char *block = cf_state(&ctx, cf_ctx_key(&ctx, "buffer"), 1024u * 1024u);
     CF_CHECK(block != NULL, "a state block is not capped by the arena a context began with");
 
     if (block != NULL) {
@@ -270,8 +270,7 @@ static void a_nameless_request_is_refused(void) {
     cf_frame_begin(&ctx);
 
     CF_CHECK(cf_state(&ctx, CF_NO_NAME, sizeof(int)) == NULL, "CF_NO_NAME names no block");
-    CF_CHECK(cf_state(&ctx, cf_intern_text(&ctx.names, "zero"), 0u) == NULL,
-             "a zero size asks for no block");
+    CF_CHECK(cf_state(&ctx, cf_ctx_key(&ctx, "zero"), 0u) == NULL, "a zero size asks for no block");
 
     cf_ctx_free(&ctx);
 }
@@ -288,7 +287,7 @@ static void a_growth_that_moves_the_block_keeps_its_contents(void) {
         return;
     }
 
-    const cf_name tab = cf_intern_text(&ctx.names, "tab");
+    const cf_name tab = cf_ctx_key(&ctx, "tab");
 
     cf_frame_begin(&ctx);
     uint32_t *block = cf_state(&ctx, tab, sizeof(uint32_t));

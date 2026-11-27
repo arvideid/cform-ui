@@ -97,7 +97,7 @@ void cf_app_run(const cf_app_config *config) {
      * one window can still be asked to move bytes somewhere else entirely, and a
      * host that names nowhere hands NULL. */
     ctx.clipboard = config->clipboard;
-    const cf_name inspector_key = cf_intern_text(&ctx.names, INSPECTOR_KEY);
+    const cf_name inspector_key = cf_ctx_key(&ctx, INSPECTOR_KEY);
     bool painted = false;
     /* The shape the backend was last told to show. A window opens as an arrow, so
      * that is what the shell believes it has until a frame says otherwise. */

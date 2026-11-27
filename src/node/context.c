@@ -87,6 +87,22 @@ void cf_frame_begin(cf_ctx *ctx) {
     }
 }
 
+cf_name cf_ctx_key(cf_ctx *ctx, const char *chars) {
+    if (ctx == NULL || chars == NULL || chars[0] == '\0') {
+        return CF_NO_NAME;
+    }
+
+    return cf_intern_text(&ctx->names, chars);
+}
+
+void *cf_frame_alloc(cf_ctx *ctx, size_t size) {
+    if (ctx == NULL) {
+        return NULL;
+    }
+
+    return cf_alloc(&ctx->frame, size);
+}
+
 const cf_tree *cf_frame_tree(const cf_ctx *ctx) {
     if (ctx == NULL || !ctx->layout_ready) {
         return NULL;

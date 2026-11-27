@@ -27,7 +27,7 @@ static void a_fresh_block_starts_at_the_start(void) {
 
     cf_frame_begin(&ctx);
 
-    const cf_name list = cf_intern_text(&ctx.names, "list");
+    const cf_name list = cf_ctx_key(&ctx, "list");
     cf_scroll *scroll = cf_scroll_of(&ctx, list);
 
     CF_CHECK(scroll != NULL, "the block is served");
@@ -130,7 +130,7 @@ static void a_block_survives_the_rebuilds_of_the_node_that_scrolls(void) {
         return;
     }
 
-    const cf_name list = cf_intern_text(&ctx.names, "list");
+    const cf_name list = cf_ctx_key(&ctx, "list");
     const cf_node scroller = {.key = list};
     cf_scroll *scroll = NULL;
 

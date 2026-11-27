@@ -634,7 +634,7 @@ static bool tap(const char *name) {
  * it states the number and lets the next build put it through the scroller's own
  * inset. */
 static bool page_scroll_to(float offset) {
-    cf_scroll *held = cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+    cf_scroll *held = cf_scroll_of(&session, cf_ctx_key(&session, "page"));
 
     if (held == NULL) {
         printf("    FAIL %s:%d: the page has no scroller to walk\n", __FILE__, __LINE__);
@@ -1668,7 +1668,7 @@ static void the_wheel_walks_the_page_it_lands_on(void) {
 
     run_session(current_size(), hands, at);
 
-    const cf_scroll *held = cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+    const cf_scroll *held = cf_scroll_of(&session, cf_ctx_key(&session, "page"));
 
     CF_CHECK(held != NULL && held->offset >= 150.0f,
              "two notches walk the document toward its end");
@@ -1692,7 +1692,7 @@ static void the_panel_keeps_its_own_wheel_and_reveals_its_rows(void) {
         return;
     }
 
-    const cf_scroll *page_before = cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+    const cf_scroll *page_before = cf_scroll_of(&session, cf_ctx_key(&session, "page"));
     const float page_offset = page_before != NULL ? page_before->offset : 0.0f;
 
     /* One wheel unit is forty-eight pixels; the pane's eight rows of sixty
@@ -1700,8 +1700,8 @@ static void the_panel_keeps_its_own_wheel_and_reveals_its_rows(void) {
     step(wheel_at(first.x + first.width / 2.0f, first.y + first.height / 2.0f, 4.0f));
     end_session();
 
-    const cf_scroll *panel = cf_scroll_of(&session, cf_intern_text(&session.names, "panel"));
-    const cf_scroll *page = cf_scroll_of(&session, cf_intern_text(&session.names, "page"));
+    const cf_scroll *panel = cf_scroll_of(&session, cf_ctx_key(&session, "panel"));
+    const cf_scroll *page = cf_scroll_of(&session, cf_ctx_key(&session, "page"));
 
     CF_CHECK(panel != NULL && panel->offset > 0.0f, "the pane walked its own content");
     CF_CHECK(page != NULL && fabsf(page->offset - page_offset) < 1.0f,

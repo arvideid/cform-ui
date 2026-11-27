@@ -112,7 +112,7 @@ static void append_edge(cf_arena *arena, cf_command_list *out, cf_rect rect) {
  * line the arena cannot hold draws nothing. */
 static void append_line(cf_ctx *ctx, cf_command_list *out, const cf_text_stack *fonts,
                         cf_rect panel, uint32_t line, float height, const char *format, ...) {
-    char *bytes = cf_alloc(&ctx->frame, LINE_BYTES);
+    char *bytes = cf_frame_alloc(ctx, LINE_BYTES);
 
     if (bytes == NULL) {
         return;

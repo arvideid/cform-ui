@@ -1198,13 +1198,13 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
 
     /* The handler's block lives in the frame arena beside the frame that declared
      * it: both are read by this frame's dispatch alone. */
-    field_data *data = cf_alloc(&ctx->frame, sizeof *data);
+    field_data *data = cf_frame_alloc(ctx, sizeof *data);
 
     if (data == NULL) {
         return node;
     }
 
-    node.key = cf_intern_text(&ctx->names, name);
+    node.key = cf_ctx_key(ctx, name);
 
     *data = (field_data){.ctx = ctx,
                          .text = text,
@@ -1254,7 +1254,7 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
                                                                   : (cf_color){0u, 0u, 0u, 255u}};
 
     if (stack != NULL && stack->fonts != NULL && stack->count > 0u) {
-        cf_text_content *content = cf_alloc(&ctx->frame, sizeof *content);
+        cf_text_content *content = cf_frame_alloc(ctx, sizeof *content);
 
         if (content != NULL) {
             *content = content_of(data);

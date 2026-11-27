@@ -62,15 +62,15 @@ cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint
         return node;
     }
 
-    scroll_data *data = cf_alloc(&ctx->frame, sizeof *data);
-    cf_node *content = cf_alloc(&ctx->frame, sizeof *content);
-    cf_node *viewport_children = cf_alloc(&ctx->frame, sizeof *viewport_children);
+    scroll_data *data = cf_frame_alloc(ctx, sizeof *data);
+    cf_node *content = cf_frame_alloc(ctx, sizeof *content);
+    cf_node *viewport_children = cf_frame_alloc(ctx, sizeof *viewport_children);
 
     if (data == NULL || content == NULL || viewport_children == NULL) {
         return node;
     }
 
-    *data = (scroll_data){.ctx = ctx, .key = cf_intern_text(&ctx->names, name)};
+    *data = (scroll_data){.ctx = ctx, .key = cf_ctx_key(ctx, name)};
 
     const cf_node *carried = cf_children(ctx, children, child_count);
 

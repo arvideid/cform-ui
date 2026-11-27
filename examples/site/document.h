@@ -231,7 +231,7 @@ static inline cf_node site_foot(cf_ctx *ctx, const site_view *view, const site_e
  */
 static inline cf_node site_pager_step(cf_ctx *ctx, const site_view *view, const char *word,
                                       const site_entry *entry, cf_on_press go_to) {
-    char *label = cf_alloc(&ctx->frame, SITE_STEP_BYTES);
+    char *label = cf_frame_alloc(ctx, SITE_STEP_BYTES);
 
     if (label == NULL) {
         return (cf_node){.style = cf_style_default()};

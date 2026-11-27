@@ -993,8 +993,8 @@ static void a_relation_names_the_box_the_build_keyed(void) {
         return;
     }
 
-    const cf_name caption_key = cf_intern_text(&ctx.names, "signature-caption");
-    const cf_name note_key = cf_intern_text(&ctx.names, "signature-note");
+    const cf_name caption_key = cf_ctx_key(&ctx, "signature-caption");
+    const cf_name note_key = cf_ctx_key(&ctx, "signature-note");
 
     cf_node field = box_node(CF_ACCESS_TEXT_BOX);
     state_named(&field, "Signature");
@@ -1063,7 +1063,7 @@ static void a_relation_to_a_box_that_is_not_declared_yet_answers_none(void) {
         return;
     }
 
-    const cf_name note_key = cf_intern_text(&ctx.names, "note");
+    const cf_name note_key = cf_ctx_key(&ctx, "note");
 
     cf_node opener = box_node(CF_ACCESS_BUTTON);
     state_named(&opener, "Show note");
@@ -1121,8 +1121,8 @@ static void a_key_held_by_a_wrapper_or_a_switched_off_box_is_no_relation(void) {
         return;
     }
 
-    const cf_name wrapper_key = cf_intern_text(&ctx.names, "wrapper");
-    const cf_name note_key = cf_intern_text(&ctx.names, "gone-note");
+    const cf_name wrapper_key = cf_ctx_key(&ctx, "wrapper");
+    const cf_name note_key = cf_ctx_key(&ctx, "gone-note");
 
     /* Announced by nothing: the box is in the tree and out of the reading. */
     cf_node wrapper = box_node(CF_ACCESS_NONE);
@@ -1181,8 +1181,8 @@ static void naming_another_box_is_a_change_the_diff_sees(void) {
         return;
     }
 
-    const cf_name first_key = cf_intern_text(&ctx.names, "first-note");
-    const cf_name second_key = cf_intern_text(&ctx.names, "second-note");
+    const cf_name first_key = cf_ctx_key(&ctx, "first-note");
+    const cf_name second_key = cf_ctx_key(&ctx, "second-note");
 
     cf_node first = box_node(CF_ACCESS_LABEL);
     state_named(&first, "first note");
