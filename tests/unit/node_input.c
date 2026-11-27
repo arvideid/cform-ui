@@ -2085,6 +2085,179 @@ static void a_report_asks_the_door_the_node_declared(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * One pane over content three times its height, built by hand because this tier links no widget:
+ * the role is what makes an ancestor worth walking, the pane's key is where its offset is kept, and
+ * the last row carries the key a reveal is asked with. Nothing here reads the offset back into the
+ * layout the way cf_scroller does - the assertions are about the move the frame makes, not about
+ * where the rows end up next frame.
+ */
+typedef struct scroll_page {
+    cf_node rows[3];
+    cf_node content;
+    cf_node pane;
+    cf_node root;
+    cf_name pane_key;
+    cf_name deep_key;
+} scroll_page;
+
+static void scroll_page_of(cf_ctx *ctx, scroll_page *page) {
+    page->pane_key = cf_ctx_key(ctx, "pane");
+    page->deep_key = cf_ctx_key(ctx, "deep");
+
+    for (uint32_t i = 0u; i < 3u; ++i) {
+        page->rows[i] = box(200.0f, 100.0f, NULL, NULL);
+    }
+
+    page->rows[2].key = page->deep_key;
+
+    page->content = box(200.0f, 300.0f, NULL, NULL);
+    page->content.style.direction = CF_DIRECTION_COLUMN;
+    page->content.style.flex_shrink = 0.0f;
+    page->content.children = page->rows;
+    page->content.child_count = 3u;
+
+    page->pane = box(200.0f, 100.0f, NULL, NULL);
+    page->pane.key = page->pane_key;
+    page->pane.role = CF_ROLE_SCROLL;
+    page->pane.style.direction = CF_DIRECTION_COLUMN;
+    page->pane.style.clips_content = true;
+    page->pane.children = &page->content;
+    page->pane.child_count = 1u;
+
+    page->root = box(200.0f, 100.0f, NULL, NULL);
+    page->root.children = &page->pane;
+    page->root.child_count = 1u;
+}
+
+/* The row three panes deep, its pane, and the content box between them. */
+static void slots_of(const cf_ctx *ctx, uint32_t *pane, uint32_t *content, uint32_t *deep,
+                     uint32_t *first) {
+    *pane = child_slot(ctx, 0u);
+    *content = child_of(ctx, *pane, 0u);
+    *first = child_of(ctx, *content, 0u);
+    *deep = child_of(ctx, *content, 2u);
+}
+
+/*
+ * The way back from a word to a box, and the move a word can ask for: a key is what a build
+ * declares and what a caller keeps, so an address's fragment or a dialog's title is enough to reach
+ * the box it named - and reaching it means bringing it into the pane that was scrolling past it.
+ */
+static void a_box_named_by_its_key_is_brought_into_the_pane_above_it(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    scroll_page page;
+    scroll_page_of(&ctx, &page);
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &page.root);
+    lay_out(&ctx, 200.0f, 100.0f);
+
+    uint32_t pane_slot;
+    uint32_t content_slot;
+    uint32_t deep_slot;
+    uint32_t first_slot;
+    slots_of(&ctx, &pane_slot, &content_slot, &deep_slot, &first_slot);
+
+    CF_CHECK(cf_slot_named(&ctx, page.deep_key) == deep_slot,
+             "a key answers with the box it was declared on");
+    CF_CHECK(cf_slot_named(&ctx, page.pane_key) == pane_slot,
+             "and finds the pane by the word its offset is kept under");
+    CF_CHECK(cf_slot_named(&ctx, cf_ctx_key(&ctx, "nowhere")) == CF_NO_LINK,
+             "a key no box carries answers nothing");
+    CF_CHECK(cf_slot_named(&ctx, CF_NO_NAME) == CF_NO_LINK, "no key is no answer");
+    CF_CHECK(cf_slot_named(NULL, page.deep_key) == CF_NO_LINK,
+             "a lookup handed no context reaches no box");
+
+    CF_CHECK(cf_reveal(&ctx, deep_slot), "a row measured below its pane is brought in");
+
+    const cf_scroll *held = cf_scroll_of(&ctx, page.pane_key);
+
+    CF_CHECK(held != NULL && held->offset == 200.0f,
+             "the pane walked the whole distance from the row's bottom edge to its own");
+    CF_CHECK(cf_frame_requested(&ctx), "and asked for the frame that will show the move");
+
+    CF_CHECK(!cf_reveal(&ctx, CF_NO_LINK), "no box is nothing to bring in");
+    CF_CHECK(!cf_reveal(NULL, deep_slot), "as is a reveal handed no context");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The page noticing something outside its own frames - an address pasted into a bar, a message that
+ * landed - asks while it is declaring, before anything it has just built has been measured. The ask
+ * waits for the pass that measures the frame, is honoured by the key rather than by the slot held
+ * when it was made, and belongs to that one frame: a reveal is a place to put a box, not a wish
+ * that outlives the run that could not carry it.
+ */
+static void a_reveal_asked_before_the_page_is_measured_lands_with_the_frame_that_measures_it(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    scroll_page page;
+    scroll_page_of(&ctx, &page);
+
+    /* The first frame of a run holds no boxes yet, so the name a caller has is not one the tree
+     * can answer, and an ask with nothing behind it is refused rather than kept. */
+    cf_frame_begin(&ctx);
+    CF_CHECK(!cf_reveal(&ctx, cf_slot_named(&ctx, page.deep_key)),
+             "a tree that holds nothing brings in nothing");
+    cf_diff(&ctx, &page.root);
+    lay_out(&ctx, 200.0f, 100.0f);
+
+    uint32_t pane_slot;
+    uint32_t content_slot;
+    uint32_t deep_slot;
+    uint32_t first_slot;
+    slots_of(&ctx, &pane_slot, &content_slot, &deep_slot, &first_slot);
+
+    /* An ask that never reaches a layout pass dies with the frame that made it: the pass that
+     * would have honoured it is this one, not some later one where the reader has moved on. */
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_reveal(&ctx, deep_slot), "the row a build names is taken as an ask");
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &page.root);
+    lay_out(&ctx, 200.0f, 100.0f);
+
+    CF_CHECK(cf_scroll_of(&ctx, page.pane_key) != NULL &&
+                 cf_scroll_of(&ctx, page.pane_key)->offset == 0.0f,
+             "and a frame that measured nothing leaves the pane where it was");
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_reveal(&ctx, deep_slot), "asked again, the row is taken");
+    CF_CHECK(!cf_reveal(&ctx, first_slot),
+             "while a box no key names cannot be found again, so it is no ask at all");
+    cf_diff(&ctx, &page.root);
+    lay_out(&ctx, 200.0f, 100.0f);
+
+    const cf_scroll *held = cf_scroll_of(&ctx, page.pane_key);
+
+    CF_CHECK(held != NULL && held->offset == 200.0f,
+             "the pass that measured the page brought the row in by its name");
+    CF_CHECK(cf_frame_requested(&ctx), "and asked for the frame that paints the move");
+
+    /* The other half of the contract: a key from a page that is gone reads as absent, so a caller
+     * holding an old slug is told there is no such box instead of being shown wherever the row
+     * used to be. */
+    page.content.child_count = 1u;
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &page.root);
+    lay_out(&ctx, 200.0f, 100.0f);
+
+    CF_CHECK(cf_slot_named(&ctx, page.deep_key) == CF_NO_LINK,
+             "a box the last frame retired answers no lookup");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node input\n");
 
@@ -2125,6 +2298,8 @@ int main(void) {
     CF_RUN(nothing_becomes_focused_by_itself);
     CF_RUN(the_focused_box_is_the_one_the_key_asks);
     CF_RUN(a_report_asks_the_door_the_node_declared);
+    CF_RUN(a_box_named_by_its_key_is_brought_into_the_pane_above_it);
+    CF_RUN(a_reveal_asked_before_the_page_is_measured_lands_with_the_frame_that_measures_it);
 
     return CF_REPORT();
 }
