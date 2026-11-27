@@ -382,6 +382,10 @@ jobs:
           cp dist/site.html public/index.html
           cp dist/gallery.html public/playground/gallery.html
           cp dist/releases.json public/releases.json
+          # The mirror is flat: `repo-docs/<name>` is the whole path a reader follows,
+          # so the README has to be copied under its own name beside the documents it
+          # links to rather than left at the root the bundle does not serve.
+          cp README.md public/repo-docs/
           cp docs/*.md public/repo-docs/
           # The three files a canvas cannot be: the release list, the text mirror's
           # index and the sitemap. Generated here rather than committed, because a

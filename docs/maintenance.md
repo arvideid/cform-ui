@@ -16,7 +16,7 @@ run locally is a gate that will be argued with.
 | Layer graph | `python3 tools/check_includes.py` | a source or a public header includes a layer it may not link, reaches into `src/` internals, or lets a raw value do a sentinel's job |
 | Version consistency | `cmake -P cmake/cform_version.cmake --check` | `CMakeLists.txt` and [`include/cf/version.h`](../include/cf/version.h) state different numbers, which is a release that lies |
 | API surface | `python3 tools/check_api.py --baseline tests/api/0.1.0.txt` | the surface differs from the last release by more than the version allows. `--probe` checks the classifier itself, so a rule nobody can trigger does not survive |
-| Documentation drift | `python3 tools/check_docs.py` | a sentence names a slot count or an ABI number the header disagrees with; a link lands nowhere; a header is named by no document; the API page and the headers disagree in either direction; a site route is spelled differently in its two homes |
+| Documentation drift | `python3 tools/check_docs.py` | a sentence names a slot count or an ABI number the header disagrees with; a link lands nowhere; a header is named by no document; the API page and the headers disagree in either direction; a site route is spelled differently in its two homes; a page the text mirror links to is not one the deploy copies |
 | Site style discipline | the same `check_docs.py` | a page states a colour, a length or a radius that `tokens.h` was supposed to own |
 | Tests | `cmake --preset dev && cmake --build --preset dev && ctest --preset dev` | anything, including a page of the docs site that renders no heading |
 | Sanitisers | the `sanitize` job: ASan and UBSan over the whole suite | a frame writes outside the arena it was handed |

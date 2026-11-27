@@ -32,8 +32,10 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 # The documents a person arrives to read, in the order a reader wants them: what it is,
-# how it is built, how to use it, how to change it.
+# how it is built, how to use it, how to change it. The README is first because it is
+# the one that answers "what is this", and the deploy copies it flat beside the rest.
 DOC_ORDER = [
+    "README.md",
     "principles.md",
     "getting-started.md",
     "backend-abi.md",
@@ -226,11 +228,14 @@ def main():
     (bundle / "releases").mkdir(parents=True, exist_ok=True)
     (bundle / "releases" / "index.html").write_text(releases_page(releases, base),
                                                     encoding="utf-8", newline="\n")
-    (bundle / "sitemap.xml").write_text(sitemap(documents, base), encoding="utf-8",
-                                        newline="\n")
+    urls = sitemap(documents, base)
+    (bundle / "sitemap.xml").write_text(urls, encoding="utf-8", newline="\n")
 
+    # Counted as the entries a crawler is sent to, not as the lines that carry them:
+    # each URL is three lines, and a deploy log that overstates by three is a number a
+    # reader cannot check against the file.
     print(f"site pages: {len(releases)} release rows, {len(documents)} document mirrors, "
-          f"{len(sitemap(documents, base).splitlines()) - 3} sitemap URLs")
+          f"{urls.count('<loc>')} sitemap URLs")
     return 0
 
 

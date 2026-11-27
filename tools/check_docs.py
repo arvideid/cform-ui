@@ -7,12 +7,13 @@ now refuses - a sentence naming how many functions a backend has to fill, and a 
 whose name appears in no document at all - so the check is derived from the source every
 run rather than remembered by a reviewer.
 
-Four rules, each printed as a sentence a stranger can act on:
+Five rules, each printed as a sentence a stranger can act on:
 
   the numbers    the count of `cf_backend`'s slots and CF_BACKEND_ABI_VERSION, as stated
                  anywhere in README.md and docs/*.md
   the links      every relative link a markdown file carries points at something
   the coverage   every public header is named by at least one document
+  the mirror     every page the text mirror links to is one the deploy publishes
   the pages      the site's prose agrees with the headers it lists, its route table
                  agrees with its navigation table, and no page states a colour,
                  a length or a radius that tokens.h has not been asked to own
@@ -34,6 +35,8 @@ SITE = ROOT / "examples" / "site"
 SHELL = ROOT / "examples" / "web" / "site_shell.html"
 API_PAGE = SITE / "page_api.c"
 NAV = SITE / "nav.h"
+RELEASE_JOB = ROOT / ".github" / "workflows" / "release.yml"
+PAGES_TOOL = ROOT / "tools" / "site_pages.py"
 
 PROSE = [ROOT / "README.md"] + sorted(DOCS.glob("*.md"))
 
@@ -300,6 +303,56 @@ def check_routes():
              "navigation row reaches")
 
 
+# The text mirror, spelled in two files: the list a browser without WebGL is handed, and
+# the copy step that puts those files where the list says they are. The name is read with
+# its slashes, because the mistake this rule exists for is a link that keeps the
+# repository's own `docs/` prefix - a pattern that stopped at a slash would let it pass.
+MIRROR_LINK = re.compile(r"repo-docs/([A-Za-z0-9_./-]+\.md)\b")
+MIRROR_COPY = re.compile(r"^\s*cp (\S+) public/repo-docs/$", re.M)
+
+
+def mirror_published():
+    """The names the release job copies into the bundle's flat text mirror."""
+    if not RELEASE_JOB.exists():
+        fail(".github/workflows/release.yml",
+             "no deploy to read the mirror's copy step from")
+        return set()
+
+    names = set()
+
+    for pattern in MIRROR_COPY.findall(RELEASE_JOB.read_text(encoding="utf-8")):
+        if "*" in pattern:
+            # `docs/*.md` publishes each document under its own name, not under `docs/`:
+            # the mirror is flat, and a reader's link is the whole path.
+            names |= {one.name for one in (ROOT / pattern.split("*")[0]).glob("*.md")}
+        else:
+            names.add(pathlib.Path(pattern).name)
+
+    return names
+
+
+def check_mirror():
+    """Every page the mirror promises is a page the deploy publishes.
+
+    A canvas is not crawled, not searchable and not drawn without WebGL2, so the shell
+    carries a plain list of links to the repository's own markdown and the release job
+    copies those files under `repo-docs/`. The list and the copy step live in different
+    files, so a name that appears in only one of them is a reader following a link into a
+    404 - the one mitigation the site makes for being a drawing, quietly missing.
+    """
+    published = mirror_published()
+
+    for path in (SHELL, PAGES_TOOL):
+        if not path.exists():
+            continue
+
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for name in MIRROR_LINK.findall(line):
+                if name not in published:
+                    fail(f"{path.relative_to(ROOT)}:{number}",
+                         f"links repo-docs/{name}, which the release job does not copy")
+
+
 def main():
     slots, abi = backend_facts()
 
@@ -309,6 +362,7 @@ def main():
     check_pages()
     check_api_page()
     check_routes()
+    check_mirror()
 
     if errors:
         print(f"docs drift: {len(errors)} problem(s)\n")
@@ -322,7 +376,8 @@ def main():
 
     print(f"docs drift: clear - a backend fills {NUMBER_WORD.get(len(slots), len(slots))} slots, "
           f"the contract is at "
-          f"ABI {abi}, every document link lands, every header is named, and no page "
+          f"ABI {abi}, every document link lands, every mirrored page is published, every "
+          "header is named, and no page "
           "states a value tokens.h does not own")
     return 0
 
