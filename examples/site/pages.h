@@ -39,7 +39,8 @@
 #define SITE_RELEASES "releases/"
 
 /* The groups, named here so a page can put its own name under the heading it lives
- * beneath and the navigation table can file it there - one spelling, two uses. */
+ * beneath and the navigation table can file it there - one spelling, and the list, the
+ * foot and the bar all read the filing rather than restating it. */
 #define SITE_GROUP_DOCS "Documentation"
 #define SITE_GROUP_PROJECT "The project"
 #define SITE_GROUP_SHOWCASE "Showcase"

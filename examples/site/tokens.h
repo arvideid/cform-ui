@@ -59,15 +59,15 @@ typedef enum site_face {
 #define DOC_GAP 24.0f
 #define BLOCK_GAP 12.0f
 /*
- * The list of pages down the left of the document: its own measure, the way across
- * to the prose, one group under the next, a group's label above its rows, and one
- * row under the next. The shell's measure is the sum of the two columns rather than
- * a fourth number somebody has to keep equal to them.
+ * The list of pages down the left of the document: its own measure, the way across to
+ * the prose, and one row under the next. The same label sits above the rows of the foot,
+ * because a group is drawn the same way wherever it is offered. The shell's measure is
+ * the sum of the two columns rather than a fourth number somebody has to keep equal to
+ * them.
  */
 #define SIDEBAR_WIDTH 240.0f
 #define SIDEBAR_GAP 40.0f
-#define SIDEBAR_GROUP_GAP 24.0f
-#define SIDEBAR_HEAD_GAP 10.0f
+#define GROUP_HEAD_GAP 10.0f
 #define SIDEBAR_ROW_GAP 4.0f
 #define SHELL_WIDTH (SIDEBAR_WIDTH + SIDEBAR_GAP + DOC_WIDTH + 2.0f * DOC_PADDING)
 /*

@@ -33,9 +33,10 @@
  * What is added here is the site's own contract: that a row of the table renders a
  * page, that the page states its heading in the title face, that the prose fits the
  * window it was offered, that a route with no browser behind it still lands somewhere,
- * that the list beside the document asks for the page a reader pressed it for, and that
- * the document moves under a wheel notch and under the Tab key - the two ways a reader
- * has of asking to see the rest of a page that does not fit.
+ * that every page is offered by a press somewhere on the first one - the list beside the
+ * document, its bar, or its foot - that the list asks for the page a reader pressed it
+ * for, and that the document moves under a wheel notch and under the Tab key - the two
+ * ways a reader has of asking to see the rest of a page that does not fit.
  *
  * The frame is built by the same function the window runs, out of document.h, rather
  * than by a copy of it drawn here. A tier that measures a hand-made layout can pass
@@ -473,6 +474,112 @@ static void a_tab_the_reader_opened_survives_the_next_frame(void) {
 }
 
 /*
+ * A short list is only allowed to mean fewer words down the left, never a page nobody can
+ * click to. The table is filed in three places - the list beside the prose, the bar, the
+ * foot under the document - so this presses for every row of the table from the first page
+ * and asks whether any of the lines that read the row's own words came back asking for its
+ * route. A row dropped from every list fails here rather than quietly becoming an address
+ * somebody has to type.
+ */
+static bool press_row(const site_entry *entry) {
+    for (uint32_t pass = 0u; pass < 2u; ++pass) {
+        if (pass > 0u) {
+            /* The foot is the last thing in the column. A notch is forty-eight points, so
+             * this is a walk past the end of any page the table holds, and the offset stops
+             * at the document's own limit instead of running off it. */
+            step((cf_event){.type = CF_EVENT_SCROLL, .wheel = {.x = 0.0f, .y = 200.0f}});
+        }
+
+        /* Every candidate is read out of one stream before any of them is pressed: a page's
+         * own H1 reads "Getting started" as well as the row does, and a press rebuilds the
+         * stream these indices came from. */
+        cf_point spots[8];
+        uint32_t found = 0u;
+
+        for (uint32_t i = 0u; i < recorded_count && found < SITE_COUNT(spots); ++i) {
+            const cf_command command = recorded[i];
+            const size_t length = strlen(entry->label);
+
+            /* Exactly the row's words, not a line that starts with them: the pager ends the
+             * document with "previous: Concepts", which is a sentence about a page rather
+             * than the row that is one. */
+            if (command.kind != CF_COMMAND_TEXT || command.text.length != (uint32_t)length ||
+                strncmp(command.text.chars, entry->label, length) != 0 ||
+                !rect_inside(command.rect, viewport)) {
+                continue;
+            }
+
+            spots[found++] = (cf_point){command.rect.x + command.rect.width / 2.0f,
+                                        command.rect.y + command.rect.height / 2.0f};
+        }
+
+        for (uint32_t i = 0u; i < found; ++i) {
+            chosen[0] = '\0';
+            step((cf_event){.type = CF_EVENT_POINTER_DOWN, .position = spots[i], .button = 1u});
+            step((cf_event){.type = CF_EVENT_POINTER_UP, .position = spots[i], .button = 1u});
+
+            if (strcmp(chosen, entry->route) == 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+static void every_page_is_offered_from_the_first_one(void) {
+    showing = site_entry_at(0u);
+
+    for (uint32_t row = 0u; row < SITE_NAV_COUNT; ++row) {
+        const site_entry *entry = site_entry_at(row);
+        CF_CHECK(entry != NULL, "the table has a row at every index");
+        if (entry == NULL) {
+            continue;
+        }
+
+        start(surfaces[0]);
+        CF_CHECK(press_row(entry), "a press somewhere on the first page asks for this one");
+        end();
+    }
+}
+
+/*
+ * The same rule seen from the other side: the list down the left is short on purpose, and
+ * what makes it short is that it holds the documentation and nothing else. Judged where the
+ * two columns are side by side, because that is the only window in which "down the left"
+ * means something - on a phone the list is above the prose and every line starts near the
+ * same edge.
+ */
+static void the_list_holds_only_the_pages_that_document_the_library(void) {
+    showing = site_entry_at(0u);
+    start(surfaces[0]);
+
+    for (uint32_t row = 0u; row < SITE_NAV_COUNT; ++row) {
+        const site_entry *entry = site_entry_at(row);
+        const size_t length = strlen(entry->label);
+        uint32_t listed = 0u;
+
+        for (uint32_t i = 0u; i < recorded_count; ++i) {
+            const cf_command command = recorded[i];
+
+            if (command.kind == CF_COMMAND_TEXT && command.text.length == (uint32_t)length &&
+                strncmp(command.text.chars, entry->label, length) == 0 &&
+                command.rect.x <= SIDEBAR_WIDTH) {
+                listed++;
+            }
+        }
+
+        if (strcmp(entry->group, SITE_GROUP_DOCS) == 0) {
+            CF_CHECK(listed == 1u, "a page that documents the library is in the list");
+        } else {
+            CF_CHECK(listed == 0u, "a page the list does not document is not in the list");
+        }
+    }
+
+    end();
+}
+
+/*
  * The list beside the document is the site's contents, so a row of it has to ask for
  * the page it names. This is as much of a navigation as a build with no address bar can
  * check: the press reaches the driver's callback carrying the row it was aimed at, and
@@ -639,6 +746,8 @@ int main(void) {
     CF_RUN(a_build_with_no_browser_answers_no_route);
     CF_RUN(every_page_paints_at_every_surface);
     CF_RUN(a_tab_the_reader_opened_survives_the_next_frame);
+    CF_RUN(every_page_is_offered_from_the_first_one);
+    CF_RUN(the_list_holds_only_the_pages_that_document_the_library);
     CF_RUN(a_row_in_the_list_names_the_page_it_holds);
     CF_RUN(a_wheel_walks_the_document_wherever_it_lands);
     CF_RUN(a_tab_past_the_fold_moves_the_page);
