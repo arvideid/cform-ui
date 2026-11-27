@@ -233,6 +233,60 @@ jobs:
           path: cf_layout-${{ env.CFORM_VERSION }}.h
           retention-days: 90
 
+  # A number that gets worse is a judgement call; a number nobody kept is an argument
+  # from memory. The same logs CI archives on every build, named for the version that
+  # printed them, so `0.2.0` against `0.3.0` is two files and a diff.
+  bench:
+    name: Measure ${{ matrix.label }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux-x86_64
+          - os: windows-latest
+            label: windows-x86_64
+          - os: macos-latest
+            label: macos-aarch64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read the version the log is named for
+        run: cmake -P cmake/cform_version.cmake >> "$GITHUB_ENV"
+
+      - name: Build in Release
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCFORM_BUILD_TESTS=ON
+          cmake --build build --config Release --parallel
+
+      - name: Run the bench label
+        shell: bash
+        run: ctest --test-dir build -L bench --output-on-failure | tee "$RUNNER_TEMP/bench.log"
+
+      # The machine is part of the number: a benchmark without a host is a rumour.
+      - name: Say what measured it
+        shell: bash
+        run: |
+          {
+            echo "# cform-ui $GITHUB_REF_NAME on ${{ matrix.label }}"
+            echo
+            uname -a
+            cmake --version | head -1
+            (cc --version || clang --version) 2>/dev/null | head -1
+          } > "$RUNNER_TEMP/header.log"
+          cat "$RUNNER_TEMP/header.log" "$RUNNER_TEMP/bench.log" > "bench-${CFORM_VERSION}-${{ matrix.label }}.log"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.label }}
+          path: bench-${{ env.CFORM_VERSION }}-${{ matrix.label }}.log
+          # A year, not 90 days: the point of keeping these is the next release.
+          retention-days: 365
+
   # The notes come out of the commits, so a release cannot be published without
   # them and cannot describe a change nobody made.
   notes:
@@ -268,13 +322,13 @@ jobs:
   # chose to leave out.
   github-release:
     name: Publish the release
-    needs: [artifacts, web, notes]
+    needs: [artifacts, web, bench, notes]
     runs-on: ubuntu-latest
     steps:
       - name: Download what the release carries
         uses: actions/download-artifact@v4
         with:
-          pattern: "{package-*,amalgam,notes}"
+          pattern: "{package-*,amalgam,notes,bench-*}"
           path: dist
           merge-multiple: true
 
@@ -292,7 +346,8 @@ jobs:
           esac
 
           while IFS= read -r asset; do args+=("$asset"); done < <(
-            find dist -type f \( -name '*.tar.gz' -o -name 'cf_layout-*.h' \) | sort)
+            find dist -type f \( -name '*.tar.gz' -o -name 'cf_layout-*.h' \
+              -o -name 'bench-*.log' \) | sort)
           gh release create "$GITHUB_REF_NAME" "${args[@]}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -328,6 +383,19 @@ jobs:
           cp dist/gallery.html public/playground/gallery.html
           cp dist/releases.json public/releases.json
           cp docs/*.md public/repo-docs/
+          # The three files a canvas cannot be: the release list, the text mirror's
+          # index and the sitemap. Generated here rather than committed, because a
+          # generated file in the tree is one that disagrees with its generator.
+          python3 tools/site_pages.py --bundle public \
+            --site-url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+
+      - name: Check the bundle holds what a reader reaches for
+        run: |
+          for want in public/index.html public/releases/index.html public/sitemap.xml \
+                      public/repo-docs/index.html public/playground/gallery.html \
+                      public/releases.json; do
+            test -f "$want" || { echo "the site bundle has no $want"; exit 1; }
+          done
 
       - name: Check the Pages source is set to Actions
         # A repository still pointed at a branch answers the deploy with a 409 and

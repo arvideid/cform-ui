@@ -1,0 +1,109 @@
+name: Dependency freshness
+
+# A pin nobody looks at is a supply-chain decision that expired quietly, discovered at
+# the worst possible moment - usually while a release is being cut. This job prints the
+# gap between what this repository names and what upstream published, once a week.
+#
+# Informational, never red: a scheduled job that fails at three in the morning teaches
+# one lesson only, which is to disable it. See docs/maintenance.md for the rule a new
+# dependency has to clear before it joins this list.
+
+on:
+  schedule:
+    # Monday morning, UTC. Any commit pushed before it is in the report.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deps
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: Pinned against published
+    runs-on: ubuntu-latest
+    # The whole job is a report; a network hiccup upstream is not a problem with this
+    # repository, and a red X on a schedule nobody can act on is worse than no row.
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The pins live in two places on purpose: the build names what it compiles
+      # against, the workflows name what they install. Both are read here rather than
+      # restated, so this report cannot drift from the tree it describes.
+      - name: Read the pins from the tree
+        id: pins
+        run: |
+          sdl=$(sed -n 's/.*GIT_TAG \(release-[0-9.]*\)/\1/p' CMakeLists.txt | head -1)
+          ttf=$(sed -n 's/.*GIT_TAG \(release-[0-9.]*\)/\1/p' CMakeLists.txt | sed -n 2p)
+          emsdk=$(sed -n 's/.*EMSDK_VERSION: "\([0-9.]*\)".*/\1/p' .github/workflows/ci.yml | head -1)
+          clang=$(sed -n 's/.*clang-format==\([0-9.]*\).*/\1/p' .github/workflows/ci.yml | head -1)
+          {
+            echo "sdl=$sdl"
+            echo "ttf=$ttf"
+            echo "emsdk=$emsdk"
+            echo "clang=$clang"
+          } >> "$GITHUB_OUTPUT"
+
+      # `--refs` so peeled tag objects do not arrive as a second line per release, and
+      # `sort -V` because a version comparator is the one thing a shell can trust here:
+      # lexicographic order puts 3.10 behind 3.2.
+      - name: Compare against what upstream published
+        run: |
+          latest_tag() {
+            git ls-remote --tags --refs "$1" 2>/dev/null |
+              sed 's|.*refs/tags/||' |
+              grep -E "$2" |
+              sort -V |
+              tail -1
+          }
+
+          rows=""
+          check() {
+            local name="$1" url="$2" pattern="$3" pinned="$4"
+            local latest
+            latest="$(latest_tag "$url" "$pattern")"
+            if [ -z "$latest" ]; then
+              latest="unknown (upstream unreachable)"
+            fi
+            if [ "$latest" = "$pinned" ]; then
+              rows="$rows| $name | \`$pinned\` | $latest | current |\n"
+            else
+              rows="$rows| $name | \`$pinned\` | $latest | **behind** |\n"
+            fi
+          }
+
+          check "SDL3" https://github.com/libsdl-org/SDL \
+            '^release-[0-9.]+$' "${{ steps.pins.outputs.sdl }}"
+          check "SDL3_ttf" https://github.com/libsdl-org/SDL_ttf \
+            '^release-[0-9.]+$' "${{ steps.pins.outputs.ttf }}"
+          check "emsdk" https://github.com/emscripten-core/emsdk \
+            '^[0-9.]+$' "${{ steps.pins.outputs.emsdk }}"
+
+          # clang-format is a Python package here, so its "latest" is the index's, not a
+          # tag: pip knows the resolver's answer without this job writing one.
+          head=$(curl -fsS https://pypi.org/pypi/clang-format/json 2>/dev/null |
+            python3 -c 'import json,sys; print(json.load(sys.stdin)["info"]["version"])' ||
+            echo "unknown (index unreachable)")
+          if [ "$head" = "${{ steps.pins.outputs.clang }}" ]; then
+            rows="$rows| clang-format | \`${{ steps.pins.outputs.clang }}\` | $head | current |\n"
+          else
+            rows="$rows| clang-format | \`${{ steps.pins.outputs.clang }}\` | $head | **behind** |\n"
+          fi
+
+          {
+            echo "### Dependency freshness"
+            echo ""
+            echo "Printed $(date -u +'%Y-%m-%d %H:%M UTC') by the weekly schedule. Never"
+            echo "a gate: a pin is a choice, and the choice is a human's to make."
+            echo ""
+            echo "| dependency | pinned | published | |"
+            echo "| --- | --- | --- | --- |"
+            printf '%b' "$rows"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          printf '%b' "$rows"

@@ -32,7 +32,8 @@ jobs:
       - name: Format
         run: |
           mapfile -t sources < <(git ls-files \
-            'include/cf/*.h' 'src/*/*.[ch]' 'tests/*/*.[ch]' 'examples/*.c')
+            'include/cf/*.h' 'src/*/*.[ch]' 'tests/*/*.[ch]' 'examples/*.c' \
+            'examples/site/*.[ch]')
           clang-format --dry-run --Werror "${sources[@]}"
 
       - name: Layer graph
@@ -54,6 +55,21 @@ jobs:
 
       - name: API surface against the last release
         run: python3 tools/check_api.py --baseline tests/api/0.1.0.txt
+
+      # A document that disagrees with the header it describes is the bug, so the
+      # documents are read against the source every run: the count of slots a backend
+      # fills, the ABI number, every link, every header, and the site's prose against
+      # the headers it lists. The same script fails a colour or a length stated in a
+      # page rather than in tokens.h, which is what keeps the site's theming honest
+      # after the first contributor arrives.
+      - name: Documentation drift
+        run: python3 tools/check_docs.py
+
+      # Informational for one release: it prints the public names nothing in the tree
+      # calls, and turns red only once that list has been worked through. See
+      # docs/maintenance.md for the day it becomes a gate.
+      - name: Public reachability
+        run: python3 tools/check_reachability.py
 
       - name: Static analysis
         run: |
