@@ -130,11 +130,25 @@ static void draw_rounded_fill(SDL_Renderer *renderer, SDL_FRect rect, float radi
 }
 
 /*
+ * Twice the area of the triangle, which is what says whether a piece of the
+ * strip covers anything: a band over a side of no width has the outer edge and
+ * the inset edge on the same line, and an area of zero is the whole of it.
+ */
+static float edge_area(SDL_FPoint a, SDL_FPoint b, SDL_FPoint c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+/*
  * The stroke between the box and the box inset by its widths: two perimeters
  * built with the same corner parametrization, joined into quads. A side with
  * no width leaves its band of the strip empty, and an inner corner gives way
  * to the wider of the two sides it joins, so uneven widths stay inside the
  * outer arc.
+ *
+ * Empty means unsent rather than drawn: a quad of no area still covers a sliver
+ * of every pixel it runs along, so a border stated on one edge would paint a
+ * hairline down the three that stated nothing. Skipping the pieces with no area
+ * is what makes an uneven border draw the edges it names and no others.
  */
 static void draw_border(SDL_Renderer *renderer, SDL_FRect rect, float radius, cf_edges widths,
                         SDL_FColor color) {
@@ -171,21 +185,36 @@ static void draw_border(SDL_Renderer *renderer, SDL_FRect rect, float radius, cf
         vertices[PERIMETER_POINTS + i].tex_coord = (SDL_FPoint){0.0f, 0.0f};
     }
 
+    /* Under a hundredth of a pixel is a shape no eye separates from the field
+     * under it, and it is far below the area of the thinnest stroke a page can
+     * ask for: a hairline at a density of one is a hundred units by this measure. */
     int indices[PERIMETER_POINTS * 6u];
+    uint32_t drawn = 0u;
 
     for (uint32_t i = 0u; i < PERIMETER_POINTS; ++i) {
         const uint32_t next = (i + 1u) % PERIMETER_POINTS;
-        const uint32_t at = i * 6u;
-        indices[at] = (int)i;
-        indices[at + 1u] = (int)next;
-        indices[at + 2u] = (int)(PERIMETER_POINTS + next);
-        indices[at + 3u] = (int)i;
-        indices[at + 4u] = (int)(PERIMETER_POINTS + next);
-        indices[at + 5u] = (int)(PERIMETER_POINTS + i);
+        const float first = edge_area(outer[i], outer[next], inset[next]);
+        const float second = edge_area(outer[i], inset[next], inset[i]);
+
+        if (SDL_fabsf(first) + SDL_fabsf(second) < 0.02f) {
+            continue;
+        }
+
+        indices[drawn * 3u] = (int)i;
+        indices[drawn * 3u + 1u] = (int)next;
+        indices[drawn * 3u + 2u] = (int)(PERIMETER_POINTS + next);
+        indices[drawn * 3u + 3u] = (int)i;
+        indices[drawn * 3u + 4u] = (int)(PERIMETER_POINTS + next);
+        indices[drawn * 3u + 5u] = (int)(PERIMETER_POINTS + i);
+        drawn += 2u;
+    }
+
+    if (drawn == 0u) {
+        return;
     }
 
     SDL_RenderGeometry(renderer, NULL, vertices, (int)(PERIMETER_POINTS * 2u), indices,
-                       (int)(PERIMETER_POINTS * 6u));
+                       (int)(drawn * 3u));
 }
 
 /*
