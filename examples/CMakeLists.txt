@@ -1,12 +1,24 @@
-# Two programs, for two different reasons. `layout_only` is a build-time proof
-# rather than a demo: it links cf_layout and nothing else, so the engine stops
-# being standalone the moment a layer it must not reach is added to that line.
+# The programs a person runs, one per thing they might want to prove. `layout_only` is a build-time
+# proof rather than a demo: it links cf_layout and nothing else, so the engine stops being
+# standalone the moment a layer it must not reach is added to that line.
 add_executable(layout_only layout_only.c)
 
 target_link_libraries(layout_only PRIVATE cf_layout)
 
 if(CFORM_WARNINGS)
     target_compile_options(layout_only PRIVATE ${CFORM_WARNINGS})
+endif()
+
+# The host that owns its own loop, and the second adoption route: a program with a main loop and a
+# renderer of its own takes frames without ever calling cf_app_run. It needs no window, no font file
+# and no backend library, so it builds everywhere - which is the point of the route, and the reason
+# it sits outside the SDL block below, where the third route (the forms application) lives.
+add_executable(host_loop host_loop.c)
+
+target_link_libraries(host_loop PRIVATE cf_widget cf_theme)
+
+if(CFORM_WARNINGS)
+    target_compile_options(host_loop PRIVATE ${CFORM_WARNINGS})
 endif()
 
 if(CFORM_WITH_SDL_BACKEND)
