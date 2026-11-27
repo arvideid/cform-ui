@@ -66,7 +66,9 @@ static void frame_of(cf_ctx *ctx, clicks *seen, bool disabled) {
     cf_frame_begin(ctx);
 
     const cf_text_stack stack = {.fonts = &mono, .count = 1u};
-    cf_node label = cf_label(ctx, cf_string_of("push"), &stack, ctx->theme->on_ink);
+    /* The ink the fixture handed the context: a build styles a label from the theme it was given,
+     * and this page was given the default one. */
+    cf_node label = cf_label(ctx, cf_string_of("push"), &stack, cf_theme_default()->on_ink);
     const cf_node children[] = {label};
     cf_node button = cf_button(ctx, "push", on_press, seen, children, 1u);
     button.disabled = disabled;
@@ -106,7 +108,7 @@ static void a_click_fires_on_the_release_that_ends_inside(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t button_slot = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t label_slot = child_of(&ctx, button_slot, 0u);
     const cf_id button = cf_node_id(&ctx, button_slot);
     const cf_id label = cf_node_id(&ctx, label_slot);
@@ -142,7 +144,7 @@ static void a_release_off_the_button_leaves_the_click_unfired(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 20.0f, .y = 10.0f}});
     cf_input(&ctx,
@@ -175,7 +177,7 @@ static void a_disabled_button_neither_presses_nor_fires(void) {
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = 20.0f, .y = 10.0f}});
 
     CF_CHECK(seen.count == 0, "a switched-off button fires nothing");
-    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u))),
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u))),
              "and books no press");
 
     cf_ctx_free(&ctx);
@@ -199,7 +201,7 @@ static void the_focused_button_answers_the_keys_that_ask(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_ENTER});
 
@@ -236,7 +238,7 @@ static void a_disabled_button_takes_no_focus_and_answers_no_key(void) {
 
     frame_of(&ctx, &seen, true);
 
-    const cf_id button = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id button = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     cf_focus(&ctx, button);
 
@@ -262,7 +264,7 @@ static void the_button_declares_the_theme_s_resting_box(void) {
 
     frame_of(&ctx, &seen, false);
 
-    const uint32_t button_slot = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t button_slot = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t label_slot = child_of(&ctx, button_slot, 0u);
     const cf_style resting = ctx.layout.styles[button_slot];
 

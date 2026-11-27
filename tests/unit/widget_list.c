@@ -5,6 +5,14 @@
 
 #include "cform_test.h"
 
+/* The box this frame laid for a slot, or a rect of no extent where it laid none. A caller outside
+ * src/node cannot index rect storage, so the tier reads the answer the frame gives. */
+static cf_rect box_of(const cf_ctx *ctx, uint32_t slot) {
+    const cf_rect *box = cf_frame_rect(ctx, slot);
+
+    return box != NULL ? *box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 /*
  * The list is the scroller with a window: only the rows in view are
  * declared, the wheel turns the window by rows, and a row keeps its slot
@@ -87,16 +95,16 @@ static void the_list_declares_only_the_rows_in_view(void) {
 
     frame_of(&ctx);
 
-    const uint32_t list = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t list = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t content = child_of(&ctx, list, 0u);
     const uint32_t rows = child_count_of(&ctx, content);
 
     CF_CHECK(rows == 6u, "a hundred-point window over twenty-point rows shows six rows");
-    CF_NEAR(ctx.rects[list].height, 100.0f);
-    CF_NEAR(ctx.rects[content].y, 0.0f);
+    CF_NEAR(box_of(&ctx, list).height, 100.0f);
+    CF_NEAR(box_of(&ctx, content).y, 0.0f);
 
     for (uint32_t i = 0u; i < rows; ++i) {
-        CF_NEAR(ctx.rects[child_of(&ctx, content, i)].height, 20.0f);
+        CF_NEAR(box_of(&ctx, child_of(&ctx, content, i)).height, 20.0f);
     }
 
     cf_ctx_free(&ctx);
@@ -113,7 +121,7 @@ static void the_wheel_turns_the_window_and_a_row_keeps_its_slot(void) {
 
     frame_of(&ctx);
 
-    const uint32_t list = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t list = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t content = child_of(&ctx, list, 0u);
     uint32_t before[6];
 
@@ -125,7 +133,7 @@ static void the_wheel_turns_the_window_and_a_row_keeps_its_slot(void) {
     frame_of(&ctx);
 
     CF_CHECK(child_count_of(&ctx, content) == 6u, "the window stays six rows wide");
-    CF_NEAR(ctx.rects[content].y, 0.0f);
+    CF_NEAR(box_of(&ctx, content).y, 0.0f);
 
     for (uint32_t i = 0u; i < 4u; ++i) {
         CF_CHECK(child_of(&ctx, content, i) == before[i + 2u],
@@ -151,7 +159,7 @@ static void the_window_clamps_at_the_list_s_end(void) {
 
     frame_of(&ctx);
 
-    const uint32_t list = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t list = child_of(&ctx, cf_frame_root(&ctx), 0u);
 
     wheel(&ctx, 1000.0f);
     frame_of(&ctx);
@@ -161,8 +169,8 @@ static void the_window_clamps_at_the_list_s_end(void) {
 
     CF_CHECK(child_count_of(&ctx, content) == 5u,
              "at the end the window shows the rows that remain");
-    CF_NEAR(ctx.rects[content].y, 0.0f);
-    CF_NEAR(ctx.rects[last].y + ctx.rects[last].height, 100.0f);
+    CF_NEAR(box_of(&ctx, content).y, 0.0f);
+    CF_NEAR(box_of(&ctx, last).y + box_of(&ctx, last).height, 100.0f);
 
     cf_ctx_free(&ctx);
 }
@@ -209,7 +217,7 @@ static void long_name_rows_keep_distinct_keys(void) {
     root.child_count = 1u;
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the long-named list");
 
-    const uint32_t scroll = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t scroll = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t content = child_of(&ctx, scroll, 0u);
     const uint32_t rows = child_count_of(&ctx, content);
 

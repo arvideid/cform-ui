@@ -130,7 +130,7 @@ static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
 }
 
 static uint32_t child_slot(const cf_ctx *ctx, uint32_t index) {
-    return child_of(ctx, ctx->root_slot, index);
+    return child_of(ctx, cf_frame_root(ctx), index);
 }
 
 /* The box under that index, as the reference a caller keeps: the number that still names the
@@ -170,7 +170,7 @@ static void a_move_hovers_the_topmost_child_at_the_point(void) {
     CF_CHECK(cf_id_equal(cf_hit_test(&ctx, at), right), "the topmost node answers the point");
     CF_CHECK(cf_hovered(&ctx, right), "the move hovers the child under the pointer");
     CF_CHECK(!cf_hovered(&ctx, left), "the child beside it stays out");
-    CF_CHECK(!cf_hovered(&ctx, cf_node_id(&ctx, ctx.root_slot)),
+    CF_CHECK(!cf_hovered(&ctx, cf_node_id(&ctx, cf_frame_root(&ctx))),
              "the container behind it stays out");
     CF_CHECK(second.moves == 1 && first.moves == 0 && root_log.moves == 1,
              "the move runs the hovered node's handler and bubbles");
@@ -318,7 +318,8 @@ static void a_press_marks_and_focuses_the_node_it_hit(void) {
 
     CF_CHECK(cf_pressed(&ctx, child), "the press lands on the child");
     CF_CHECK(cf_focused(&ctx, child), "focus follows the press");
-    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, ctx.root_slot)), "the container is not pressed");
+    CF_CHECK(!cf_pressed(&ctx, cf_node_id(&ctx, cf_frame_root(&ctx))),
+             "the container is not pressed");
     CF_CHECK(child_log.downs == 1 && root_log.downs == 1,
              "the press reaches the child and bubbles to the container");
 
@@ -832,7 +833,7 @@ static void focus_set_by_hand_reaches_a_node_no_press_touched(void) {
 
     CF_CHECK(cf_focused(&ctx, right), "the focus lands where it was set");
     CF_CHECK(!cf_focused(&ctx, child_id(&ctx, 0u)), "the sibling stays out");
-    CF_CHECK(!cf_focused(&ctx, cf_node_id(&ctx, ctx.root_slot)), "the container stays out");
+    CF_CHECK(!cf_focused(&ctx, cf_node_id(&ctx, cf_frame_root(&ctx))), "the container stays out");
 
     cf_focus(&ctx, CF_NO_ID);
 
@@ -1079,7 +1080,7 @@ static void a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out(void) {
              "a child still inside the clip answers the point");
     CF_CHECK(!cf_id_equal(cf_hit_test(&ctx, over_hidden), third),
              "a child cut out by the clip no longer answers it");
-    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, over_hidden), cf_node_id(&ctx, ctx.root_slot)),
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, over_hidden), cf_node_id(&ctx, cf_frame_root(&ctx))),
              "the point falls through to what shows beside the scroller");
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = over_hidden});

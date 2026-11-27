@@ -4,6 +4,14 @@
 
 #include "cform_test.h"
 
+/* The box this frame laid for a slot, or a rect of no extent where it laid none. A caller outside
+ * src/node cannot index rect storage, so the tier reads the answer the frame gives. */
+static cf_rect box_of(const cf_ctx *ctx, uint32_t slot) {
+    const cf_rect *box = cf_frame_rect(ctx, slot);
+
+    return box != NULL ? *box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 /*
  * The two contracts this tier covers. The export is the diagnostic: a bounded, printable dump a
  * developer reads. The visit is the bridge protocol: whole UTF-8, an identity a caller may hold,
@@ -426,7 +434,7 @@ static void a_wrapper_is_passed_through_and_a_box_that_means_something_is_announ
              "a group that was never named announces no bytes");
     CF_CHECK(group != NULL && group->actions == 0u,
              "a box with no handler and no focus declares no door to open");
-    CF_CHECK(group != NULL && group->rect.width == ctx.rects[group->slot].width &&
+    CF_CHECK(group != NULL && group->rect.width == box_of(&ctx, group->slot).width &&
                  group->rect.width == 120.0f,
              "the rect a bridge is handed is the one this frame laid out");
 
@@ -730,8 +738,10 @@ static void the_box_holding_the_keyboard_is_the_one_announced_focused(void) {
     /* The press and the release are states the frame knows and a bridge cannot guess: the box under
      * a held pointer is the one wearing the pressed paint, and the hand leaving it takes that paint
      * and the resting tone with it. */
-    const cf_point on_first = {ctx.rects[first_slot].x + 10.0f, ctx.rects[first_slot].y + 10.0f};
-    const cf_point on_second = {ctx.rects[second_slot].x + 10.0f, ctx.rects[second_slot].y + 10.0f};
+    const cf_point on_first = {box_of(&ctx, first_slot).x + 10.0f,
+                               box_of(&ctx, first_slot).y + 10.0f};
+    const cf_point on_second = {box_of(&ctx, second_slot).x + 10.0f,
+                                box_of(&ctx, second_slot).y + 10.0f};
     cf_input(&ctx,
              (cf_event){.type = CF_EVENT_POINTER_DOWN, .target = first_slot, .position = on_first});
     announce(&ctx);

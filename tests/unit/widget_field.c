@@ -5,6 +5,14 @@
 
 #include "cform_test.h"
 
+/* The box this frame laid for a slot, or a rect of no extent where it laid none. A caller outside
+ * src/node cannot index rect storage, so the tier reads the answer the frame gives. */
+static cf_rect box_of(const cf_ctx *ctx, uint32_t slot) {
+    const cf_rect *box = cf_frame_rect(ctx, slot);
+
+    return box != NULL ? *box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 /*
  * The field is the first widget that edits what the build owns: every case
  * presses it, types into it and reads the buffer the declaration handed it.
@@ -225,7 +233,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
 
     frame_of(&ctx, &text, false);
 
-    const cf_id field = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id field = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
 
@@ -347,7 +355,7 @@ static void a_disabled_field_neither_focuses_nor_edits(void) {
 
     frame_of(&ctx, &text, true);
 
-    const cf_id field = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id field = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = {.x = 10.0f, .y = 10.0f}});
     type(&ctx, "x", 1u);
@@ -2046,7 +2054,7 @@ static void the_change_door_answers_the_box_whose_value_moved(void) {
     ctx.theme = cf_theme_default();
     frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
 
-    const uint32_t field = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t field = child_of(&ctx, cf_frame_root(&ctx), 0u);
 
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "ab", 2u);
@@ -2097,7 +2105,7 @@ static float field_box_height(cf_ctx *ctx, cf_text_edit *text, cf_field_mode mod
     type(ctx, run, (uint32_t)strlen(run));
     frame_at(ctx, text, false, mode, height, NULL, NULL, NULL, NULL, NULL, NULL);
 
-    return ctx->rects[child_of(ctx, ctx->root_slot, 0u)].height;
+    return box_of(ctx, child_of(ctx, cf_frame_root(ctx), 0u)).height;
 }
 
 /*
@@ -2349,7 +2357,7 @@ static void the_mode_survives_the_box_it_was_pinned_in(void) {
 
     CF_CHECK(text.length == 3u && asks == 0u,
              "a box one row tall does not turn a multiline field into a single-line one");
-    CF_CHECK(ctx.rects[child_of(&ctx, ctx.root_slot, 0u)].height == 34.0f,
+    CF_CHECK(box_of(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u)).height == 34.0f,
              "and the box stayed the height it was pinned at rather than the rows it holds");
 
     hold(&ctx, CF_KEY_UP, false);
@@ -2677,8 +2685,8 @@ static void a_run_goes_back_when_the_keyboard_changes_hands(void) {
     ctx.theme = cf_theme_default();
     frame_pair(&ctx, &first, &second);
 
-    const cf_id a = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
-    const cf_id b = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 1u));
+    const cf_id a = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
+    const cf_id b = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 1u));
 
     press(&ctx, 10.0f, 10.0f);
     lift(&ctx, 10.0f, 10.0f);
@@ -2722,7 +2730,7 @@ static void a_run_goes_back_when_the_box_that_held_it_leaves(void) {
     ctx.theme = cf_theme_default();
     frame_pair(&ctx, &first, &second);
 
-    const cf_id a = cf_node_id(&ctx, child_of(&ctx, ctx.root_slot, 0u));
+    const cf_id a = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
 
     /* Where the keyboard came from is what the repair hands it back to, so the box below is
      * pressed first and the one that takes the run second. */

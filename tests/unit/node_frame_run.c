@@ -294,8 +294,8 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
         }
     }
 
-    if (!live[ctx.root_slot]) {
-        live[ctx.root_slot] = true;
+    if (!live[cf_frame_root(&ctx)]) {
+        live[cf_frame_root(&ctx)] = true;
         ++live_count;
     }
 

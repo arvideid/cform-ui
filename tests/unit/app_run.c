@@ -232,7 +232,7 @@ static bool silent_write(void *user_data, cf_string utf8) {
 
 static cf_node noting_board(cf_ctx *ctx, void *user_data) {
     (void)user_data;
-    if (ctx->clipboard != NULL) {
+    if (cf_clipboard_of(ctx) != NULL) {
         boards_seen++;
     }
 

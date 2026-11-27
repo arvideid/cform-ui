@@ -23,11 +23,11 @@ static cf_node box(float width, float height) {
 static uint32_t child_slot(const cf_ctx *ctx, uint32_t index) {
     const cf_tree *tree = cf_frame_tree(ctx);
 
-    if (tree == NULL || ctx->root_slot == CF_NO_LINK) {
+    if (tree == NULL || cf_frame_root(ctx) == CF_NO_LINK) {
         return CF_NO_LINK;
     }
 
-    return tree->child_slots[tree->child_start[ctx->root_slot] + index];
+    return tree->child_slots[tree->child_start[cf_frame_root(ctx)] + index];
 }
 
 static void a_fresh_slot_is_dirty(void) {
@@ -45,7 +45,7 @@ static void a_fresh_slot_is_dirty(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the root just joined");
+    CF_CHECK(cf_dirty(&ctx, cf_frame_root(&ctx)), "the root just joined");
     CF_CHECK(cf_dirty(&ctx, child_slot(&ctx, 0u)), "the child just joined");
     CF_CHECK(!cf_dirty(&ctx, CF_NO_LINK), "a slot that names no node is not dirty");
 
@@ -70,7 +70,7 @@ static void an_unchanged_declaration_is_not_dirty(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
 
-    CF_CHECK(!cf_dirty(&ctx, ctx.root_slot), "the same root is clean");
+    CF_CHECK(!cf_dirty(&ctx, cf_frame_root(&ctx)), "the same root is clean");
     CF_CHECK(!cf_dirty(&ctx, child_slot(&ctx, 0u)), "the same child is clean");
 
     cf_ctx_free(&ctx);
@@ -101,7 +101,7 @@ static void a_changed_style_dirties_only_what_changed(void) {
 
     CF_CHECK(cf_dirty(&ctx, first), "the widened child changed");
     CF_CHECK(!cf_dirty(&ctx, second), "the child beside it kept its declaration");
-    CF_CHECK(!cf_dirty(&ctx, ctx.root_slot), "the container kept its own declaration");
+    CF_CHECK(!cf_dirty(&ctx, cf_frame_root(&ctx)), "the container kept its own declaration");
 
     cf_ctx_free(&ctx);
 }
@@ -130,7 +130,7 @@ static void a_changed_child_count_dirties_the_parent(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the container's child list changed shape");
+    CF_CHECK(cf_dirty(&ctx, cf_frame_root(&ctx)), "the container's child list changed shape");
     CF_CHECK(!cf_dirty(&ctx, kept), "the child that stayed keeps its slot clean");
     CF_CHECK(cf_dirty(&ctx, child_slot(&ctx, 1u)), "the child that joined is dirty");
 
@@ -166,14 +166,14 @@ static void a_subtree_mark_reaches_every_descendant(void) {
     const uint32_t grandchild = tree->child_slots[tree->child_start[child_slot_now]];
 
     CF_CHECK(!cf_dirty(&ctx, child_slot_now) && !cf_dirty(&ctx, grandchild) &&
-                 !cf_dirty(&ctx, ctx.root_slot),
+                 !cf_dirty(&ctx, cf_frame_root(&ctx)),
              "an unchanged second frame reads clean");
 
     cf_dirty_subtree(&ctx, child_slot_now);
 
     CF_CHECK(cf_dirty(&ctx, child_slot_now), "the mark reaches the node it starts at");
     CF_CHECK(cf_dirty(&ctx, grandchild), "the mark walks down the subtree");
-    CF_CHECK(!cf_dirty(&ctx, ctx.root_slot), "the mark stops at the subtree's root");
+    CF_CHECK(!cf_dirty(&ctx, cf_frame_root(&ctx)), "the mark stops at the subtree's root");
 
     cf_ctx_free(&ctx);
 }
@@ -190,11 +190,11 @@ static void the_bit_lives_one_frame(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &root);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the first frame arrived dirty");
+    CF_CHECK(cf_dirty(&ctx, cf_frame_root(&ctx)), "the first frame arrived dirty");
 
     cf_frame_begin(&ctx);
 
-    CF_CHECK(!cf_dirty(&ctx, ctx.root_slot), "the next begin cleared it");
+    CF_CHECK(!cf_dirty(&ctx, cf_frame_root(&ctx)), "the next begin cleared it");
 
     cf_ctx_free(&ctx);
 }
@@ -212,13 +212,16 @@ static void a_mark_made_before_the_diff_survives_an_unchanged_declaration(void) 
     root.child_count = 1u;
 
     cf_frame_begin(&ctx);
-    cf_diff(&ctx, &root);
+    const cf_id held = cf_node_id(&ctx, cf_diff(&ctx, &root));
 
+    /* The mark is made between the frame's start and the diff that puts the tree back: what the
+     * frame's root is in the meantime is the number the page kept, not a slot this frame has
+     * answered, which is the case cf_dirty_subtree is here for. */
     cf_frame_begin(&ctx);
-    cf_dirty_subtree(&ctx, ctx.root_slot);
+    cf_dirty_subtree(&ctx, cf_node_slot(&ctx, held));
     cf_diff(&ctx, &root);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the mark outlives the unchanged claim");
+    CF_CHECK(cf_dirty(&ctx, cf_node_slot(&ctx, held)), "the mark outlives the unchanged claim");
     CF_CHECK(cf_dirty(&ctx, child_slot(&ctx, 0u)), "the mark reached the child before the diff");
 
     cf_ctx_free(&ctx);
@@ -249,7 +252,7 @@ static void a_track_array_edited_in_place_dirties_the_node(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &grid);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot), "the first frame arrived dirty");
+    CF_CHECK(cf_dirty(&ctx, cf_frame_root(&ctx)), "the first frame arrived dirty");
 
     /* Same pointer, same style struct: only a track's value moved. */
     columns[1] = (cf_track){CF_PX(60.0f), CF_PX(60.0f)};
@@ -257,7 +260,7 @@ static void a_track_array_edited_in_place_dirties_the_node(void) {
     cf_frame_begin(&ctx);
     cf_diff(&ctx, &grid);
 
-    CF_CHECK(cf_dirty(&ctx, ctx.root_slot),
+    CF_CHECK(cf_dirty(&ctx, cf_frame_root(&ctx)),
              "a track edited in place at the same pointer dirties the node");
 
     cf_ctx_free(&ctx);

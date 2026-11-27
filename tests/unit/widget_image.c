@@ -6,6 +6,14 @@
 
 #include "cform_test.h"
 
+/* The box this frame laid for a slot, or a rect of no extent where it laid none. A caller outside
+ * src/node cannot index rect storage, so the tier reads the answer the frame gives. */
+static cf_rect box_of(const cf_ctx *ctx, uint32_t slot) {
+    const cf_rect *box = cf_frame_rect(ctx, slot);
+
+    return box != NULL ? *box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+}
+
 /*
  * The image is the first widget whose paint is not its own box's: the case
  * checks what it declares, what the theme resolves over it, and the extent
@@ -49,7 +57,7 @@ static void the_image_declares_its_texture_and_rests_on_the_theme(void) {
     cf_frame_layout(&ctx, (cf_available){.width = CF_PX(100.0f), .height = CF_PX(100.0f)},
                     (cf_point){.x = 0.0f, .y = 0.0f});
 
-    const uint32_t slot = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t slot = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const cf_tree *tree = cf_frame_tree(&ctx);
 
     CF_CHECK(slot != CF_NO_LINK && tree != NULL, "the image took a slot in the frame");
@@ -58,8 +66,8 @@ static void the_image_declares_its_texture_and_rests_on_the_theme(void) {
              "and the content the measure answers");
     /* The content's extent answers the main axis; the cross axis stretches
      * to the container, as a replaced element does. */
-    CF_NEAR(ctx.rects[slot].height, 24.0f);
-    CF_NEAR(ctx.rects[slot].width, 100.0f);
+    CF_NEAR(box_of(&ctx, slot).height, 24.0f);
+    CF_NEAR(box_of(&ctx, slot).width, 100.0f);
 
     const cf_style resting = ctx.layout.styles[slot];
 
