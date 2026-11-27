@@ -19,6 +19,11 @@
 # Tooling scripts run from CI and from a shell, where a CR breaks a shebang
 *.py   text eol=lf
 
+# The page shells are read as text by tools/check_docs.py, which matches whole lines in
+# them: under text=auto a Windows checkout ends every line with a CR, and a pattern
+# anchored at the end of a line then passes on one platform and fails on the other.
+*.html text eol=lf
+
 # These two carry the rules above. Left to text=auto, a Windows checkout reads
 # them back with CRLF while the stored blob stays LF, and git then reports both
 # as modified in every status.
