@@ -91,7 +91,7 @@ static void the_list_declares_only_the_rows_in_view(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx);
 
@@ -117,7 +117,7 @@ static void the_wheel_turns_the_window_and_a_row_keeps_its_slot(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx);
 
@@ -155,7 +155,7 @@ static void the_window_clamps_at_the_list_s_end(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx);
 
@@ -199,7 +199,7 @@ static void long_name_rows_keep_distinct_keys(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     static char long_name[200];
 

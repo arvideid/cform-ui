@@ -221,7 +221,7 @@ static void start(cf_size size) {
         return;
     }
 
-    session.theme = cf_theme_default();
+    cf_use_theme(&session, cf_theme_default());
     recorder.arena = &store;
     recorder.commands = NULL;
     recorder.count = 0u;

@@ -40,7 +40,7 @@ static void the_image_declares_its_texture_and_rests_on_the_theme(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_frame_begin(&ctx);
     cf_node image = cf_image(&ctx, "logo", &image_content);
@@ -130,7 +130,7 @@ static void a_loaded_image_paints_the_texture_and_the_extent_the_loader_answered
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     uint32_t calls = 0u;
     const cf_backend backend = (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,

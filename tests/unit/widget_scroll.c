@@ -80,7 +80,7 @@ static void the_wheel_walks_the_content_and_clamps_at_both_ends(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, true);
 
@@ -119,7 +119,7 @@ static void a_scroller_without_a_height_of_its_own_never_walks(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, false);
 
@@ -176,7 +176,7 @@ static void a_notch_the_inner_pane_cannot_take_walks_the_page(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     chained_frame(&ctx);
 

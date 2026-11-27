@@ -229,7 +229,7 @@ static void the_focused_field_takes_the_keys_it_is_given(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, false);
 
@@ -262,7 +262,7 @@ static void a_run_appends_whatever_bytes_it_needs(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, false);
 
@@ -293,7 +293,7 @@ static void the_field_stops_at_the_capacity_its_buffer_stated(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, false);
 
@@ -330,7 +330,7 @@ static void a_field_without_focus_edits_nothing(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, false);
 
@@ -351,7 +351,7 @@ static void a_disabled_field_neither_focuses_nor_edits(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, true);
 
@@ -382,7 +382,7 @@ static void the_arrows_move_the_caret_and_shift_extends_the_selection(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -424,7 +424,7 @@ static void an_arrow_steps_a_whole_character(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
 
@@ -479,7 +479,7 @@ static void an_accent_leaves_the_field_under_the_letter_it_sits_on(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, accented_e, 3u);
@@ -517,7 +517,7 @@ static void a_joined_sequence_enters_and_leaves_the_field_as_one_character(void)
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, joined_family, 18u);
@@ -564,7 +564,7 @@ static void two_indicator_letters_are_one_character_too(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, flag_pair, 8u);
@@ -606,7 +606,7 @@ static void a_word_key_leaves_no_mark_behind_at_the_end_of_its_run(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "caf", 3u);
@@ -642,7 +642,7 @@ static void a_caret_a_click_placed_inside_a_character_moves_out_of_it(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, joined_family, 18u);
@@ -675,7 +675,7 @@ static void what_is_selected_gives_way_to_what_is_typed(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abcd", 4u);
@@ -704,7 +704,7 @@ static void a_full_buffer_takes_what_the_selection_frees(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abcd", 4u);
@@ -731,7 +731,7 @@ static void the_edit_keys_cut_the_selection_or_the_character_they_name(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -768,7 +768,7 @@ static void a_press_places_the_caret_and_a_drag_selects_to_where_it_went(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -827,7 +827,7 @@ static void a_press_below_the_rows_the_field_holds_stands_on_the_last_one(void) 
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     /* The value is laid before the press, because the walk reads the frame's rects. */
     frame_of(&ctx, &text, false);
@@ -900,7 +900,7 @@ static void a_press_lands_on_the_row_of_the_box_rather_than_the_row_of_the_page(
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     /* The box at the top of the page, and a press one hundred and thirty points down it. */
     frame_tall_of(&ctx, &near, 0.0f);
@@ -934,7 +934,7 @@ static void a_key_that_carries_no_text_edits_nothing(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     frame_of(&ctx, &text, false);
 
@@ -1069,8 +1069,8 @@ static void copy_puts_the_selection_where_the_host_keeps_bytes(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'c', (uint32_t)CF_MOD_CONTROL);
@@ -1096,8 +1096,8 @@ static void cut_offers_the_bytes_before_it_drops_them(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
@@ -1122,8 +1122,8 @@ static void a_refused_write_leaves_the_range_selected(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
@@ -1149,8 +1149,8 @@ static void paste_inserts_what_the_host_holds_over_the_selection(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     host_holds(&board, "xy");
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abcd", 4u);
@@ -1177,8 +1177,8 @@ static void a_host_run_too_long_for_the_buffer_lands_nowhere(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     host_holds(&board, "wxyzq");
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
@@ -1203,8 +1203,8 @@ static void a_host_with_no_text_leaves_the_page_alone(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'v', (uint32_t)CF_MOD_CONTROL);
@@ -1230,8 +1230,8 @@ static void either_primary_modifier_carries_the_chord_and_alt_does_not(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_watched(&ctx, &text, false, count_keys, &seen);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'c', (uint32_t)CF_MOD_META);
@@ -1261,7 +1261,7 @@ static void a_page_with_no_host_buffer_leaves_the_chord_unstopped(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_watched(&ctx, &text, false, count_keys, &seen);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
@@ -1293,7 +1293,7 @@ static void stepping_back_returns_what_the_keys_took(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -1337,7 +1337,7 @@ static void an_edit_after_a_step_back_ends_the_forward_walk(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "a", 1u);
@@ -1376,7 +1376,7 @@ static void a_step_forward_returns_to_where_the_marks_stood(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -1411,7 +1411,7 @@ static void a_field_rebuilt_over_a_smaller_buffer_forgets_the_old_layout(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &big, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "x", 1u);
@@ -1457,7 +1457,7 @@ static void a_caret_move_costs_no_step(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "ab", 2u);
@@ -1489,7 +1489,7 @@ static void a_history_outlives_the_frame_that_wrote_it(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -1520,7 +1520,7 @@ static void a_buffer_too_large_to_copy_keeps_no_history(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_watched(&ctx, &text, false, count_keys, &seen);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -1544,7 +1544,7 @@ static void the_ring_holds_the_last_few_runs_and_no_more(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
 
@@ -1587,8 +1587,8 @@ static void bytes_a_cut_took_come_back_with_their_selection(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     select_tail(&ctx, "abc", 2u);
     chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
@@ -1622,7 +1622,7 @@ static void a_word_key_steps_the_run_it_stands_in(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     type_from_home(&ctx, "let me in");
 
@@ -1652,7 +1652,7 @@ static void a_word_key_comes_back_over_the_same_runs(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "let me in", 9u);
@@ -1689,7 +1689,7 @@ static void a_word_key_crosses_the_punctuation_between_two_words(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     type_from_home(&ctx, "foo.bar");
 
@@ -1725,7 +1725,7 @@ static void shift_with_a_word_key_selects_the_run_it_ends_on(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     type_from_home(&ctx, "let me in");
 
@@ -1755,7 +1755,7 @@ static void a_word_key_answers_either_primary_modifier_and_not_alt(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     type_from_home(&ctx, "let me in");
 
@@ -1782,7 +1782,7 @@ static void the_chord_holds_every_byte_the_buffer_carries(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_watched(&ctx, &text, false, count_keys, &seen);
     press(&ctx, 10.0f, 10.0f);
     chord(&ctx, 'a', (uint32_t)CF_MOD_CONTROL);
@@ -1831,8 +1831,8 @@ static void a_run_that_will_not_fit_says_so_in_the_buffer(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abcdefg", 7u);
@@ -1889,7 +1889,7 @@ static void a_space_in_a_field_is_a_character_and_enter_is_the_ask(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_doors(&ctx, &text, false, count_keys, &through, count_keys, &asks, NULL, NULL);
     press(&ctx, 10.0f, 10.0f);
 
@@ -1940,7 +1940,7 @@ static void the_change_door_hears_the_bytes_and_not_the_caret(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
     press(&ctx, 10.0f, 10.0f);
 
@@ -1997,8 +1997,8 @@ static void cutting_pasting_and_stepping_the_history_move_the_value(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
     select_tail(&ctx, "abcd", 2u);
 
@@ -2051,7 +2051,7 @@ static void the_change_door_answers_the_box_whose_value_moved(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
 
     const uint32_t field = child_of(&ctx, cf_frame_root(&ctx), 0u);
@@ -2082,7 +2082,7 @@ static void the_change_door_answers_the_box_whose_value_moved(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_doors(&ctx, &text, true, NULL, NULL, NULL, NULL, count_change, &moved);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "ab", 2u);
@@ -2129,7 +2129,7 @@ static void a_multiline_field_asks_for_the_height_its_rows_need(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     const float single = field_box_height(&ctx, &flat, CF_FIELD_SINGLE, 0.0f, value);
 
     cf_ctx_free(&ctx);
@@ -2139,7 +2139,7 @@ static void a_multiline_field_asks_for_the_height_its_rows_need(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     const float multi = field_box_height(&ctx, &tall, CF_FIELD_MULTILINE, 0.0f, value);
 
     cf_ctx_free(&ctx);
@@ -2169,7 +2169,7 @@ static void enter_writes_a_row_in_one_mode_and_asks_in_the_other(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, count_keys, &asks,
              count_change, &moved);
     press(&ctx, 10.0f, 10.0f);
@@ -2211,7 +2211,7 @@ static void the_vertical_arrows_belong_to_the_mode_and_not_the_page(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, NULL, NULL, NULL,
              NULL);
     press(&ctx, 10.0f, 10.0f);
@@ -2249,7 +2249,7 @@ static void the_vertical_arrows_belong_to_the_mode_and_not_the_page(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 0.0f, count_keys, &through, NULL, NULL, NULL,
              NULL);
     press(&ctx, 10.0f, 10.0f);
@@ -2283,8 +2283,8 @@ static void a_pasted_break_lands_where_the_mode_puts_rows(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, NULL, NULL, NULL, NULL, count_change,
              &moved);
     press(&ctx, 10.0f, 10.0f);
@@ -2315,8 +2315,8 @@ static void a_pasted_break_lands_where_the_mode_puts_rows(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
-    ctx.clipboard = &clipboard;
+    cf_use_theme(&ctx, cf_theme_default());
+    cf_use_clipboard(&ctx, &clipboard);
     frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 0.0f, NULL, NULL, NULL, NULL, count_change,
              &moved);
     press(&ctx, 10.0f, 10.0f);
@@ -2348,7 +2348,7 @@ static void the_mode_survives_the_box_it_was_pinned_in(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 34.0f, NULL, NULL, count_keys, &asks, NULL,
              NULL);
     press(&ctx, 10.0f, 10.0f);
@@ -2375,7 +2375,7 @@ static void the_mode_survives_the_box_it_was_pinned_in(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_SINGLE, 54.0f, NULL, NULL, count_keys, &asks, NULL, NULL);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "ab", 2u);
@@ -2412,7 +2412,7 @@ static void an_arrow_past_the_rows_the_walk_holds_stays_on_the_last_one(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_at(&ctx, &text, false, CF_FIELD_MULTILINE, 0.0f, count_keys, &through, NULL, NULL, NULL,
              NULL);
     press(&ctx, 10.0f, 10.0f);
@@ -2451,7 +2451,7 @@ static void a_run_being_decided_is_not_the_pages_value(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
     press(&ctx, 10.0f, 10.0f);
     compose(&ctx, "ni");
@@ -2530,7 +2530,7 @@ static void the_box_a_run_stands_in_follows_the_frame_that_lays_it(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_pair(&ctx, &first, &second);
     press(&ctx, 10.0f, 10.0f);
     lift(&ctx, 10.0f, 10.0f);
@@ -2575,7 +2575,7 @@ static void the_words_chosen_replace_the_bytes_the_run_covered(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -2617,7 +2617,7 @@ static void a_key_the_method_owns_does_not_reach_the_value(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_watched(&ctx, &text, false, count_keys, &through);
     press(&ctx, 10.0f, 10.0f);
     type(&ctx, "abc", 3u);
@@ -2650,7 +2650,7 @@ static void the_tree_still_moves_the_keyboard_around_a_run(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_watched(&ctx, &text, false, count_keys, &through);
     press(&ctx, 10.0f, 10.0f);
     compose(&ctx, "ni");
@@ -2682,7 +2682,7 @@ static void a_run_goes_back_when_the_keyboard_changes_hands(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_pair(&ctx, &first, &second);
 
     const cf_id a = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
@@ -2727,7 +2727,7 @@ static void a_run_goes_back_when_the_box_that_held_it_leaves(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_pair(&ctx, &first, &second);
 
     const cf_id a = cf_node_id(&ctx, child_of(&ctx, cf_frame_root(&ctx), 0u));
@@ -2771,7 +2771,7 @@ static void a_run_over_the_room_the_field_keeps_is_refused_whole(void) {
 
     memset(long_run, 'a', sizeof long_run - 1u);
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
     frame_of(&ctx, &text, false);
     press(&ctx, 10.0f, 10.0f);
     compose(&ctx, long_run);

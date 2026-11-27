@@ -139,7 +139,7 @@ static void a_focused_node_resolves_its_focused_variant(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();
@@ -184,7 +184,7 @@ static void a_hovered_node_resolves_after_the_pointer_moves(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();
@@ -220,7 +220,7 @@ static void a_disabled_node_resolves_its_disabled_variant(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();
@@ -252,7 +252,7 @@ static void a_node_without_a_role_keeps_its_declared_style(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();
@@ -297,7 +297,7 @@ static void resolve_without_a_theme_or_a_view_is_a_no_op(void) {
     /* No view: a frame the diff never built. */
     cf_ctx empty;
     context_of(&empty);
-    empty.theme = cf_theme_default();
+    cf_use_theme(&empty, cf_theme_default());
     cf_frame_resolve(&empty);
     CF_CHECK(empty.layout.styles == NULL, "a frame without a diff has no view to rewrite");
 
@@ -312,7 +312,7 @@ static void a_state_change_between_frames_changes_the_variant(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();

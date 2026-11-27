@@ -503,7 +503,7 @@ static void start_session(cf_size size) {
         return;
     }
 
-    session.theme = cf_theme_default();
+    cf_use_theme(&session, cf_theme_default());
     recorder.arena = &store;
     recorder.count = 0u;
     recorder.capacity = 0u;
@@ -912,7 +912,7 @@ static void the_gallery_field_trades_bytes_with_the_host_it_names(void) {
         .read = script_read, .write = script_write, .user_data = &board};
 
     start_session(current_size());
-    session.clipboard = &clipboard;
+    cf_use_clipboard(&session, &clipboard);
 
     if (!focus_the_field()) {
         end_session();

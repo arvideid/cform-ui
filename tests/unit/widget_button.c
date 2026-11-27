@@ -102,7 +102,7 @@ static void a_click_fires_on_the_release_that_ends_inside(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
@@ -138,7 +138,7 @@ static void a_release_off_the_button_leaves_the_click_unfired(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
@@ -167,7 +167,7 @@ static void a_disabled_button_neither_presses_nor_fires(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
@@ -195,7 +195,7 @@ static void the_focused_button_answers_the_keys_that_ask(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
@@ -232,7 +232,7 @@ static void a_disabled_button_takes_no_focus_and_answers_no_key(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
@@ -258,7 +258,7 @@ static void the_button_declares_the_theme_s_resting_box(void) {
         return;
     }
 
-    ctx.theme = cf_theme_default();
+    cf_use_theme(&ctx, cf_theme_default());
 
     clicks seen = {0};
 
