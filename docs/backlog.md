@@ -5,6 +5,10 @@ row names the tier that would prove it closed — a plan nobody can check is a w
 Scores quoted here are the ones the suites print today; `ctest` is the authority
 and this file is the record.
 
+*Recorded at* `0.2.0`, commit `45cbdd3`. A row that closes gets deleted rather than
+crossed out, and the score beside it moves with the release that moved it — step 3 of
+[`releases.md`](releases.md).
+
 ## Blocking a real application
 
 | what is missing | what that means on screen | how it gets closed |
@@ -25,6 +29,8 @@ and this file is the record.
 | Whether a keyboard appears is unqualified | the shell's ask reaches SDL's `SDL_StartTextInput` and `SDL_StopTextInput`, and the dummy driver takes both because it keeps that state for the window rather than for the hardware — so what no tier can see is a screen keyboard rising on a device that has one to show, which is a touch platform's check |
 | Where the platform stands its answers is unqualified | the run an input method is deciding is painted and measured in the page (the protocol is replayed headlessly over the gallery's own field: `widget_field`, `app_run`, `gallery_headless`), the shell hands the same box to SDL's `SDL_SetTextInputArea`, and chapter fifteen lays a strip of its own from those numbers so a tier can check that a page moving under a standing run moves the strip along with the answer. What no tier can show is a candidate list rising under those letters, because the dummy driver has no list to place: reading it needs a gallery window, a field in it and a real input method — typing pinyin into a box on the page and watching the run underline, the strip and the platform's list follow it |
 | Selection by word is the keyboard's | **Ctrl**/**Cmd** with the arrows moves and **Shift** selects over the runs the field reads, but a double-click still selects no word it landed in and a triple-click no line |
+| A sleeping page does not follow the back button | the documentation site reads the address bar on every frame it builds, and the idle invariant means it builds no frame when nothing moved — so a reader who presses Back without touching the canvas keeps the page they left until the next event. Closing it wants what the loop lacks: one way for a host to say "something outside the window changed", which is the same missing door a network response or a file watch would knock on. `cf_frame_requested` is the build's own door and the honest answer is that it should not be the only one |
+| The bar's GitHub item is a word, not a mark | a drawn octocat is an image, an image wants a decoder, and a decoder is the `load_image` slot — a backend-ABI conversation rather than a stylesheet change. The site states the destination in text until the slot has an owner |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
 | A line is as tall as its primary says | a line is drawn in the fonts it was measured in — `cf_text_each_run` splits it where the stack changed hands and the stream carries one command per face it needed (`text_measure`, `paint_emit`, `app_run`) — but the row's height still comes from the first font alone, so a fallback glyph taller than the latin face is cut by a line the layout swears fits. Closing it wants the walk to report the tallest face a line used, and the measure to charge that |
 

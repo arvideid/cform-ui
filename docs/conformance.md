@@ -42,9 +42,13 @@ ones a browser would infer.
 ## The score
 
 **510 of 522 ported fixtures match** — 98% of what could be ported, 94% of Yoga's
-whole suite. Measured at the branch tip that added the sizing-keyword port. The
-tier prints a per-suite table on every run, so `ctest -R yoga` is the check and
-this file is only the record.
+whole suite. The tier prints a per-suite table on every run, so `ctest -R yoga` is
+the check and this file is only the record.
+
+*Recorded at* `0.2.0`, commit `45cbdd3`, on a Windows desktop with MSYS2 UCRT64 GCC.
+A score with no version beside it is a number that can outlive the code that printed
+it, so step 3 of [`releases.md`](releases.md) re-runs the tier on a release build and
+updates the line above it.
 
 Of Yoga's 543 fixtures, 522 can be expressed in `cf_style` at all. The other 21
 need a feature the struct has no field for, and they are counted rather than
@@ -74,12 +78,16 @@ off by the grade rather than missing a rule. This stays a published difference.
 ## The known differences
 
 `tests/conformance/yoga_cases.c` names the twelve fixtures the corpus is known
-not to match rather than asserting a floor. A fixture outside the list that
-starts to miss fails `ctest`, and one the list still carries that starts to pass
-fails too — so a fix can no longer cancel a break, which an aggregate score
-alone would hide. The tier still prints the whole per-suite table and the score
-on every run, so `ctest -R yoga` is the check and this file is the record.
+not to match. A fixture outside the list that starts to miss fails `ctest`, and one
+the list still carries that starts to pass fails too — so a fix can no longer cancel
+a break, which an aggregate score alone would hide.
 
-Closing a gap means deleting that fixture's name from the list, raising the
-published score above, and — where it changes what could be ported at all — the
-skip table, all in one commit.
+Beside the names, the same program holds one floor per category: 64 of 64
+`aligncontent`, 46 of 46 `boxsizing`, 3 of 13 `rounding`. Identity-pinning catches a
+single fixture moving; the floors catch the corpus being re-sorted or a suite losing
+ground in a way a reviewer reading one file's diff would never see, and they make a
+new suite in the corpus an edit to this file rather than a passing test run.
+
+Closing a gap means deleting that fixture's name from the list, raising its suite's
+floor, the published score above, and — where it changes what could be ported at all
+— the skip table, all in one commit.

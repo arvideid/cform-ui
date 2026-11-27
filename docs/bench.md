@@ -43,6 +43,11 @@ somebody else's process — the fastest pass is the one that describes the engin
 Every number in this file comes from one machine in one session; an absolute that
 moves when you change the machine is why the tables below are read as ratios.
 
+*Recorded at* `0.2.0`, commit `45cbdd3`. The bench log CI archives on every build
+(`bench-<os>-<type>.log`) is the current answer, and the release workflow keeps one
+named per version, so a reviewer compares `0.2.0` against `0.3.0` instead of arguing
+from a table that stopped being true quietly.
+
 | shape of the tree | boxes | per layout | per box |
 |---|---|---|---|
 | nested rows and columns | 1,250 | 0.43 ms | 346 ns |

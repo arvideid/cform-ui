@@ -6,12 +6,13 @@ of that agreement each side was built against. This file is that agreement
 between cform and a device.
 
 `cf/backend.h` is the only place the engine touches a window, a GPU, a font file
-or a mouse. It is one struct of eight function pointers, and nothing else crosses
-the boundary in either direction — which is how the engine runs headless in tests
-and in a browser. Four are the engine's to call: `submit`, `present`,
-`poll_event` and `surface`. Four are the host's: the two uploads, the release and
-the teardown, which a backend fills in but never waits to be asked for. If you
-only want to *use* cform, you can stop here.
+or a mouse. It is one struct of eleven function pointers, and nothing else
+crosses the boundary in either direction — which is how the engine runs headless
+in tests and in a browser. Seven are the engine's to call: `submit`, `present`,
+`poll_event`, `surface`, `set_cursor`, `set_text_input` and `set_candidate_rect`.
+Four are the host's: the two uploads, the release and the teardown, which a backend
+fills in but never waits to be asked for. If you only want to *use* cform, you can
+stop here.
 
 ```
 engine ──submit──▶ shapes ──▶ backend ──▶ screen
@@ -60,7 +61,7 @@ exactly what `size` is there to catch.
 | `set_candidate_rect` | Move the input method's answer box beside the run being decided; a rect of no extent says the page stopped deciding | Yes — the page draws the run itself, so a desk told nothing loses nothing |
 
 There is no error code to return, and no callback from the engine into your code
-beyond the four it calls. A backend that can't open its window returns a struct whose
+beyond the seven it calls. A backend that can't open its window returns a struct whose
 functions do nothing and logs the reason once on `CF_LOG_BACKEND`. The two numbers at
 the front catch a mismatched library: `abi_version` is the revision you were built
 against and `size` is how big the struct was where you compiled. Either one is enough
