@@ -2659,6 +2659,145 @@ static void a_relation_names_the_box_the_page_carries(void) {
     end_session();
 }
 
+/*
+ * Where this frame laid the box a chapter keyed. A switch is found by the name its build interned
+ * rather than by the size the theme's family states, so a design that moves the square drives the
+ * same control here instead of reporting a hunt that no longer holds.
+ */
+static cf_rect switch_square(const char *name, bool *found) {
+    *found = false;
+
+    const uint32_t slot = cf_slot_named(&session, cf_ctx_key(&session, name));
+
+    if (slot == CF_NO_LINK) {
+        return (cf_rect){0};
+    }
+
+    const cf_rect *rect = cf_frame_rect(&session, slot);
+
+    if (rect == NULL) {
+        return (cf_rect){0};
+    }
+
+    *found = true;
+    return *rect;
+}
+
+/* The tone the last frame filled that rect with: the resolver's answer for the states the box is
+ * in, which is the only difference between a switch that is on and one that a page only believes
+ * it is. */
+static bool painted_tone(cf_rect rect, cf_color *out) {
+    for (uint32_t i = recorded_count; i > 0u; --i) {
+        const cf_command command = recorded[i - 1u];
+
+        if (command.kind == CF_COMMAND_FILL && fabsf(command.rect.x - rect.x) < 0.5f &&
+            fabsf(command.rect.y - rect.y) < 0.5f &&
+            fabsf(command.rect.width - rect.width) < 0.5f &&
+            fabsf(command.rect.height - rect.height) < 0.5f) {
+            *out = command.color;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+static bool grey_is(cf_color tone, uint8_t value) {
+    return tone.red == value && tone.green == value && tone.blue == value;
+}
+
+/*
+ * Chapter sixteen on the page a person would look at. The square is reached by the key its build
+ * was given, its tone is read out of the stream the frame submitted, and the bit belongs to the
+ * block the driver keeps - the three things the rule separates, checked where they meet. One click,
+ * one key, a box that reports nothing and a box that answers nobody.
+ */
+static void the_switch_the_page_holds_moves_under_both_hands(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("mail me", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    bool found = false;
+    const cf_rect mail = switch_square("mail me", &found);
+    CF_CHECK(found, "the box the build keyed is laid out on the chapter");
+
+    cf_color tone = {0};
+    CF_CHECK(painted_tone(mail, &tone), "and the square is a painted box");
+    CF_CHECK(grey_is(tone, 250u), "off is the card's own tone, not the accent");
+    CF_CHECK(!*switch_held(&session), "and the bit the page holds has not been moved");
+
+    step(press_at(mail.x + mail.width / 2.0f, mail.y + mail.height / 2.0f));
+    step(release_at(mail.x + mail.width / 2.0f, mail.y + mail.height / 2.0f));
+
+    CF_CHECK(*switch_held(&session),
+             "a release that started and ended inside moved the page's bit");
+    const cf_rect lit = switch_square("mail me", &found);
+    CF_CHECK(painted_tone(lit, &tone), "and the frame that read the bit back filled the square");
+    CF_CHECK(grey_is(tone, 23u), "and it filled it with the accent the theme has for on");
+    CF_CHECK(page_reads("the page heard 1 ask"), "and the box told the page it had moved");
+
+    /* What a reader who cannot see the accent is told about the same box: the name the build
+     * stated, the state the page holds, and an ask - never a value to write into a bit. */
+    ask_the_page();
+
+    const announced *switched = heard_as(CF_ACCESS_CHECKBOX, "Email me when a release lands");
+
+    CF_CHECK(switched != NULL, "a bridge hears the switch by the words its build wrote");
+    CF_CHECK(switched != NULL && (switched->states & (uint32_t)CF_SEMANTIC_CHECKED) != 0u,
+             "and that the bit it carries is on");
+    CF_CHECK(switched != NULL && (switched->actions & (uint32_t)CF_SEMANTIC_ACTIVATE) != 0u,
+             "and the ask the box really takes");
+    CF_CHECK(switched != NULL && (switched->actions & (uint32_t)CF_SEMANTIC_SET_VALUE) == 0u,
+             "and no value a bridge could write into it");
+
+    /* The press booked the keyboard on the square as well, so the key door asks the same box the
+     * hand just left - and the handler cannot tell the two apart. */
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(!*switch_held(&session), "Enter on the box holding the keyboard flipped the bit back");
+    CF_CHECK(page_reads("the page heard 2 asks"),
+             "and told the page the same way it tells a click");
+
+    const cf_rect quiet = switch_square("quiet", &found);
+    CF_CHECK(found, "the box declared with nobody to tell is laid out among the others");
+
+    step(press_at(quiet.x + quiet.width / 2.0f, quiet.y + quiet.height / 2.0f));
+    step(release_at(quiet.x + quiet.width / 2.0f, quiet.y + quiet.height / 2.0f));
+
+    CF_CHECK(*switch_unasked(&session), "and a hand still moves its bit");
+    CF_CHECK(painted_tone(quiet, &tone), "and the frame filled that square as well");
+    CF_CHECK(grey_is(tone, 23u), "so the box reads as on for all that nobody was told");
+    CF_CHECK(page_reads("the page heard 2 asks"),
+             "while the count the page keeps stays where it is");
+
+    const cf_rect closed = switch_square("closed", &found);
+    CF_CHECK(found, "the box the build switched off is laid out with the others");
+    CF_CHECK(painted_tone(closed, &tone), "the switched-off box is painted too");
+    CF_CHECK(grey_is(tone, 229u),
+             "and it wears the tone the theme has for a control nobody reaches");
+
+    step(press_at(closed.x + closed.width / 2.0f, closed.y + closed.height / 2.0f));
+    step(release_at(closed.x + closed.width / 2.0f, closed.y + closed.height / 2.0f));
+
+    CF_CHECK(!*switch_shut(&session), "the pointer asks the switched-off box and moves nothing");
+    CF_CHECK(page_reads("the page heard 2 asks"), "and the ask is not counted as one it heard");
+
+    /* The keyboard's side of the same refusal: a box that answers no hand is left out of the ring,
+     * so the walk from the second square comes round to the page's first control rather than
+     * stopping on the third. */
+    step(tab_key(false));
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(*click_count(&session) == 1u,
+             "Tab passed the switched-off box and the key asked the one the walk reached");
+    CF_CHECK(!*switch_shut(&session), "and the box that was switched off holds no bit for it");
+
+    end_session();
+}
+
 /* The page is declared from the block its driver handed the run: the faces it
  * measures with, the buffers its fields write into and the line a handler says
  * back all live there. A frame handed nothing instead states no page at all - a
@@ -2726,6 +2865,7 @@ int main(void) {
     CF_RUN(a_bridge_asking_twice_sees_which_boxes_moved);
     CF_RUN(the_boxes_inside_a_live_region_are_reheard_under_their_own_ids);
     CF_RUN(a_relation_names_the_box_the_page_carries);
+    CF_RUN(the_switch_the_page_holds_moves_under_both_hands);
     CF_RUN(a_page_handed_no_host_states_nothing);
 
     end_sessions();
