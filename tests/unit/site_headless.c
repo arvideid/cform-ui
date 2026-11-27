@@ -15,7 +15,7 @@
 #include "cf/widget.h"
 
 #include "cform_test.h"
-#include "nav.h"
+#include "document.h"
 
 /*
  * The documentation site drawn through the real frame pipeline against the headless
@@ -33,8 +33,14 @@
  * What is added here is the site's own contract: that a row of the table renders a
  * page, that the page states its heading in the title face, that the prose fits the
  * window it was offered, that a route with no browser behind it still lands somewhere,
- * and that the document moves under a wheel notch and under the Tab key - the two ways
- * a reader has of asking to see the rest of a page that does not fit.
+ * that the list beside the document asks for the page a reader pressed it for, and that
+ * the document moves under a wheel notch and under the Tab key - the two ways a reader
+ * has of asking to see the rest of a page that does not fit.
+ *
+ * The frame is built by the same function the window runs, out of document.h, rather
+ * than by a copy of it drawn here. A tier that measures a hand-made layout can pass
+ * while the layout that ships is broken, and the two files have to be kept in step by
+ * somebody remembering to do it.
  */
 
 #define FRAME_BYTES (1024u * 1024u)
@@ -89,35 +95,29 @@ static void bind_view(void) {
     view.open_url = NULL;
 }
 
-/* The page under test, in the document the shell puts it in: one column, capped at a
- * readable measure, padded, and walked by a single scroller. Driving a bare page would
- * measure it against a window it never gets. */
+/* The page under test, in the frame the site puts every page in: the masthead, the list
+ * of pages beside the prose and the way on to the next one, all walked by a single
+ * scroller. Driving a bare page would measure it against a window it never gets. */
 static const site_entry *showing;
 
+/* Where a press was aimed. This build has no address bar to write to, so the route the
+ * row carries is recorded instead - which is the whole of what pressing a row is owed,
+ * and the one thing about a press a tier with no browser can still read back. */
+static char chosen[64];
+
+static void go_to(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)ctx;
+    (void)slot;
+
+    const site_entry *entry = user_data;
+
+    if (entry != NULL) {
+        snprintf(chosen, sizeof chosen, "%s", entry->route);
+    }
+}
+
 static cf_node build(cf_ctx *ctx) {
-    const cf_node page = showing->page(ctx, &view);
-
-    cf_style sheet = cf_style_default();
-    sheet.direction = CF_DIRECTION_COLUMN;
-    sheet.row_gap = CF_PT(DOC_GAP);
-    sheet.width = CF_PERCENT(100.0f);
-    sheet.max_width = CF_PT(DOC_WIDTH);
-    sheet.padding = site_pad(DOC_PADDING);
-
-    const cf_node document = cf_col(ctx, sheet, &page, 1u);
-
-    /* The node the shell declares, restated the same way and for the same reason - and
-     * keeping the role cf_scroller asked for, because the tier exists to measure what
-     * ships and what ships is a viewport the keyboard can scroll. */
-    cf_node root = cf_scroller(ctx, "page", &document, 1u);
-    root.style = view.surface;
-    root.style.width = CF_PERCENT(100.0f);
-    root.style.height = CF_PERCENT(100.0f);
-    root.style.direction = CF_DIRECTION_COLUMN;
-    root.style.align_items = CF_ALIGN_CENTER;
-    root.style.clips_content = true;
-
-    return root;
+    return site_document(ctx, &view, showing, showing->page(ctx, &view), go_to);
 }
 
 /* ---------- the recorder, and what the last frame submitted ------------------ */
@@ -473,6 +473,52 @@ static void a_tab_the_reader_opened_survives_the_next_frame(void) {
 }
 
 /*
+ * The list beside the document is the site's contents, so a row of it has to ask for
+ * the page it names. This is as much of a navigation as a build with no address bar can
+ * check: the press reaches the driver's callback carrying the row it was aimed at, and
+ * what the driver then writes - a hash, a window's route - is the shell's own business.
+ */
+static void a_row_in_the_list_names_the_page_it_holds(void) {
+    const site_entry *target = site_entry_for_route(SITE_PREFIX "concepts");
+
+    CF_CHECK(target != NULL, "the concepts row is in the table");
+
+    if (target == NULL) {
+        return;
+    }
+
+    showing = site_entry_at(0u);
+    chosen[0] = '\0';
+    start(surfaces[0]);
+
+    bool tapped = false;
+
+    for (uint32_t i = 0u; i < recorded_count && !tapped; ++i) {
+        if (!command_reads(&recorded[i], target->label)) {
+            continue;
+        }
+
+        /* The list owns the left of the document, so a line of prose that happened to
+         * start with the same two words is not the row this case is aiming at. */
+        const cf_rect row = recorded[i].rect;
+
+        if (row.x > SIDEBAR_WIDTH) {
+            continue;
+        }
+
+        const cf_point at = {row.x + row.width / 2.0f, row.y + row.height / 2.0f};
+        step((cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at, .button = 1u});
+        step((cf_event){.type = CF_EVENT_POINTER_UP, .position = at, .button = 1u});
+        tapped = true;
+    }
+
+    CF_CHECK(tapped, "the list paints the row a reader can press");
+    CF_CHECK(strcmp(chosen, target->route) == 0, "the press asks for the page the row names");
+
+    end();
+}
+
+/*
  * The complaint the document's shape is the answer to: a wheel notch has to move the page,
  * and it has to move it wherever the hand happens to be. A notch that arrives with the
  * pointer at the window's origin is what a browser reports before anything has moved, and
@@ -560,9 +606,9 @@ static void the_semantic_tree_names_each_page(void) {
 
         CF_CHECK(fits, "the page's tree fits the buffer");
         CF_CHECK(strstr(out, showing->group) != NULL, "the tree carries the heading block");
-        /* The words the nav chip reads and the words the page's own H1 reads are
-         * the same words, so the table alone says what every page has to be
-         * findable by: a page that renders a heading the tree does not name is a
+        /* The words the list beside the document reads and the words the page's own
+         * H1 reads are the same words, so the table alone says what every page has to
+         * be findable by: a page that renders a heading the tree does not name is a
          * heading nobody using a screen reader reaches. */
         CF_CHECK(strstr(out, showing->label) != NULL, "the tree names the page's title");
         CF_CHECK(strstr(out, "'") != NULL, "the tree quotes text rather than only boxes");
@@ -572,9 +618,9 @@ static void the_semantic_tree_names_each_page(void) {
     }
 
     /* That the tree says which boxes act is a claim about the site's own spelling: a
-     * nav row, a tab and a link all declare the list family - a hover well rather
-     * than the button family's dark pill - so `list` is the word an actionable row
-     * arrives as, and getting-started has tabs to prove it with. */
+     * row of the list, a tab and a link all declare the list family - a hover well
+     * rather than the button family's dark pill - so `list` is the word an actionable
+     * row arrives as, and getting-started has tabs to prove it with. */
     showing = site_entry_for_route(SITE_PREFIX "getting-started");
     start(surfaces[0]);
     memset(out, 0, SEMANTIC_BYTES);
@@ -593,6 +639,7 @@ int main(void) {
     CF_RUN(a_build_with_no_browser_answers_no_route);
     CF_RUN(every_page_paints_at_every_surface);
     CF_RUN(a_tab_the_reader_opened_survives_the_next_frame);
+    CF_RUN(a_row_in_the_list_names_the_page_it_holds);
     CF_RUN(a_wheel_walks_the_document_wherever_it_lands);
     CF_RUN(a_tab_past_the_fold_moves_the_page);
     CF_RUN(the_semantic_tree_names_each_page);

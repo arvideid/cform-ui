@@ -1,10 +1,10 @@
 /*
  * The documentation site: one cform program whose pages are the library's own.
  *
- * What the reader sees is one document - the site's name, the pages to choose from,
- * the prose the address names, and the way on to the next one - in a column that
- * stops growing at a readable measure and walks as a whole. That shape is the
- * gallery's, for the gallery's reason: a document is a column a reader moves down,
+ * What the reader sees is one document - the site's name, the pages to choose from
+ * down the left, the prose the address names, and the way on to the next one - in a
+ * column that stops growing at a readable measure and walks as a whole. That shape is
+ * the gallery's, for the gallery's reason: a document is a column a reader moves down,
  * not a frame of panels a reader steers between, and one viewport costs nothing to
  * keep in step where two panes have to agree about every edge.
  *
@@ -15,18 +15,19 @@
  * page.
  *
  * This file is the driver only. It owns the fonts, the window, the current route and
- * the page's neighbours, and it hands a page a context and the table - the whole of
- * what a page is given, so a page cannot reach the window, the route or the platform
- * behind it.
+ * the address bar. The document a frame is made of is in document.h, which the headless
+ * tier builds as well - so what that tier measures is what ships, rather than a copy of
+ * it someone has to keep in step. A page is handed a context and the table of values,
+ * the whole of what a page is given, so a page cannot reach the window, the route or the
+ * platform behind it.
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "cf/app.h"
-#include "cf/version.h"
 
-#include "nav.h"
+#include "document.h"
 
 /* The longest address this shell can hold. A route the table does not name falls
  * back to its first page, so an over-long hash costs the reader a page they did not
@@ -36,10 +37,6 @@
 /* The addresses the masthead points at are in pages.h, beside the pages that point at
  * the same places: leaving this document is the driver's business, but the address is
  * not the driver's to invent twice. */
-
-/* The longest a pager's words can be: the two ends of the site name a page beside
- * them, and a row of the table is what the table has already agreed to hold. */
-#define SITE_STEP_BYTES 96u
 
 /* The two faces, as the build named them. On a browser tab both are embedded in the
  * module and read from a virtual path; on a desktop they are the files the fetch
@@ -81,152 +78,13 @@ static void go_to(cf_ctx *ctx, uint32_t slot, void *user_data) {
     }
 }
 
-/* The mark: a rounded square in the accent tone with two columns of the tone a
- * button's label carries inside it. Drawn, not loaded - the repository carries no
- * binary it can regenerate, and an image would mean a decoder, which is a
- * backend-ABI conversation rather than a logo. */
-static cf_node make_mark(cf_ctx *ctx) {
-    cf_style column = cf_style_default();
-    column.width = CF_PT(MARK_STROKE);
-    column.height = CF_PERCENT(56.0f);
-    column.background = (cf_opt_color){.present = true, .value = view.on_accent};
-
-    cf_style pair = cf_style_default();
-    pair.column_gap = CF_PT(MARK_STROKE);
-    pair.align_items = CF_ALIGN_CENTER;
-    pair.justify_content = CF_JUSTIFY_CENTER;
-
-    const cf_node columns[] = {{.style = column}, {.style = column}};
-
-    cf_style square = view.accent;
-    square.width = CF_PT(MARK_SIZE);
-    square.height = CF_PT(MARK_SIZE);
-    square.align_items = CF_ALIGN_CENTER;
-    square.justify_content = CF_JUSTIFY_CENTER;
-
-    return cf_col(ctx, square, (cf_node[]){cf_row(ctx, pair, columns, 2u)}, 1u);
-}
-
-/*
- * The top of the document: what the site is, what the build was made from, and where
- * the source lives.
- *
- * The version is a link rather than a label, because the number a reader cannot look
- * up is a number they cannot act on, and the number is the header's own - a masthead
- * that lies about it is a build nobody shipped. Everything else a page can be reached
- * by is in the row under this one, so the two ways out of the document are the only
- * things standing beside the name.
- */
-static cf_node make_masthead(cf_ctx *ctx) {
-    const cf_node wordmark = site_text(ctx, &view, SITE_FACE_HEAD, view.prose, "cform");
-
-    cf_style pair = cf_style_default();
-    pair.column_gap = CF_PT(CHIP_GAP);
-    pair.align_items = CF_ALIGN_CENTER;
-
-    cf_style line = cf_style_default();
-    line.width = CF_PERCENT(100.0f);
-    line.align_items = CF_ALIGN_CENTER;
-    line.justify_content = CF_JUSTIFY_SPACE_BETWEEN;
-
-    const cf_node leading[] = {
-        make_mark(ctx),
-        wordmark,
-        site_link(ctx, &view, "version", "v" CF_VERSION_STRING, SITE_RELEASES),
-    };
-
-    return cf_row(
-        ctx, line,
-        (cf_node[]){cf_row(ctx, pair, leading, SITE_COUNT(leading)),
-                    cf_row(ctx, pair,
-                           (cf_node[]){site_link(ctx, &view, "github", "GitHub", SITE_REPO)}, 1u)},
-        2u);
-}
-
-/*
- * Every page the site holds, in one row of chips.
- *
- * The table is short enough that grouping it would be furniture: the group a page
- * belongs to is already the eyebrow over its title, and a reader choosing between
- * seven words needs the words. The row wraps, so the same chips answer a wide tab and
- * a phone without a second navigation to keep in step - and every chip is a button the
- * keyboard walks in the order the table reads, which is what makes the row below the
- * masthead the page's contents rather than a picture of them.
- */
-static cf_node make_nav(cf_ctx *ctx) {
-    cf_node chips[SITE_NAV_COUNT];
-
-    for (uint32_t i = 0u; i < SITE_NAV_COUNT; ++i) {
-        const site_entry *entry = site_entry_at(i);
-
-        chips[i] = site_row_button(ctx, &view, entry->route, entry->label, entry == current(),
-                                   false, go_to, (void *)entry);
-    }
-
-    cf_style sheet = cf_style_default();
-    sheet.column_gap = CF_PT(CHIP_GAP);
-    sheet.row_gap = CF_PT(CHIP_GAP);
-    sheet.width = CF_PERCENT(100.0f);
-    sheet.align_items = CF_ALIGN_START;
-    sheet.wrap = CF_WRAP;
-
-    return cf_row(ctx, sheet, chips, SITE_NAV_COUNT);
-}
-
-/*
- * One end of the pager, in words.
- *
- * "Previous: Concepts" is what the box says and what a reader who never sees the
- * drawing hears. An arrow would be shorter, and it would be a glyph neither of the two
- * faces here is obliged to carry and a label no semantic tree can name.
- */
-static cf_node make_step(cf_ctx *ctx, const char *word, const site_entry *entry) {
-    char *label = cf_alloc(&ctx->frame, SITE_STEP_BYTES);
-
-    if (label == NULL) {
-        return (cf_node){.style = cf_style_default()};
-    }
-
-    snprintf(label, SITE_STEP_BYTES, "%s: %s", word, entry->label);
-
-    return site_row_button(ctx, &view, word, label, false, false, go_to, (void *)entry);
-}
-
-/* The two pages beside this one, at the two ends of the line the document ends on. */
-static cf_node make_pager(cf_ctx *ctx, const site_entry *entry) {
-    const uint32_t at = site_index_of(entry);
-    cf_node steps[2];
-    uint32_t count = 0u;
-
-    if (at > 0u) {
-        steps[count++] = make_step(ctx, "previous", site_entry_at(at - 1u));
-    }
-
-    if (at + 1u < SITE_NAV_COUNT) {
-        steps[count++] = make_step(ctx, "next", site_entry_at(at + 1u));
-    }
-
-    cf_style sheet = cf_style_default();
-    sheet.column_gap = CF_PT(CHIP_GAP);
-    sheet.row_gap = CF_PT(CHIP_GAP);
-    sheet.width = CF_PERCENT(100.0f);
-    sheet.align_items = CF_ALIGN_CENTER;
-    sheet.wrap = CF_WRAP;
-    /* Both ends of the document keep their own end of the line; with one there is
-     * nothing to space between, and pushing it to a corner would be the layout
-     * inventing a distance no block asked for. */
-    sheet.justify_content = count == 2u ? CF_JUSTIFY_SPACE_BETWEEN : CF_JUSTIFY_START;
-
-    return cf_row(ctx, sheet, steps, count);
-}
-
 /*
  * The native route.
  *
  * A window has no address bar to type into, so the keys walk the table instead - the
  * same entries and the same write a press makes, one line that decides where a page's
  * route came from. The handler rides the root and runs when the keyboard's chain
- * climbs to it, so a chip the Tab key reached is a chip the arrows can walk off.
+ * climbs to it, so a row the Tab key reached is a row the arrows can walk off.
  */
 static void route_key(cf_event *event, void *user_data) {
     (void)user_data;
@@ -271,21 +129,9 @@ static void follow_address_bar(void) {
 }
 
 /*
- * The whole frame: one document, in one viewport that walks it.
- *
- * The column is capped rather than filled, because a line of prose a reader cannot
- * track back along is not what a wide tab asked for, and it is centred by the viewport
- * rather than by margins of its own.
- *
- * The scroller keeps the role the widget asked for. The role is what lets a Tab the
- * reader has not finished scroll the page to whatever it moved focus onto - a control
- * below the fold is reachable but invisible without it - and the theme's scroll family
- * states a resting box and no marks for the pointer's states, so restating the style
- * whole takes the page's tone and leaves nothing to paint over it.
- *
- * One viewport, wherever the pointer rests: a wheel notch that arrives with no move
- * before it is delivered against the position it carries, and a page made of panes has
- * to guess which of them the reader meant. The document has nothing beside it to mean.
+ * The frame the page is drawn in, and the one thing the driver adds to it: the keys
+ * that walk the table, which are this shell's route and not something a headless tier
+ * building the same document has any use for.
  */
 static cf_node build(cf_ctx *ctx) {
     /* Read before the page is chosen: a route the bar named has to be the one this
@@ -293,29 +139,7 @@ static cf_node build(cf_ctx *ctx) {
     follow_address_bar();
 
     const site_entry *entry = current();
-    const cf_node page = entry->page(ctx, &view);
-
-    cf_style sheet = cf_style_default();
-    sheet.direction = CF_DIRECTION_COLUMN;
-    sheet.row_gap = CF_PT(DOC_GAP);
-    sheet.width = CF_PERCENT(100.0f);
-    sheet.max_width = CF_PT(DOC_WIDTH);
-    sheet.padding = site_pad(DOC_PADDING);
-
-    const cf_node document =
-        cf_col(ctx, sheet,
-               (cf_node[]){make_masthead(ctx), make_nav(ctx), page, make_pager(ctx, entry)}, 4u);
-
-    /* Restated whole, the way a scroller's viewport is always restated: the widget
-     * asked for the clip and the direction, and a style handed back over it keeps the
-     * wheel handler it installed on the node. */
-    cf_node root = cf_scroller(ctx, "page", &document, 1u);
-    root.style = view.surface;
-    root.style.width = CF_PERCENT(100.0f);
-    root.style.height = CF_PERCENT(100.0f);
-    root.style.direction = CF_DIRECTION_COLUMN;
-    root.style.align_items = CF_ALIGN_CENTER;
-    root.style.clips_content = true;
+    cf_node root = site_document(ctx, &view, entry, entry->page(ctx, &view), go_to);
     root.handlers.key = route_key;
 
     return root;

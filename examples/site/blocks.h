@@ -142,7 +142,7 @@ static inline cf_node site_panel(cf_ctx *ctx, const site_view *view, const char 
     return cf_col(ctx, sheet, rows, count);
 }
 
-/* A note set off the prose: the same well a chosen chip wears, so an aside reads as
+/* A note set off the prose: the same well a chosen row wears, so an aside reads as
  * furniture rather than as another paragraph. */
 static inline cf_node site_note(cf_ctx *ctx, const site_view *view, const char *chars) {
     cf_style well = view->chrome;
@@ -154,7 +154,7 @@ static inline cf_node site_note(cf_ctx *ctx, const site_view *view, const char *
 }
 
 /*
- * One press target that is not a pill: a nav chip, a tab, a link out.
+ * One press target that is not a pill: a row of the list, a tab, a link out.
  *
  * The family it asks to be styled as is a list row, and that is the whole design
  * decision - the theme's list family is the one that hands out a hover well, the
@@ -163,8 +163,8 @@ static inline cf_node site_note(cf_ctx *ctx, const site_view *view, const char *
  * well a hovered row already wears, so the row the reader is on is filled and inked
  * and the rows beside it are a word and nothing more.
  *
- * An edge is stated on every chip and coloured on none. A border paints nothing
- * without a tone, which leaves the chip quiet until the keyboard reaches it, and it
+ * An edge is stated on every box and coloured on none. A border paints nothing
+ * without a tone, which leaves the box quiet until the keyboard reaches it, and it
  * is stated on all four sides at once because a box stroked on one edge alone has
  * three edges for the stroke to leak along.
  */
@@ -196,7 +196,7 @@ static inline cf_node site_row_of(cf_ctx *ctx, const site_view *view, const char
     return row;
 }
 
-/* The row above, with one word for its label - which is what a nav chip, a tab and
+/* The row above, with one word for its label - which is what a row of the list, a tab and
  * a link out are. */
 static inline cf_node site_row_button(cf_ctx *ctx, const site_view *view, const char *name,
                                       const char *label, bool active, bool stretch,
@@ -216,7 +216,7 @@ static inline cf_node site_row_button(cf_ctx *ctx, const site_view *view, const 
  * anything gets there - the shell hands the view its `open_url` or leaves it
  * unset, and a build with no browser shows the same link and follows it nowhere.
  *
- * The link is the word and the chip around it. A drawn arrow would need a glyph
+ * The link is the word and the box around it. A drawn arrow would need a glyph
  * neither of the two faces here is obliged to carry, and a mark made of two
  * hairlines reads as a smudge at the size a label needs; a page that has to point
  * at its own links has not named them well enough.
@@ -277,7 +277,7 @@ static inline void site_pick_tab(cf_ctx *ctx, uint32_t slot, void *user_data) {
  *
  * The choice lives in the keyed block the name opens, so a rebuild - a resize, a
  * click three columns away - keeps the tab the reader opened. A chosen tab is the
- * chip the reader is on, filled and inked exactly as a nav chip is: one rule for
+ * chip the reader is on, filled and inked exactly as a row of the list is: one rule for
  * "where you are", stated once in `site_row_of`.
  */
 static inline cf_node site_tabs(cf_ctx *ctx, const site_view *view, const char *name,

@@ -59,10 +59,23 @@ typedef enum site_face {
 #define DOC_GAP 24.0f
 #define BLOCK_GAP 12.0f
 /*
- * A press target that is a box rather than a line of prose: the nav chip, the tab,
- * the way to the page before this one. The edge width is stated on every chip and
- * coloured on none - an unstated tone paints nothing - so the box is quiet at rest
- * and the theme's focus mark has something to colour when the keyboard arrives.
+ * The list of pages down the left of the document: its own measure, the way across
+ * to the prose, one group under the next, a group's label above its rows, and one
+ * row under the next. The shell's measure is the sum of the two columns rather than
+ * a fourth number somebody has to keep equal to them.
+ */
+#define SIDEBAR_WIDTH 240.0f
+#define SIDEBAR_GAP 40.0f
+#define SIDEBAR_GROUP_GAP 24.0f
+#define SIDEBAR_HEAD_GAP 10.0f
+#define SIDEBAR_ROW_GAP 4.0f
+#define SHELL_WIDTH (SIDEBAR_WIDTH + SIDEBAR_GAP + DOC_WIDTH + 2.0f * DOC_PADDING)
+/*
+ * A press target that is a box rather than a line of prose: a row of the list
+ * beside the document, the tab strip, the way to the page before this one. The edge
+ * width is stated on every box and coloured on none - an unstated tone paints
+ * nothing - so the box is quiet at rest and the theme's focus mark has something to
+ * colour when the keyboard arrives.
  */
 #define CHIP_GAP 8.0f
 #define CHIP_PADDING 10.0f
@@ -150,14 +163,14 @@ static inline cf_box site_pad(float points) {
 typedef struct site_view {
     /* Surfaces, each read from the theme's own box. */
     cf_style surface; /* the field behind the whole page */
-    cf_style chrome;  /* a note, the well a chosen chip wears */
+    cf_style chrome;  /* a note, the well a chosen row wears */
     cf_style card;    /* a callout, a showcase tile */
     cf_style accent;  /* the primary action's box, used for the mark */
     cf_style panel;   /* a code panel: the one box the theme has no slot for */
 
     /* Tones. */
     cf_color prose;     /* the ink a body of text reads in */
-    cf_color aside;     /* secondary text: an eyebrow, a caption, a chip at rest */
+    cf_color aside;     /* secondary text: an eyebrow, a caption, a row at rest */
     cf_color on_accent; /* the tone text carries over the accent */
     cf_color on_panel;  /* the tone code carries over the panel */
 

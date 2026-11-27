@@ -5,8 +5,8 @@
  * The site's whole structure, as data.
  *
  * One row per page: the group the page files itself under, the words the row
- * reads, the route that reaches it and the function that declares it. The row of
- * chips at the top of every page, the address bar and the headless tier all read
+ * reads, the route that reaches it and the function that declares it. The list
+ * down the left of every page, the address bar and the headless tier all read
  * this one table, so a page that exists in the navigation cannot be missing from
  * the tests and a page that is not in the table cannot be reached at all.
  *
@@ -38,9 +38,10 @@ typedef struct site_entry {
 } site_entry;
 
 /*
- * The table. Every row is a page rather than a pointer to one, because the chips,
+ * The table. Every row is a page rather than a pointer to one, because the list,
  * the keyboard, the pager and the headless tier all want the same thing: the page
- * an address reaches, in the order the document walks it.
+ * an address reaches, in the order the document walks it. The rows read grouped,
+ * which is what the list beside the document files them by.
  */
 static const site_entry site_nav[] = {
     {SITE_GROUP_DOCS, "Getting started", SITE_PREFIX "getting-started",

@@ -34,7 +34,7 @@
 #define SITE_BLOB SITE_REPO "/blob/main/"
 #define SITE_GALLERY "playground/gallery.html"
 
-/* The page every version chip lands on: static HTML generated at deploy time from
+/* The page the version link lands on: static HTML generated at deploy time from
  * the tags, because a canvas cannot fetch and a link can. */
 #define SITE_RELEASES "releases/"
 
