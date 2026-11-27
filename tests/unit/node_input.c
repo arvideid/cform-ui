@@ -902,6 +902,90 @@ static void a_recycled_slot_reads_as_nothing(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The hazard a caller meets rather than the framework: a page keeps the number this frame indexes a
+ * box by, the box goes away, and the store hands that same place to the next box the build
+ * declares. The reference the page should have kept names nothing by then, so the states, the rects
+ * and the keyboard all stay with the box that is actually there.
+ */
+static void the_number_a_caller_kept_follows_the_box_that_took_the_place(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    recorder root_log = {0};
+    cf_node elder[] = {focus_box(50.0f, 50.0f, on_pointer, &root_log)};
+    cf_node first = box(200.0f, 200.0f, on_pointer, &root_log);
+    first.children = elder;
+    first.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &first);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const uint32_t kept_slot = child_slot(&ctx, 0u);
+    const cf_id kept = child_id(&ctx, 0u);
+
+    /* The page rebuilds without the box: its place in the arrays is retired with it. */
+    cf_node second = box(200.0f, 200.0f, on_pointer, &root_log);
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &second);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    CF_CHECK(cf_id_is_none(cf_node_id(&ctx, kept_slot)),
+             "the place is emptied, so a bridge reading it now is handed no reference");
+
+    /* Two boxes arrive, and the store's free list is last-out: the first one stands where the kept
+     * number points. That is the collision, stated rather than assumed. */
+    cf_node younger[] = {
+        focus_box(50.0f, 50.0f, on_pointer, &root_log),
+        focus_box(50.0f, 50.0f, on_pointer, &root_log),
+    };
+    cf_node third = box(200.0f, 200.0f, on_pointer, &root_log);
+    third.children = younger;
+    third.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    cf_diff(&ctx, &third);
+    lay_out(&ctx, 200.0f, 200.0f);
+
+    const cf_id newcomer = child_id(&ctx, 0u);
+    const cf_id sibling = child_id(&ctx, 1u);
+
+    CF_CHECK(child_slot(&ctx, 0u) == kept_slot,
+             "the recycled box sits exactly where the kept number points");
+    CF_CHECK(!cf_id_equal(kept, newcomer), "and yet the two are not the same reference");
+
+    const cf_point at = {.x = 10.0f, .y = 10.0f};
+
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_MOVE, .position = at});
+    cf_input(&ctx, (cf_event){.type = CF_EVENT_POINTER_DOWN, .position = at});
+
+    CF_CHECK(cf_hovered(&ctx, newcomer) && cf_pressed(&ctx, newcomer),
+             "the press books the box that stands under the pointer");
+    CF_CHECK(!cf_hovered(&ctx, kept) && !cf_pressed(&ctx, kept) && !cf_focused(&ctx, kept),
+             "the number the page kept answers none of it");
+    CF_CHECK(cf_id_equal(cf_hit_test(&ctx, at), newcomer),
+             "and the point is answered by the box that is there now");
+    CF_CHECK(cf_node_slot(&ctx, kept) == CF_NO_LINK,
+             "the retired reference asks for no rect at all");
+    CF_CHECK(cf_node_slot(&ctx, newcomer) == kept_slot,
+             "while the live one reads back the place it took");
+
+    /* The ask a stale reference carries is refused outright: it cannot move the keyboard onto the
+     * box that happens to share its old number. */
+    cf_focus(&ctx, sibling);
+    cf_focus(&ctx, kept);
+
+    CF_CHECK(cf_focused(&ctx, sibling) && !cf_focused(&ctx, newcomer),
+             "a reference the tree let go hands the keyboard to nobody");
+
+    cf_ctx_free(&ctx);
+}
+
 static void dispatch_before_a_layout_hits_nothing(void) {
     cf_ctx ctx;
 
@@ -2021,6 +2105,7 @@ int main(void) {
     CF_RUN(what_the_keyboard_wrote_goes_to_whoever_holds_focus);
     CF_RUN(focus_set_by_hand_reaches_a_node_no_press_touched);
     CF_RUN(a_recycled_slot_reads_as_nothing);
+    CF_RUN(the_number_a_caller_kept_follows_the_box_that_took_the_place);
     CF_RUN(dispatch_before_a_layout_hits_nothing);
     CF_RUN(a_point_past_a_clipping_ancestor_skips_the_child_it_cut_out);
     CF_RUN(a_point_past_an_overflow_axis_uses_the_same_rule);
