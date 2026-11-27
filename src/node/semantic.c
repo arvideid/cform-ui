@@ -308,6 +308,53 @@ static void selection_of(const cf_tree *tree, uint32_t slot, cf_opt_u32 *out_sta
 }
 
 /*
+ * The first box a reader meets that the build keyed with this name. Depth first from the root and
+ * in reading order, because a relation names a box on the page rather than a box under this one:
+ * the line explaining a field sits beside it, and no walk down from the field would find it.
+ *
+ * A box that announces nothing is passed over the way the walk passes it. Handing a bridge the
+ * identity of a wrapper it was never told about would give it a box with no words to read.
+ */
+static uint32_t keyed_box(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot, cf_name key) {
+    const node_record *record = visible_record(ctx, tree, slot);
+
+    if (record == NULL) {
+        return CF_NO_LINK;
+    }
+
+    if (record->key == key && record->access != CF_ACCESS_NONE) {
+        return slot;
+    }
+
+    for (uint32_t i = tree->child_start[slot]; i < tree->child_start[slot + 1u]; ++i) {
+        const uint32_t found = keyed_box(ctx, tree, tree->child_slots[i], key);
+
+        if (found != CF_NO_LINK) {
+            return found;
+        }
+    }
+
+    return CF_NO_LINK;
+}
+
+/*
+ * A relation as a bridge is handed it. The build named the box by key, so this is a walk rather
+ * than a stored pointer - which is why a relation to a box the frame did not declare, a dialog
+ * still closed, answers no box instead of an old one. A page declares relations for the few boxes a
+ * person asks about, so paying for the walk once per relation is the cheaper agreement than keeping
+ * a table of every keyed box for the frames that never read one.
+ */
+static cf_id relation_of(const cf_ctx *ctx, const cf_tree *tree, cf_name key) {
+    if (key == CF_NO_NAME) {
+        return CF_NO_ID;
+    }
+
+    const uint32_t slot = keyed_box(ctx, tree, ctx->root_slot, key);
+
+    return slot != CF_NO_LINK ? cf_store_id(&ctx->nodes, slot) : CF_NO_ID;
+}
+
+/*
  * The level that covers a box: the one it stated, or the one the region around it did. Liveness is
  * inherited downward the way WAI-ARIA inherits aria-live, so a build marks the status group and the
  * label whose words moved inside it needs no mark of its own - and the wrapper holding that label,
@@ -370,6 +417,8 @@ static void announce_below(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot
                              .selection_end = selection_end,
                              .labelled_by = labelled_by,
                              .announce = covering,
+                             .described_by = relation_of(ctx, tree, record->described_by),
+                             .controls = relation_of(ctx, tree, record->controls),
                              .rect = rect,
                              .states = states,
                              .actions = actions_of(record, states)},

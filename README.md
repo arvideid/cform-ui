@@ -151,8 +151,12 @@ accepted and ignored — there is no field that pretends to take these things.
   bounded text for a developer, not a protocol. What is missing is the other side:
   nothing reaches Narrator, VoiceOver or AT-SPI, there is no ARIA mapping and no
   hit-target or contrast checking. A `cf_label` in this project is a box that
-  draws glyphs; it names the box it sits inside, not a sibling beside it, and a
-  box is related to nothing but the boxes holding it.
+  draws glyphs; it names the box it sits inside rather than a sibling beside it,
+  and a caption a person reads next to a field is only in the announcement once
+  the build says so — `cf_node.described_by` and `controls` carry the key of the
+  other box, the walk resolves each name to an identity in the frame it reads, and
+  a box that is not declared this frame answers no box rather than the one that
+  left.
 - **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
   says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk the

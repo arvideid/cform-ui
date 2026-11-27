@@ -222,6 +222,8 @@ typedef struct said {
     cf_access access;
     cf_announce announce;
     cf_id labelled_by;
+    cf_id described_by;
+    cf_id controls;
     uint32_t states;
     uint32_t actions;
     cf_rect rect;
@@ -265,6 +267,8 @@ static void keep_the_visit(const cf_semantic *node, void *user_data) {
                     .access = node->access,
                     .announce = node->announce,
                     .labelled_by = node->labelled_by,
+                    .described_by = node->described_by,
+                    .controls = node->controls,
                     .states = node->states,
                     .actions = node->actions,
                     .selection_start = node->selection_start,
@@ -974,6 +978,292 @@ static void a_region_that_becomes_urgent_reads_as_a_changed_box(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The relation a build states rather than a walk guesses: the key the other box was given, resolved
+ * into an identity a bridge may hold. Two directions, because "whose words explain this box" and
+ * "which box does this one change" are different asks - a field's caption says nothing about what a
+ * press will bring about.
+ */
+static void a_relation_names_the_box_the_build_keyed(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name caption_key = cf_intern_text(&ctx.names, "signature-caption");
+    const cf_name note_key = cf_intern_text(&ctx.names, "signature-note");
+
+    cf_node field = box_node(CF_ACCESS_TEXT_BOX);
+    state_named(&field, "Signature");
+    field.described_by = caption_key;
+
+    cf_node caption = box_node(CF_ACCESS_LABEL);
+    state_named(&caption, "Letters only");
+    caption.key = caption_key;
+
+    cf_node opener = box_node(CF_ACCESS_BUTTON);
+    state_named(&opener, "Show note");
+    opener.controls = note_key;
+
+    cf_node note = box_node(CF_ACCESS_LABEL);
+    state_named(&note, "the note");
+    note.key = note_key;
+
+    const cf_node page_kids[] = {field, caption, opener, note};
+    /* The page announces itself and states a relation of its own, because the root is claimed by a
+     * different branch of the diff than a child is: a relation booked for a box that holds the page
+     * has to be read back as well as one written under it. */
+    cf_node page = page_node();
+    page.access = CF_ACCESS_GROUP;
+    page.described_by = note_key;
+    page.controls = caption_key;
+    page.children = page_kids;
+    page.child_count = 4u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the frame claims the page");
+    lay(&ctx);
+    announce(&ctx);
+    CF_CHECK(spoken_count == 5u, "five named boxes are walked");
+
+    const said *box = spoken_as(CF_ACCESS_TEXT_BOX);
+    const said *words = spoken_saying("Letters only");
+    CF_CHECK(box != NULL && words != NULL && cf_id_equal(box->described_by, words->id),
+             "the field is described by the caption its build named");
+
+    const said *button = spoken_as(CF_ACCESS_BUTTON);
+    const said *held = spoken_saying("the note");
+    CF_CHECK(button != NULL && held != NULL && cf_id_equal(button->controls, held->id),
+             "and the button controls the box its build named");
+    CF_CHECK(button != NULL && cf_id_is_none(button->described_by),
+             "the two directions stay separate - one does not borrow the other's name");
+
+    const said *group = spoken_as(CF_ACCESS_GROUP);
+    CF_CHECK(group != NULL && cf_id_equal(group->described_by, held != NULL ? held->id : CF_NO_ID),
+             "a relation stated by the box holding the page is read back the same way");
+    CF_CHECK(group != NULL && cf_id_equal(group->controls, words != NULL ? words->id : CF_NO_ID),
+             "and so is the direction it states beside that one");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A relation is a name resolved at the read rather than a pointer kept behind it, so the box it
+ * points at may not be in the frame at all. The honest answer then is no box: a bridge told the
+ * button controls the note that was there a moment ago would read words that are gone, and a dialog
+ * that has not been opened yet is exactly this case.
+ */
+static void a_relation_to_a_box_that_is_not_declared_yet_answers_none(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name note_key = cf_intern_text(&ctx.names, "note");
+
+    cf_node opener = box_node(CF_ACCESS_BUTTON);
+    state_named(&opener, "Show note");
+    opener.controls = note_key;
+
+    const cf_node first_kids[] = {opener};
+    cf_node page = page_node();
+    page.children = first_kids;
+    page.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the first frame declares no note");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *button = spoken_as(CF_ACCESS_BUTTON);
+    CF_CHECK(button != NULL && cf_id_is_none(button->controls),
+             "a button controlling a box the page does not show answers no box");
+    const cf_id kept = button != NULL ? button->id : CF_NO_ID;
+
+    cf_node note = box_node(CF_ACCESS_LABEL);
+    state_named(&note, "the note");
+    note.key = note_key;
+
+    const cf_node again_kids[] = {opener, note};
+    cf_node again = page_node();
+    again.children = again_kids;
+    again.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &again) != CF_NO_LINK, "the second frame brings the note in");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *opened = spoken_as(CF_ACCESS_BUTTON);
+    const said *words = spoken_saying("the note");
+    CF_CHECK(opened != NULL && cf_id_equal(kept, opened->id),
+             "naming a box that joined the page leaves the box that named it itself");
+    CF_CHECK(opened != NULL && words != NULL && cf_id_equal(opened->controls, words->id),
+             "and the relation now answers the note's own identity");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A key is an identity rather than a promise about a relation: the box carrying it has to be one
+ * the reading includes. A wrapper nobody announced is passed over the way the walk passes it when
+ * asked about it directly, and a box behind one the page switched off is not in the tree a bridge
+ * walks.
+ */
+static void a_key_held_by_a_wrapper_or_a_switched_off_box_is_no_relation(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name wrapper_key = cf_intern_text(&ctx.names, "wrapper");
+    const cf_name note_key = cf_intern_text(&ctx.names, "gone-note");
+
+    /* Announced by nothing: the box is in the tree and out of the reading. */
+    cf_node wrapper = box_node(CF_ACCESS_NONE);
+    wrapper.key = wrapper_key;
+
+    cf_node field = box_node(CF_ACCESS_TEXT_BOX);
+    state_named(&field, "Signature");
+    field.described_by = wrapper_key;
+
+    /* The note is declared, and the box holding it is not laid out at all. */
+    cf_node note = box_node(CF_ACCESS_LABEL);
+    state_named(&note, "the note");
+    note.key = note_key;
+
+    const cf_node closed_kids[] = {note};
+    cf_node closed = box_node(CF_ACCESS_NONE);
+    closed.style.display = CF_DISPLAY_NONE;
+    closed.children = closed_kids;
+    closed.child_count = 1u;
+
+    cf_node opener = box_node(CF_ACCESS_BUTTON);
+    state_named(&opener, "Show note");
+    opener.controls = note_key;
+
+    const cf_node page_kids[] = {wrapper, field, closed, opener};
+    cf_node page = page_node();
+    page.children = page_kids;
+    page.child_count = 4u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the frame claims the page");
+    lay(&ctx);
+    announce(&ctx);
+    CF_CHECK(spoken_saying("the note") == NULL, "the switched-off note is not in the reading");
+
+    const said *box = spoken_as(CF_ACCESS_TEXT_BOX);
+    CF_CHECK(box != NULL && cf_id_is_none(box->described_by),
+             "a caption the page announces nowhere is no box to be described by");
+
+    const said *button = spoken_as(CF_ACCESS_BUTTON);
+    CF_CHECK(button != NULL && cf_id_is_none(button->controls),
+             "and a note behind a box that lays nothing is no box to control");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * Pointing at another box is a change the diff has to see for itself. A build that moves a relation
+ * while leaving the style and the words alone still sends a bridge a different box to read, so the
+ * name rides the signature the same way the announced words do.
+ */
+static void naming_another_box_is_a_change_the_diff_sees(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_name first_key = cf_intern_text(&ctx.names, "first-note");
+    const cf_name second_key = cf_intern_text(&ctx.names, "second-note");
+
+    cf_node first = box_node(CF_ACCESS_LABEL);
+    state_named(&first, "first note");
+    first.key = first_key;
+
+    cf_node second = box_node(CF_ACCESS_LABEL);
+    state_named(&second, "second note");
+    second.key = second_key;
+
+    cf_node opener = box_node(CF_ACCESS_BUTTON);
+    state_named(&opener, "Show note");
+    opener.controls = first_key;
+
+    cf_node field = box_node(CF_ACCESS_TEXT_BOX);
+    state_named(&field, "Signature");
+    field.described_by = first_key;
+
+    const cf_node page_kids[] = {opener, field, first, second};
+    cf_node page = page_node();
+    page.children = page_kids;
+    page.child_count = 4u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the first frame claims the page");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *button = spoken_as(CF_ACCESS_BUTTON);
+    const said *box = spoken_as(CF_ACCESS_TEXT_BOX);
+    const uint32_t opener_slot = button != NULL ? button->slot : CF_NO_LINK;
+    const uint32_t field_slot = box != NULL ? box->slot : CF_NO_LINK;
+    const cf_id first_id =
+        spoken_saying("first note") != NULL ? spoken_saying("first note")->id : CF_NO_ID;
+    CF_CHECK(button != NULL && cf_id_equal(button->controls, first_id),
+             "the button starts out controlling the first note");
+    CF_CHECK(box != NULL && cf_id_equal(box->described_by, first_id),
+             "and the field is described by the same box");
+
+    /* Only the field's name moves. The two relations are separate claims, so each has to be a
+     * reason of its own to rebuild the box that made it - a hashed struct that carried one and not
+     * the other would leave a bridge watching the wrong box. */
+    field.described_by = second_key;
+    const cf_node again_kids[] = {opener, field, first, second};
+    page.children = again_kids;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the second frame claims it again");
+    CF_CHECK(cf_dirty(&ctx, field_slot),
+             "naming another box to explain itself is a change the diff sees without being told");
+    CF_CHECK(!cf_dirty(&ctx, opener_slot), "and the box whose relation stayed put stays clean");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *moved = spoken_as(CF_ACCESS_TEXT_BOX);
+    const said *other = spoken_saying("second note");
+    CF_CHECK(moved != NULL && other != NULL && cf_id_equal(moved->described_by, other->id),
+             "the walk hands the bridge the box the build means now");
+    const said *steady = spoken_as(CF_ACCESS_BUTTON);
+    CF_CHECK(steady != NULL && cf_id_equal(steady->controls, first_id),
+             "while the button still controls the note it was stated against");
+
+    /* And the other way round, one frame later: the two fields ride the signature on their own, so
+     * a build that moves the one a press acts on is dirty without the one that explains a box being
+     * dirty with it. */
+    opener.controls = second_key;
+    const cf_node third_kids[] = {opener, field, first, second};
+    page.children = third_kids;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the third frame claims it once more");
+    CF_CHECK(cf_dirty(&ctx, opener_slot), "the box a press controls is a claim of its own");
+    CF_CHECK(!cf_dirty(&ctx, field_slot),
+             "and the field that went on naming the same box stays clean");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *latest = spoken_as(CF_ACCESS_BUTTON);
+    CF_CHECK(latest != NULL && other != NULL && cf_id_equal(latest->controls, other->id),
+             "and the button moves to the note the build names");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("semantics\n");
     CF_RUN(a_view_walks_as_the_roles_it_kept);
@@ -992,6 +1282,10 @@ int main(void) {
     CF_RUN(a_live_region_covers_every_box_inside_it);
     CF_RUN(the_urgent_line_inside_a_polite_region_stays_urgent);
     CF_RUN(a_region_that_becomes_urgent_reads_as_a_changed_box);
+    CF_RUN(a_relation_names_the_box_the_build_keyed);
+    CF_RUN(a_relation_to_a_box_that_is_not_declared_yet_answers_none);
+    CF_RUN(a_key_held_by_a_wrapper_or_a_switched_off_box_is_no_relation);
+    CF_RUN(naming_another_box_is_a_change_the_diff_sees);
 
     return CF_REPORT();
 }

@@ -1739,6 +1739,8 @@ typedef struct announced {
     char name[SPOKEN_BYTES];
     char value[SPOKEN_BYTES];
     cf_id labelled_by;
+    cf_id described_by;
+    cf_id controls;
     cf_opt_u32 selection_start;
     cf_opt_u32 selection_end;
     uint32_t states;
@@ -1775,6 +1777,8 @@ static void keep_the_visit(const cf_semantic *node, void *user_data) {
                        .access = node->access,
                        .announce = node->announce,
                        .labelled_by = node->labelled_by,
+                       .described_by = node->described_by,
+                       .controls = node->controls,
                        .selection_start = node->selection_start,
                        .selection_end = node->selection_end,
                        .states = node->states,
@@ -1960,8 +1964,8 @@ static void a_bridge_hears_the_page_the_way_a_person_reads_it(void) {
                  entry->selection_start.value == 1u && entry->selection_end.value == 1u,
              "and where the caret is, as offsets into the bytes");
 
-    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 2u,
-             "both of the page's fields answer, and no other box claims to take typed text");
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 3u,
+             "every field the page builds answers, and no other box claims to take typed text");
     CF_CHECK(entry != NULL && entry->announce == CF_ANNOUNCE_NONE,
              "a field is not a news line: no region covers what a person is typing into");
 
@@ -2116,6 +2120,78 @@ static void the_boxes_inside_a_live_region_are_reheard_under_their_own_ids(void)
     end_session();
 }
 
+/*
+ * The relation as a bridge reads it: a name the build booked rather than a box it kept a pointer
+ * to. The field points at the caption beside it, which no walk pairing a control with its own label
+ * could find, and the button points at a note the page only declares once the press has asked for
+ * it. Between the two readings the caption rewrote its own words and stayed the box the field names
+ * - which is the whole reason the relation is a key and not an identity the build would have to
+ * remember.
+ */
+static void a_relation_names_the_box_the_page_carries(void) {
+    char caption_words[SPOKEN_BYTES];
+
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("toggle the note", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *opener = heard_as(CF_ACCESS_BUTTON, "toggle the note");
+    const announced *field = heard_as(CF_ACCESS_TEXT_BOX, "Signature");
+    const announced *caption = heard_starting("Letters only");
+    CF_CHECK(opener != NULL && field != NULL && caption != NULL,
+             "the field, its caption and the button that has a note are all in the reading");
+    CF_CHECK(field != NULL && caption != NULL && cf_id_equal(field->described_by, caption->id),
+             "the field is read with the caption standing beside it, not inside it");
+    CF_CHECK(opener != NULL && cf_id_is_none(opener->controls),
+             "and the button whose note the page does not declare answers no box at all");
+
+    /* Kept by value, because the next ask overwrites the table the first one filled. */
+    const cf_id opener_id = opener != NULL ? opener->id : CF_NO_ID;
+    const cf_id field_id = field != NULL ? field->id : CF_NO_ID;
+    const cf_id caption_id = caption != NULL ? caption->id : CF_NO_ID;
+    snprintf(caption_words, sizeof caption_words, "%s", caption != NULL ? caption->name : "");
+
+    if (!tap("toggle the note")) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *again = row_by_id(spoken, spoken_count, opener_id);
+    const announced *note = heard_starting("the note the press");
+    CF_CHECK(again != NULL && note != NULL, "the note joined the reading under an id of its own");
+    CF_CHECK(again != NULL && note != NULL && cf_id_equal(again->controls, note->id),
+             "and the relation the button stated a frame ago now answers that box");
+
+    const announced *steady = row_by_id(spoken, spoken_count, field_id);
+    const announced *moved = row_by_id(spoken, spoken_count, caption_id);
+    CF_CHECK(steady != NULL && moved != NULL && cf_id_equal(steady->described_by, moved->id),
+             "the field still names the same caption, whose words moved with the flag");
+    CF_CHECK(moved != NULL && strcmp(moved->name, caption_words) != 0,
+             "and it is the same box saying something different, not another box saying it");
+
+    if (!tap("toggle the note")) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *closed = row_by_id(spoken, spoken_count, opener_id);
+    CF_CHECK(closed != NULL && cf_id_is_none(closed->controls),
+             "putting the note away takes the relation back to no box as well");
+    CF_CHECK(heard_starting("the note the press") == NULL,
+             "and the note is not answered at all, rather than answered empty");
+
+    end_session();
+}
+
 int main(void) {
     printf("gallery headless\n");
 
@@ -2147,6 +2223,7 @@ int main(void) {
     CF_RUN(a_bridge_hears_the_page_the_way_a_person_reads_it);
     CF_RUN(a_bridge_asking_twice_sees_which_boxes_moved);
     CF_RUN(the_boxes_inside_a_live_region_are_reheard_under_their_own_ids);
+    CF_RUN(a_relation_names_the_box_the_page_carries);
 
     end_sessions();
     return CF_REPORT();

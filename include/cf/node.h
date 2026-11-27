@@ -126,6 +126,18 @@ typedef struct cf_node {
      * group named once announces the label that moved inside it. */
     cf_announce announce;
 
+    /* Boxes the build means to be read together, named by the key each of them was given. A field
+     * states `described_by` for the line beside it that explains what to type, because no walk can
+     * pair a control with its own caption; a control states `controls` for the area it opens, so a
+     * bridge can say what a press will do before the person makes it. Both are resolved when the
+     * walk reaches the box, and a name the frame declares nowhere answers as no box at all - which
+     * is also the answer for a dialog that has not been opened yet.
+     *
+     * The target has to be a box the walk announces: a key carried by a plain wrapper is passed
+     * over, because a bridge handed that id would have nothing to read from it. */
+    cf_name described_by;
+    cf_name controls;
+
     /* Whether this box takes keyboard focus. A role is not the answer: a box
      * themed as a button can be a picture of one, and a box with no role at all
      * can be the field a person types into. The widgets declare it for their
@@ -509,6 +521,13 @@ typedef struct cf_semantic {
      * it - and a bridge knows which rows to watch for changed bytes without walking the page for
      * news it was never meant to hear. */
     cf_announce announce;
+    /* The boxes this one points at, resolved to their identities for this frame: `described_by` is
+     * the box whose words explain this one and `controls` the box this one opens or changes. Both
+     * answer CF_NO_ID when the build stated no relation or named a box the frame did not declare -
+     * a dialog that is closed is not in the reading, and the button that would open it says so.
+     * `labelled_by` above is the relation the walk worked out on its own. */
+    cf_id described_by;
+    cf_id controls;
     cf_rect rect;
     uint32_t states;
     uint32_t actions;

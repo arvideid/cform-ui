@@ -103,6 +103,10 @@ static cf_text_edit typed = {.chars = typed_bytes, .capacity = sizeof typed_byte
 static char memo_chars[96];
 static cf_text_edit memo = {.chars = memo_chars, .capacity = sizeof memo_chars};
 
+/* The buffer of the field that has a caption named rather than drawn inside it. */
+static char related_chars[48];
+static cf_text_edit related = {.chars = related_chars, .capacity = sizeof related_chars};
+
 /* Eight panel boxes and eight list rows are ever named at once, and a ring of
  * eight each never rewrites bytes a label in the same frame still points at.
  * The two keep separate rings because both declare in one frame. */
@@ -135,6 +139,8 @@ static char leaving_bytes[96];
 static char spoken_bytes[64];
 static char live_bytes[64];
 static char again_bytes[64];
+static char caption_bytes[96];
+static char relate_bytes[96];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -198,6 +204,12 @@ static uint32_t *answered_chip(cf_ctx *ctx) {
  * keyboard is concerned: the box that held the focus stops being declared. */
 static bool *dialog_box(cf_ctx *ctx) {
     return cf_state(ctx, cf_intern_text(&ctx->names, "dialog"), sizeof(bool));
+}
+
+/* Whether the relation chapter declares its note this frame. The button's own name never changes,
+ * so the box that carries the relation is the same box on both sides of the press. */
+static bool *note_box(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "note"), sizeof(bool));
 }
 
 /* The one tween the motion chapter runs, in the keyed block that outlives the
@@ -1291,13 +1303,66 @@ static cf_node make_live_demo(cf_ctx *ctx) {
     return demo_column(ctx, 8.0f, (cf_node[]){again, status}, 2u);
 }
 
+/* Chapter fourteen: the boxes a person is meant to read together. The walk pairs a control with the
+ * words it carries inside itself and with nothing else, so the caption beside a field and the area
+ * a button brings about have to be named by the build. A name is booked once and resolved every
+ * read, which is what makes a relation to a box that is not declared answer no box at all. */
+static cf_node make_related_demo(cf_ctx *ctx) {
+    bool *shown = note_box(ctx);
+    const bool open = shown != NULL && *shown;
+
+    cf_node entry = cf_field(ctx, "signature", &related, &body, CF_FIELD_SINGLE);
+    entry.name = cf_string_of("Signature");
+    entry.style.width = CF_PERCENT(100.0f);
+    entry.style.height = CF_PX(FIELD_HEIGHT);
+
+    /* The caption's words move with the flag, and the relation does not: the box the field points
+     * at is the same box in every frame, whatever it happens to be saying in it. */
+    const int caption_length =
+        snprintf(caption_bytes, sizeof caption_bytes, "Letters only%s",
+                 open ? ", and the note below says what the button brought about" : "");
+
+    cf_node caption =
+        cf_label(ctx, (cf_string){caption_bytes, (uint32_t)caption_length}, &body, theme->muted);
+    caption.key = cf_intern_text(&ctx->names, "signature-caption");
+    entry.described_by = caption.key;
+
+    cf_node opener = make_button(ctx, "toggle the note", flip, shown);
+    /* The key of the box the press writes in and out of the page. Nothing is stored behind it: the
+     * walk looks the name up in the tree it is already walking, so the answer follows the frame. */
+    opener.controls = cf_intern_text(&ctx->names, "signature-note");
+
+    const int relate_length =
+        snprintf(relate_bytes, sizeof relate_bytes, "the note the button controls is %s",
+                 open ? "in the reading" : "not declared this frame");
+
+    cf_node parts[5];
+    uint32_t count = 0u;
+
+    parts[count++] = entry;
+    parts[count++] = caption;
+    parts[count++] = opener;
+
+    if (open) {
+        cf_node note =
+            cf_label(ctx, cf_string_of("the note the press brings about"), &body, theme->muted);
+        note.key = opener.controls;
+        parts[count++] = note;
+    }
+
+    parts[count++] =
+        cf_label(ctx, (cf_string){relate_bytes, (uint32_t)relate_length}, &body, theme->muted);
+
+    return demo_column(ctx, 8.0f, parts, count);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
 
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("thirteen rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("fourteen rules, each with something to try"),
                                   &body, theme->muted);
 
     cf_style row = cf_style_default();
@@ -1522,6 +1587,28 @@ static cf_node build(cf_ctx *ctx) {
             "asking for a frame is how it says so: the shell's idle rule cannot see a number "
             "that changed in a block nothing was told about.",
             make_live_demo(ctx)),
+        make_chapter(
+            ctx, "14", "The boxes meant to be read together",
+            "A walk pairs a control with the words it carries inside itself, and that is as far as "
+            "it can go on its own: the line explaining a field sits beside it rather than under "
+            "it, "
+            "and the area a button opens is nowhere inside the button. So the build names the "
+            "other "
+            "box with the key that box was given, and the walk resolves the name in the frame it "
+            "reads - which is why a relation can point at something that is not there yet and say "
+            "so "
+            "instead of at whatever stood there last. Two directions are booked because they "
+            "answer "
+            "two questions: the box whose words explain this one, and the box this one changes. A "
+            "name carried by a box the page announces nowhere is passed over, since a bridge "
+            "handed "
+            "the identity of a wrapper it was never told about would have nothing to read from it. "
+            "Press the button under the caption and a note joins the reading: the relation above "
+            "it, "
+            "which answered no box a moment ago, now answers the note's own identity - and the "
+            "field "
+            "still names the same caption it did, whatever that line happens to be saying.",
+            make_related_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "
