@@ -25,6 +25,10 @@ run locally is a gate that will be argued with.
 | Benchmarks | the `build` job archives `bench-<os>-<type>.log` | never red. A number that got worse is a judgement; a number that got better by an implausible margin is usually a measurement that stopped measuring |
 | Public reachability | `python3 tools/check_reachability.py` | not yet. It prints what it finds today, and turns red one release after it lands — see below |
 
+Every rule above has been broken on purpose and named once: one edited word or one added
+line, the gate's own sentence read back, the file put back. A gate nobody has watched fail
+is a gate nobody can trust, and each failure message is written to say what to do.
+
 Two of these are worth arguing for, because both could have been left as review comments.
 
 **Documentation drift.** This repository has already shipped a README claiming a number
