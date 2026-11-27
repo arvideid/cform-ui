@@ -29,8 +29,8 @@ and this file is the record.
 
 ## Text, the largest known gap
 
-None of this is close, and none of it is faked by a field that pretends to take
-it. Each needs a design conversation before a line of code:
+None of what is left here is close, and none of it is faked by a field that
+pretends to take it. Each needs a design conversation before a line of code:
 
 - Right-to-left and bidirectional text: the walk lays every run left to right, and
   no field names the writing direction of a line — `cf_style.direction` is the
@@ -38,10 +38,17 @@ it. Each needs a design conversation before a line of code:
 - Shaping for Arabic, Devanagari and Thai — one codepoint is not one glyph there.
 - Justification, ligatures, `letter-spacing`, `line-height` as a style rather than
   the font's own metric, and variable fonts.
-- Grapheme clusters: backspace deletes one scalar and a word key names its run by the
-  bytes it reads, so a combining mark or an emoji ZWJ sequence comes apart in more than
-  one step, and every scalar above ASCII counts as a letter — an unspaced CJK run is
-  one word to the arrow and a non-breaking space ends one.
+- Grapheme boundaries, the part that is left: the editor already steps and deletes whole
+  characters (`cf_text_next_cluster`, `cf_text_prev_cluster`, covered by `text_cluster`,
+  `widget_field` and the gallery page), but on a subset of UAX #29 — a Hangul syllable
+  spelled with separate jamo and the few marks that attach forwards still come apart in
+  more than one step, and the whole property table is not carried.
+- Wrapping does not use those boundaries. A run too long for its box breaks at a scalar,
+  so a mark can be left behind on the row above its letter; the break opportunities are
+  still the spaces, hyphens and ideographs the wrapper knows.
+- The word key names its run by the leading byte, so anything above ASCII is neither
+  blank nor letter — an unspaced CJK run is one jump and a pasted non-breaking space
+  ends one. Naming a codepoint's category is the text layer's unbuilt work.
 - Fonts from memory, and a font stack chosen per script rather than tried in order.
 
 ## Layout and performance

@@ -133,9 +133,7 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Text is Latin-shaped only.** Wrapping honours spaces, hyphens, ideographs and
   the text's own breaks, and a font stack falls back glyph by glyph. There is no
   right-to-left, no bidirectional text, no shaping for Arabic or Indic, no
-  justification, no ligatures and no variable fonts. An editor's field deletes
-  one whole scalar at a time, so a combining mark comes apart as two steps rather
-  than one.
+  justification, no ligatures and no variable fonts.
 - **Accessibility is a tree, not a screen reader.** `cf_semantic_visit` hands a
   caller one typed row for every box that declared what it is: the role
   (`cf_access`, separate from the theme family the painter reads, so a box painted
@@ -178,12 +176,23 @@ accepted and ignored — there is no field that pretends to take these things.
   of the buffer with the caret and the selection where you left them, kept in the
   field's own state block at sixteen images inside four KiB, so a long value walks
   back through fewer steps and one too large to copy twice keeps none.
+- **A character is what a reader sees, not a byte.** The field steps, deletes, jumps
+  words and selects over whole grapheme clusters — the accented letter a
+  mark was written onto, the family three pictures tie together with zero-width
+  joiners, the flag two regional indicators make — on the subset of Unicode's boundary
+  rules (UAX #29) that `cf_text_next_cluster` and `cf_text_prev_cluster` implement. A
+  byte that decodes to nothing counts as a character of its own, so a truncated paste
+  still steps. What the tables leave out is Hangul, whose syllables are spelled with
+  separate jamo letters, and the few marks that attach forwards. Wrapping picks its
+  points from the spaces, hyphens and ideographs it knows rather than from these
+  boundaries, so a word too long for its box can end between a letter and its mark.
 - **A word is a step, and the whole value is a chord.** **Ctrl** or **Cmd** with the
   arrows moves the caret over the run it stands in — letters and digits, anything
   that is neither, or the blanks ahead and the run after them — and **Shift** along
   with them selects that run instead. **Ctrl** or **Cmd** with **A** holds every byte
-  the buffer carries, for the next key to replace. The rule reads the bytes, so a
-  scalar above ASCII counts as a letter and an unspaced CJK run steps as one word.
+  the buffer carries, for the next key to replace. The run is named by its first byte,
+  so anything above ASCII is neither blank nor letter: an unspaced CJK run steps as one
+  word and a pasted non-breaking space ends one.
 - **A full buffer says so.** The field never inserts half of a UTF-8 sequence, so a run
   that will not fit whole is refused outright. `cf_text_edit.refusals` counts the runs
   it turned away and chapter two's line prints it, so a page can say "there is no room
@@ -250,7 +259,7 @@ and a C17 compiler ([GCC](https://gcc.gnu.org/) or
 ```sh
 cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON   # set up a Debug build
 cmake --build --preset dev                        # compile everything
-ctest --preset dev                                # run the 38 headless checks
+ctest --preset dev                                # run the 39 headless checks
 build/dev/bin/gallery                             # open the demo window
 ```
 
@@ -413,7 +422,7 @@ SDL itself.
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the 36 checks `ctest` runs |
+| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 37 checks, 39 once the SDL backend is on |
 | `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `gallery` and `layout_only` |
 | `CFORM_WITH_SDL_BACKEND` | `OFF` | the SDL window backend, and the SDL download |
 | `CFORM_WITH_SANITIZERS` | `OFF` | memory and undefined-behaviour checkers |
