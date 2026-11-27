@@ -43,8 +43,10 @@ typedef struct cf_backend {
 
 Every one takes `user_data` first, so all of your state hangs off a single
 pointer that you allocate. The last three are the newest asks, appended after the
-resource slots: a struct built against an older header is shorter, and that is
-exactly what `size` is there to catch.
+resource slots: `CF_BACKEND_ABI_VERSION` is 12, and the slot that moved it there is
+`set_candidate_rect`, the box a method's answers are placed beside. A struct built
+against an older header is shorter, and that is exactly what `size` is there to
+catch.
 
 | Function | Job | Can be left NULL |
 |---|---|---|

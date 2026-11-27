@@ -51,7 +51,7 @@ rectangles, text and images to a backend that puts them on a surface.
 | the CSS box model, flexbox, grid | `cf_style` and `cf_layout` |
 | the browser's layout pass | step 2 of [how a frame happens](#how-a-frame-happens) |
 | a display list the compositor builds | `cf_command_list`, the shape list `cf_paint` emits |
-| a graphics backend (Skia, ANGLE) | a `cf_backend`: [ten functions](docs/backend-abi.md) |
+| a graphics backend (Skia, ANGLE) | a `cf_backend`: [eleven functions](docs/backend-abi.md) |
 | React re-rendering your component tree | describing the whole screen every frame and letting the diff decide |
 | a `click` listener on an ancestor | a handler on a parent box: they run from the one the pointer hit up through its parents, and `cf_stop` ends the walk |
 
@@ -383,10 +383,10 @@ Four steps, and each one can be used on its own:
    the shell stops calling the pipeline once it sees nothing moved.
 4. **Draw.** A backend turns that list onto a real surface, reports clicks and
    keystrokes back, answers how big the surface is, reads an image file, puts the
-   shape the frame asked for under the pointer and opens or shuts the service that
-   takes written text. One over SDL3 ships here, a headless recorder exists for
-   tests, and writing your own means filling in
-   [ten functions](docs/backend-abi.md).
+   shape the frame asked for under the pointer, opens or shuts the service that
+   takes written text and moves an input method's answer box. One over SDL3 ships
+   here, a headless recorder exists for tests, and writing your own means filling
+   in [eleven functions](docs/backend-abi.md).
 
 ## Words this repository uses
 

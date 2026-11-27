@@ -166,6 +166,11 @@ static const api_symbol text_symbols[] = {
      "uint32_t cf_text_line_of(const cf_text_content *content, const cf_text_line *lines, uint32_t "
      "count, uint32_t offset);",
      "Which laid line a byte offset falls on."},
+    {"cf_text_each_run",
+     "void cf_text_each_run(const cf_text_content *content, const cf_text_line *line, "
+     "void (*visit)(void *user_data, const cf_text_run *run), void *user_data);",
+     "Hands over the runs a laid line is drawn in, each with the face that measured it, so no "
+     "device sets a glyph in a width its box was never sized for."},
     {"cf_text_caret_x",
      "float cf_text_caret_x(const cf_text_content *content, const cf_text_line *line, uint32_t "
      "offset);",
@@ -178,6 +183,12 @@ static const api_symbol text_symbols[] = {
      "cf_point cf_text_scroll(const cf_text_content *content, const cf_text_line *lines, uint32_t "
      "count, cf_size window);",
      "How far a box must slide to keep the caret it states inside itself."},
+    {"cf_text_next_cluster", "uint32_t cf_text_next_cluster(cf_string text, uint32_t offset);",
+     "The boundary a step forward lands on, so an accent written onto a letter crosses as the "
+     "letter does."},
+    {"cf_text_prev_cluster", "uint32_t cf_text_prev_cluster(cf_string text, uint32_t offset);",
+     "The boundary a backspace stops at, which takes a joined picture apart rather than one byte "
+     "of it."},
 };
 
 /* layout: the pass that turns a declaration into geometry. */
@@ -247,6 +258,10 @@ static const api_symbol node_symbols[] = {
     {"cf_frame_takes_text", "bool cf_frame_takes_text(const cf_ctx *ctx);",
      "Whether the focused box takes written text: when a device with a screen keyboard should show "
      "one."},
+    {"cf_frame_composition_rect", "cf_rect cf_frame_composition_rect(const cf_ctx *ctx);",
+     "Where the run an input method is still deciding stands, taken from the box this frame laid "
+     "under it - the number a candidate window is placed with, and one that follows a page that "
+     "moves."},
     {"cf_state", "void *cf_state(cf_ctx *ctx, cf_name key, size_t size);",
      "A block of build state under a name, zeroed once, kept while it is asked for and retired a "
      "frame after it is not."},
@@ -294,6 +309,11 @@ static const api_symbol node_symbols[] = {
      "bool cf_semantic_export(const cf_ctx *ctx, char *out, size_t capacity);",
      "The view as the tree a screen reader walks: role, text, rect and a disabled suffix, one line "
      "per node."},
+    {"cf_semantic_visit",
+     "void cf_semantic_visit(const cf_ctx *ctx, void (*visit)(const cf_semantic *node, void "
+     "*user_data), void *user_data);",
+     "The same walk for a bridge rather than a log: the whole value as UTF-8, an id a reader can "
+     "hold across frames, and the state, action and relation each box declares."},
 };
 
 /* build: the sugar over the declaration vocabulary. */
