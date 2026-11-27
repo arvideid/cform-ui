@@ -133,6 +133,8 @@ static char motion_bytes[96];
 static char keyboard_bytes[96];
 static char leaving_bytes[96];
 static char spoken_bytes[64];
+static char live_bytes[64];
+static char again_bytes[64];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -606,11 +608,17 @@ static cf_node make_field_demo(cf_ctx *ctx) {
     const int memo_length = snprintf(memo_bytes, sizeof memo_bytes,
                                      "the memo holds %u bytes and %u breaks", memo.length, breaks);
 
+    /* The one line on the page worth interrupting for: its refused count moves only when a key did
+     * nothing, which is the thing to say out loud before the person types another one. The lines
+     * beside it report what already happened, and can wait their turn. */
+    cf_node refusal = cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted);
+    refusal.announce = CF_ANNOUNCE_ASSERTIVE;
+
     return demo_column(
         ctx, 8.0f,
         (cf_node[]){
             entry,
-            cf_label(ctx, (cf_string){echo_bytes, (uint32_t)length}, &body, theme->muted),
+            refusal,
             cf_label(ctx, (cf_string){submit_bytes, (uint32_t)saved_length}, &body, theme->muted),
             cf_label(ctx, (cf_string){change_bytes, (uint32_t)moved_length}, &body, theme->muted),
             block,
@@ -1239,13 +1247,57 @@ static cf_node make_words_demo(cf_ctx *ctx) {
                        2u);
 }
 
+/* How many times the page has made news since it opened, which is the number the live region below
+ * is rewritten from. */
+static uint32_t *news_count(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "news"), sizeof(uint32_t));
+}
+
+static void make_the_news(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot, (void)user_data;
+    uint32_t *held = news_count(ctx);
+
+    if (held != NULL) {
+        (*held)++;
+    }
+}
+
+/* Chapter thirteen: which words are worth hearing twice. A region of the page is marked once and
+ * everything inside it is covered, so the lines a control rewrites can be announced without any of
+ * them being named as an announcement. */
+static cf_node make_live_demo(cf_ctx *ctx) {
+    const uint32_t *counted = news_count(ctx);
+    const uint32_t news = counted != NULL ? *counted : 0u;
+    const int length =
+        snprintf(live_bytes, sizeof live_bytes, "the page has made news %u times", news);
+    const int again_length =
+        snprintf(again_bytes, sizeof again_bytes, "and %u of them were this button", news);
+
+    const cf_node again = make_button(ctx, "make news", make_the_news, NULL);
+
+    /* The mark goes on the box that holds the lines, not on the lines: a region is an area of the
+     * page and grows another line without anything being remarked. The holder is announced by
+     * nothing at all - no role, only a direction - so the level has to be read on the way down to
+     * the words that moved, which is what the walk does. */
+    cf_node status = cf_row(
+        ctx, wrap_row(4.0f),
+        (cf_node[]){
+            cf_label(ctx, (cf_string){live_bytes, (uint32_t)length}, &body, theme->muted),
+            cf_label(ctx, (cf_string){again_bytes, (uint32_t)again_length}, &body, theme->muted),
+        },
+        2u);
+    status.announce = CF_ANNOUNCE_POLITE;
+
+    return demo_column(ctx, 8.0f, (cf_node[]){again, status}, 2u);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
 
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("twelve rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("thirteen rules, each with something to try"),
                                   &body, theme->muted);
 
     cf_style row = cf_style_default();
@@ -1452,6 +1504,24 @@ static cf_node build(cf_ctx *ctx) {
             "at "
             "the same box instead of a different one in the same slot.",
             make_words_demo(ctx)),
+        make_chapter(
+            ctx, "13", "The words worth hearing twice",
+            "Most of what a page says is worth saying once. A line that reports what just "
+            "happened is not, and the person who cannot see it needs it the moment the bytes "
+            "move under them - with a word about whether to be interrupted for it. The build "
+            "marks the area rather than the sentence: one field on the box holding the status "
+            "lines, which the walk hands to every box reported inside it, so a region grows "
+            "another line without anything being remarked and the plain wrapper carrying it "
+            "stays out of the reading. There are two levels because a screen reader has two: "
+            "polite waits for the end of what it was saying, assertive says it now. Press the "
+            "button and both lines under it move, so a bridge comparing what it heard "
+            "last finds the same two identities carrying different words. The line under the "
+            "field in chapter two is marked the other way on purpose - its refused count moves "
+            "only when a key did nothing, which is the thing to say before the next one is "
+            "tried. Words that move with no event and no dirty box are the page's own news, and "
+            "asking for a frame is how it says so: the shell's idle rule cannot see a number "
+            "that changed in a block nothing was told about.",
+            make_live_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "

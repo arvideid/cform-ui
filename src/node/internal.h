@@ -27,11 +27,14 @@
  * stated them is already gone.
  *
  * `signature` hashes what the last claim declared - style, measure, handler
- * pointers, role, disabled, the child count, and the grid track arrays by value
- * (a borrowed array whose in-place edits the style bytes alone would miss) - so
- * a diff sees a change without keeping the declaration. `dirty` says this frame
- * changed the node, by that comparison or by hand, and lives until the next
- * frame begins.
+ * pointers, role, disabled, the child count, the announced role and
+ * focusability, the live-region level and the grid track arrays by value (a
+ * borrowed array whose in-place edits the style bytes alone would miss) - so a
+ * diff sees a change without keeping the declaration. The announced words are
+ * hashed by value too, because a build that assembles a name into one steady
+ * buffer every frame changes the bytes without changing the pointer. `dirty`
+ * says this frame changed the node, by that comparison or by hand, and lives
+ * until the next frame begins.
  */
 typedef struct node_record {
     cf_name key;
@@ -53,6 +56,10 @@ typedef struct node_record {
     cf_access access;
     cf_string name;
     cf_string description;
+    /* Booked from the declaration: the level a live region covers this box with, as the build
+     * stated it. The walk inherits it downward, so only the region's own box carries a level here.
+     */
+    cf_announce announce;
     /* Booked from the declaration: the keyboard reaches the boxes that say so,
      * and neither the role nor a handler is the question. */
     bool focusable;

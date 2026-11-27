@@ -1735,6 +1735,7 @@ typedef struct announced {
     cf_id id;
     uint32_t slot;
     cf_access access;
+    cf_announce announce;
     char name[SPOKEN_BYTES];
     char value[SPOKEN_BYTES];
     cf_id labelled_by;
@@ -1772,6 +1773,7 @@ static void keep_the_visit(const cf_semantic *node, void *user_data) {
     *row = (announced){.id = node->id,
                        .slot = node->slot,
                        .access = node->access,
+                       .announce = node->announce,
                        .labelled_by = node->labelled_by,
                        .selection_start = node->selection_start,
                        .selection_end = node->selection_end,
@@ -1818,6 +1820,31 @@ static uint32_t count_of_access(const announced *rows, uint32_t count, cf_access
 
     for (uint32_t i = 0u; i < count; ++i) {
         seen += rows[i].access == access ? 1u : 0u;
+    }
+
+    return seen;
+}
+
+/* A row found by the beginning of its words, for the lines a page writes into a buffer of its own:
+ * the copy is bounded, so an exact match would ask the case to know how long the sentence was
+ * allowed to be. */
+static const announced *heard_starting(const char *prefix) {
+    const size_t length = strlen(prefix);
+
+    for (uint32_t i = 0u; i < spoken_count; ++i) {
+        if (strncmp(spoken[i].name, prefix, length) == 0) {
+            return &spoken[i];
+        }
+    }
+
+    return NULL;
+}
+
+static uint32_t count_of_announce(const announced *rows, uint32_t count, cf_announce level) {
+    uint32_t seen = 0u;
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        seen += rows[i].announce == level ? 1u : 0u;
     }
 
     return seen;
@@ -1873,6 +1900,23 @@ static void a_bridge_hears_the_page_the_way_a_person_reads_it(void) {
     CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_LIST) == 1u,
              "and the list that holds the rows is announced as the run, above its items");
 
+    /* Which words the page means to say again. Two boxes of the build carry a level and the walk
+     * hands it to the lines that move, so a bridge knows what to watch for news without watching
+     * the whole page for it. */
+    const announced *refusal = heard_starting("the buffer holds");
+    const announced *news = heard_starting("the page has made news");
+    const announced *beside = heard_starting("and 0 of them");
+    CF_CHECK(refusal != NULL && refusal->announce == CF_ANNOUNCE_ASSERTIVE,
+             "the line that reports a key refused is the one worth interrupting for");
+    CF_CHECK(count_of_announce(spoken, spoken_count, CF_ANNOUNCE_ASSERTIVE) == 1u,
+             "and it is the only line on the page that says so");
+    CF_CHECK(news != NULL && news->announce == CF_ANNOUNCE_POLITE,
+             "the status line is covered by the box that holds it, having stated nothing itself");
+    CF_CHECK(beside != NULL && beside->announce == CF_ANNOUNCE_POLITE,
+             "and so is the line written beside it, which is what marking an area buys");
+    CF_CHECK(count_of_announce(spoken, spoken_count, CF_ANNOUNCE_POLITE) == 2u,
+             "only the two lines inside that region are watched, not the page around them");
+
     const announced *mute = NULL;
 
     for (uint32_t i = 0u; i < spoken_count && mute == NULL; ++i) {
@@ -1918,6 +1962,8 @@ static void a_bridge_hears_the_page_the_way_a_person_reads_it(void) {
 
     CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 2u,
              "both of the page's fields answer, and no other box claims to take typed text");
+    CF_CHECK(entry != NULL && entry->announce == CF_ANNOUNCE_NONE,
+             "a field is not a news line: no region covers what a person is typing into");
 
     uint32_t focused = 0u;
 
@@ -2006,6 +2052,70 @@ static void a_bridge_asking_twice_sees_which_boxes_moved(void) {
     end_session();
 }
 
+/*
+ * The live region read the way a bridge has to read it: ask, keep the identities, let the page move
+ * the words inside the marked area, ask again. The lines that were watched are still there under
+ * the ids they were watched at, answering differently, and the urgency the region was marked with
+ * does not move with the news. That is a notification, handed over by a bridge that never looked at
+ * the painted stream.
+ */
+static void the_boxes_inside_a_live_region_are_reheard_under_their_own_ids(void) {
+    char news_words[SPOKEN_BYTES];
+    char beside_words[SPOKEN_BYTES];
+    char urgent_words[SPOKEN_BYTES];
+
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("make news", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *news = heard_starting("the page has made news");
+    const announced *beside = heard_starting("and 0 of them");
+    const announced *urgent = heard_starting("the buffer holds");
+    CF_CHECK(news != NULL && beside != NULL && urgent != NULL,
+             "both lines of the region and the urgent line outside it are in the first reading");
+
+    /* Kept by value: the next ask overwrites the table, and a bridge that meant to compare two
+     * frames had to remember what it was told rather than point at it. */
+    const cf_id news_id = news != NULL ? news->id : CF_NO_ID;
+    const cf_id beside_id = beside != NULL ? beside->id : CF_NO_ID;
+    const cf_id urgent_id = urgent != NULL ? urgent->id : CF_NO_ID;
+    snprintf(news_words, sizeof news_words, "%s", news != NULL ? news->name : "");
+    snprintf(beside_words, sizeof beside_words, "%s", beside != NULL ? beside->name : "");
+    snprintf(urgent_words, sizeof urgent_words, "%s", urgent != NULL ? urgent->name : "");
+
+    if (!tap("make news")) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *again = row_by_id(spoken, spoken_count, news_id);
+    const announced *mate = row_by_id(spoken, spoken_count, beside_id);
+    const announced *steady = row_by_id(spoken, spoken_count, urgent_id);
+
+    CF_CHECK(again != NULL && mate != NULL,
+             "the page moved the words without retiring the boxes that carry them");
+    CF_CHECK(again != NULL && again->announce == CF_ANNOUNCE_POLITE && mate != NULL &&
+                 mate->announce == CF_ANNOUNCE_POLITE,
+             "and the region still covers both of them at the level it was marked with");
+    CF_CHECK(again != NULL && strcmp(again->name, news_words) != 0 && mate != NULL &&
+                 strcmp(mate->name, beside_words) != 0,
+             "both watched lines answer differently now, which is the delta asked for");
+    CF_CHECK(again != NULL && strcmp(again->name, "the page has made news 1 times") == 0,
+             "and they answer with what happened, not with that something happened");
+    CF_CHECK(steady != NULL && steady->announce == CF_ANNOUNCE_ASSERTIVE &&
+                 strcmp(steady->name, urgent_words) == 0,
+             "the urgent line outside the region kept its words and its urgency alike");
+
+    end_session();
+}
+
 int main(void) {
     printf("gallery headless\n");
 
@@ -2036,6 +2146,7 @@ int main(void) {
     CF_RUN(the_inspector_lays_its_numbers_over_the_page);
     CF_RUN(a_bridge_hears_the_page_the_way_a_person_reads_it);
     CF_RUN(a_bridge_asking_twice_sees_which_boxes_moved);
+    CF_RUN(the_boxes_inside_a_live_region_are_reheard_under_their_own_ids);
 
     end_sessions();
     return CF_REPORT();

@@ -220,6 +220,7 @@ typedef struct said {
     cf_id id;
     uint32_t slot;
     cf_access access;
+    cf_announce announce;
     cf_id labelled_by;
     uint32_t states;
     uint32_t actions;
@@ -262,6 +263,7 @@ static void keep_the_visit(const cf_semantic *node, void *user_data) {
     *entry = (said){.id = node->id,
                     .slot = node->slot,
                     .access = node->access,
+                    .announce = node->announce,
                     .labelled_by = node->labelled_by,
                     .states = node->states,
                     .actions = node->actions,
@@ -290,6 +292,18 @@ static const said *spoken_as(cf_access access) {
 
 static bool words_are(const char *bytes, uint32_t length, const char *expected) {
     return length == (uint32_t)strlen(expected) && memcmp(bytes, expected, length) == 0;
+}
+
+/* A label is announced by the words it lays, so those words name the row a case is asking about
+ * even when several rows carry the same role. */
+static const said *spoken_saying(const char *words) {
+    for (uint32_t i = 0u; i < spoken_count; ++i) {
+        if (words_are(spoken[i].name, spoken[i].name_length, words)) {
+            return &spoken[i];
+        }
+    }
+
+    return NULL;
 }
 
 /* A handler that does nothing is still the door its action bit reports. */
@@ -774,6 +788,192 @@ static void a_name_keeps_every_byte_of_the_text_the_build_wrote(void) {
     cf_ctx_free(&ctx);
 }
 
+/* A live region marks an area of the page rather than a sentence: every box the walk reports inside
+ * it carries the level, including the ones that stated nothing of their own, and the box that opens
+ * the region is covered by it as much as any line inside. */
+static void a_live_region_covers_every_box_inside_it(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    static const cf_text_content later_text = {.text = {.chars = "later", .length = 5u}};
+
+    cf_node line = box_node(CF_ACCESS_LABEL);
+    line.measure = cf_text_measure;
+    line.measure_data = (void *)&later_text;
+
+    cf_node control = box_node(CF_ACCESS_BUTTON);
+    state_named(&control, "Save");
+
+    const cf_node region_kids[] = {line, control};
+    cf_node region = box_node(CF_ACCESS_GROUP);
+    region.announce = CF_ANNOUNCE_POLITE;
+    region.children = region_kids;
+    region.child_count = 2u;
+
+    cf_node elsewhere = box_node(CF_ACCESS_LABEL);
+    elsewhere.measure = cf_text_measure;
+    elsewhere.measure_data = (void *)&typed_text;
+
+    const cf_node page_kids[] = {region, elsewhere};
+    cf_node page = page_node();
+    page.children = page_kids;
+    page.child_count = 2u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the diff claims the page");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *held = spoken_as(CF_ACCESS_BUTTON);
+    const said *outside = spoken_saying("say hi");
+    CF_CHECK(spoken_as(CF_ACCESS_GROUP) != NULL &&
+                 spoken_as(CF_ACCESS_GROUP)->announce == CF_ANNOUNCE_POLITE,
+             "the region is announced at the level it states, the same as anything inside it");
+    CF_CHECK(held != NULL && held->announce == CF_ANNOUNCE_POLITE,
+             "the control inside the region is covered by it, though it stated no level");
+    CF_CHECK(spoken_saying("later") != NULL &&
+                 spoken_saying("later")->announce == CF_ANNOUNCE_POLITE,
+             "and so is the line beside it");
+    CF_CHECK(held != NULL && outside != NULL && outside->announce == CF_ANNOUNCE_NONE,
+             "a box outside every region is announced once and not watched for news");
+
+    cf_ctx_free(&ctx);
+}
+
+/* The nearest mark wins, and what a box declares reaches its own children: one status area can hold
+ * a line that interrupts while the lines beside it keep waiting their turn. */
+static void the_urgent_line_inside_a_polite_region_stays_urgent(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    static const cf_text_content later_text = {.text = {.chars = "later", .length = 5u}};
+    static const cf_text_content now_text = {.text = {.chars = "now", .length = 3u}};
+
+    cf_node waiting = box_node(CF_ACCESS_LABEL);
+    waiting.measure = cf_text_measure;
+    waiting.measure_data = (void *)&later_text;
+
+    cf_node word = box_node(CF_ACCESS_LABEL);
+    word.measure = cf_text_measure;
+    word.measure_data = (void *)&now_text;
+
+    const cf_node shout_kids[] = {word};
+    cf_node shout = box_node(CF_ACCESS_GROUP);
+    /* Named, because both boxes here are groups and the row a case asks about has to be the one it
+     * means: the walk reports the outer region first. */
+    state_named(&shout, "shout");
+    shout.announce = CF_ANNOUNCE_ASSERTIVE;
+    shout.children = shout_kids;
+    shout.child_count = 1u;
+
+    const cf_node region_kids[] = {waiting, shout};
+    cf_node region = box_node(CF_ACCESS_GROUP);
+    region.announce = CF_ANNOUNCE_POLITE;
+    region.children = region_kids;
+    region.child_count = 2u;
+
+    const cf_node page_kids[] = {region};
+    cf_node page = page_node();
+    page.children = page_kids;
+    page.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the diff claims the page");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *urgent = spoken_saying("shout");
+    CF_CHECK(urgent != NULL && urgent->announce == CF_ANNOUNCE_ASSERTIVE,
+             "the box that stated a level keeps it over the one it sits inside");
+    CF_CHECK(spoken_as(CF_ACCESS_GROUP) != NULL &&
+                 spoken_as(CF_ACCESS_GROUP)->announce == CF_ANNOUNCE_POLITE,
+             "and the region holding it is still announced at its own level");
+    CF_CHECK(spoken_saying("now") != NULL &&
+                 spoken_saying("now")->announce == CF_ANNOUNCE_ASSERTIVE,
+             "and hands it down to the words inside it");
+    CF_CHECK(spoken_saying("later") != NULL &&
+                 spoken_saying("later")->announce == CF_ANNOUNCE_POLITE,
+             "while its sibling stays under the region that covers them both");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A region that changes its mind is a change to the box: the level rides the diff's signature, so a
+ * build that flips a status area from polite to urgent with the same words and the same style still
+ * reads as a changed node, and the frame after reports the new urgency.
+ *
+ * The line inside it changes nothing about itself - the walk hands the level down as it goes, so a
+ * box the diff called unchanged is covered by a region it never had to hear about.
+ */
+static void a_region_that_becomes_urgent_reads_as_a_changed_box(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    static const cf_text_content later_text = {.text = {.chars = "later", .length = 5u}};
+
+    cf_node line = box_node(CF_ACCESS_LABEL);
+    line.measure = cf_text_measure;
+    line.measure_data = (void *)&later_text;
+
+    const cf_node region_kids[] = {line};
+    cf_node region = box_node(CF_ACCESS_GROUP);
+    region.announce = CF_ANNOUNCE_POLITE;
+    region.children = region_kids;
+    region.child_count = 1u;
+
+    const cf_node page_kids[] = {region};
+    cf_node page = page_node();
+    page.children = page_kids;
+    page.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the first frame claims the region");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *held = spoken_as(CF_ACCESS_GROUP);
+    const cf_id kept = held != NULL ? held->id : CF_NO_ID;
+    const uint32_t kept_slot = held != NULL ? held->slot : CF_NO_LINK;
+    const uint32_t line_slot =
+        spoken_saying("later") != NULL ? spoken_saying("later")->slot : CF_NO_LINK;
+
+    region.announce = CF_ANNOUNCE_ASSERTIVE;
+    const cf_node again_kids[] = {line};
+    region.children = again_kids;
+    const cf_node again_page_kids[] = {region};
+    page.children = again_page_kids;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &page) != CF_NO_LINK, "the second frame claims it again");
+    CF_CHECK(cf_dirty(&ctx, kept_slot),
+             "a level stated differently is a change the diff sees for itself");
+    CF_CHECK(!cf_dirty(&ctx, line_slot),
+             "and it is the region that changed, not the line it covers");
+    lay(&ctx);
+    announce(&ctx);
+
+    const said *urgent = spoken_as(CF_ACCESS_GROUP);
+    const said *words = spoken_saying("later");
+    CF_CHECK(urgent != NULL && cf_id_equal(kept, urgent->id),
+             "the region keeps the identity a bridge is holding");
+    CF_CHECK(urgent != NULL && urgent->announce == CF_ANNOUNCE_ASSERTIVE,
+             "and says what it now means");
+    CF_CHECK(words != NULL && words->announce == CF_ANNOUNCE_ASSERTIVE,
+             "the line inside it is heard at the new level, having changed nothing");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("semantics\n");
     CF_RUN(a_view_walks_as_the_roles_it_kept);
@@ -789,6 +989,9 @@ int main(void) {
     CF_RUN(a_retired_box_leaves_the_walk_and_its_slot_answers_for_nobody);
     CF_RUN(the_box_holding_the_keyboard_is_the_one_announced_focused);
     CF_RUN(a_name_keeps_every_byte_of_the_text_the_build_wrote);
+    CF_RUN(a_live_region_covers_every_box_inside_it);
+    CF_RUN(the_urgent_line_inside_a_polite_region_stays_urgent);
+    CF_RUN(a_region_that_becomes_urgent_reads_as_a_changed_box);
 
     return CF_REPORT();
 }

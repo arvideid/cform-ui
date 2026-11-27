@@ -143,13 +143,16 @@ accepted and ignored — there is no field that pretends to take these things.
   the name the build stated, or the label it carries — the bytes a field holds and
   which run of them is selected, the states a person is in (disabled, focused,
   pressed, hovered) and only the asks the frame can really serve. Each row carries
-  the store's generational id, so a bridge asks again after a frame and repaints
-  the boxes whose id arrived, left or changed. Nothing allocates and no name is
-  cut. `cf_semantic_export` stays what it was — bounded text for a developer, not
-  a protocol. What is missing is the other side: nothing reaches Narrator,
-  VoiceOver or AT-SPI, there is no live region, no ARIA, and no hit-target or
-  contrast checking. A `cf_label` in this project is a box that draws glyphs; it
-  names the box it sits inside, not a sibling beside it.
+  the store's generational id and the live-region level covering it: a build marks
+  an area once with `cf_node.announce` — polite waits for the end of a sentence,
+  assertive says it now — and the walk hands that level to every box reported
+  inside it, so a bridge watches the rows carrying news instead of the whole page.
+  Nothing allocates and no name is cut. `cf_semantic_export` stays what it was —
+  bounded text for a developer, not a protocol. What is missing is the other side:
+  nothing reaches Narrator, VoiceOver or AT-SPI, there is no ARIA mapping and no
+  hit-target or contrast checking. A `cf_label` in this project is a box that
+  draws glyphs; it names the box it sits inside, not a sibling beside it, and a
+  box is related to nothing but the boxes holding it.
 - **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
   says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
   callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk the
@@ -250,8 +253,8 @@ build/dev/bin/gallery                             # open the demo window
 `gallery` is a scrolling page that demonstrates every widget and reacts to the
 mouse: type in the field, drag the scrollbars, watch the box the frame clock
 animates. Press **F12** in it to see the frame's numbers on screen, with the words
-the walk would announce for the box holding the keyboard — Tab across the last
-chapter's three controls to watch that line change. Drag its edge: the window is
+the walk would announce for the box holding the keyboard — Tab across chapter
+twelve's three controls to watch that line change. Drag its edge: the window is
 resizable, and every line of text re-breaks against the width the shell hands the
 page.
 

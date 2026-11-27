@@ -307,13 +307,27 @@ static void selection_of(const cf_tree *tree, uint32_t slot, cf_opt_u32 *out_sta
     *out_end = (cf_opt_u32){.present = true, .value = caret > mark ? caret : mark};
 }
 
-static void announce(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot,
-                     void (*visit)(const cf_semantic *node, void *user_data), void *user_data) {
+/*
+ * The level that covers a box: the one it stated, or the one the region around it did. Liveness is
+ * inherited downward the way WAI-ARIA inherits aria-live, so a build marks the status group and the
+ * label whose words moved inside it needs no mark of its own - and the wrapper holding that label,
+ * which is announced by nothing, still carries the region through.
+ */
+static cf_announce level_covering(cf_announce declared, cf_announce enclosing) {
+    return declared != CF_ANNOUNCE_NONE ? declared : enclosing;
+}
+
+static void announce_below(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot,
+                           cf_announce region,
+                           void (*visit)(const cf_semantic *node, void *user_data),
+                           void *user_data) {
     const node_record *record = visible_record(ctx, tree, slot);
 
     if (record == NULL) {
         return;
     }
+
+    const cf_announce covering = level_covering(record->announce, region);
 
     if (record->access != CF_ACCESS_NONE) {
         const cf_id id = cf_store_id(&ctx->nodes, slot);
@@ -355,6 +369,7 @@ static void announce(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot,
                              .selection_start = selection_start,
                              .selection_end = selection_end,
                              .labelled_by = labelled_by,
+                             .announce = covering,
                              .rect = rect,
                              .states = states,
                              .actions = actions_of(record, states)},
@@ -362,7 +377,7 @@ static void announce(const cf_ctx *ctx, const cf_tree *tree, uint32_t slot,
     }
 
     for (uint32_t i = tree->child_start[slot]; i < tree->child_start[slot + 1u]; ++i) {
-        announce(ctx, tree, tree->child_slots[i], visit, user_data);
+        announce_below(ctx, tree, tree->child_slots[i], covering, visit, user_data);
     }
 }
 
@@ -378,5 +393,5 @@ void cf_semantic_visit(const cf_ctx *ctx, void (*visit)(const cf_semantic *node,
         return;
     }
 
-    announce(ctx, tree, ctx->root_slot, visit, user_data);
+    announce_below(ctx, tree, ctx->root_slot, CF_ANNOUNCE_NONE, visit, user_data);
 }

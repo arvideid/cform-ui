@@ -56,6 +56,7 @@ static uint32_t signature_of(const cf_node *decl) {
         uint32_t child_count;
         cf_role role;
         cf_access access;
+        cf_announce announce;
         bool disabled;
         bool focusable;
     } declared;
@@ -70,6 +71,7 @@ static uint32_t signature_of(const cf_node *decl) {
     declared.disabled = decl->disabled;
     declared.access = decl->access;
     declared.focusable = decl->focusable;
+    declared.announce = decl->announce;
 
     /* The grid tracks are a borrowed array, so the struct hash above carries
      * their pointer but not their values - an edit made in place at a stable
@@ -293,6 +295,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->access = root->access;
     root_record->name = root->name;
     root_record->description = root->description;
+    root_record->announce = root->announce;
     root_record->focusable = root->focusable;
 
     const uint32_t root_signature = signature_of(root);
@@ -345,6 +348,7 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->access = decl->access;
         record->name = decl->name;
         record->description = decl->description;
+        record->announce = decl->announce;
         record->focusable = decl->focusable;
 
         const uint32_t signature = signature_of(decl);

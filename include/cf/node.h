@@ -64,6 +64,25 @@ typedef enum cf_access {
 } cf_access;
 
 /*
+ * Whether a box's words are worth hearing again after they change, and how soon. The question a
+ * live region answers is not "what is this box" - the role above is - but "the page moved under
+ * this text, interrupt me or wait". A status line that updates when a save finishes can wait; a
+ * refusal that explains why a key did nothing is the reason the person pressed it. Bridges map
+ * these onto the politeness a screen reader already has: WAI-ARIA's `aria-live` of "polite" and
+ * "assertive", and the equivalent of it in UI Automation's live-text property.
+ *
+ * CF_ANNOUNCE_NONE states nothing about a box of its own, so the box takes the level of the region
+ * it sits inside. Liveness belongs to a region rather than to a box, which is what makes a status
+ * area cheap to build: mark the group once and every label inside it is covered, including the
+ * plain wrappers that carry no role at all.
+ */
+typedef enum cf_announce {
+    CF_ANNOUNCE_NONE,
+    CF_ANNOUNCE_POLITE,   /* say the new words when the person is not mid-sentence */
+    CF_ANNOUNCE_ASSERTIVE /* say them now: this is what the person was waiting for */
+} cf_announce;
+
+/*
  * One declared node: a value the build assembles and the diff reads, never
  * the engine's to keep. `children`, `measure_data` and the handler data stay
  * borrowed through the frame that declared them: the diff reads the child
@@ -101,6 +120,11 @@ typedef struct cf_node {
     cf_access access;
     cf_string name;
     cf_string description;
+
+    /* Whether the words under this box are meant to be heard again when they change. A build marks
+     * the region, not every box in it: the level is inherited downward by the walk, so a status
+     * group named once announces the label that moved inside it. */
+    cf_announce announce;
 
     /* Whether this box takes keyboard focus. A role is not the answer: a box
      * themed as a button can be a picture of one, and a box with no role at all
@@ -479,6 +503,12 @@ typedef struct cf_semantic {
     cf_opt_u32 selection_start;
     cf_opt_u32 selection_end;
     cf_id labelled_by;
+    /* Whether this box sits in a live region, and how urgent that region is: the level the box
+     * declared, or the one the region around it did. Only CF_ANNOUNCE_NONE means no region covers
+     * the box, so a build that marked a group sees the mark on every box the walk reported inside
+     * it - and a bridge knows which rows to watch for changed bytes without walking the page for
+     * news it was never meant to hear. */
+    cf_announce announce;
     cf_rect rect;
     uint32_t states;
     uint32_t actions;
@@ -494,7 +524,10 @@ typedef struct cf_semantic {
  *
  * The walk is how a bridge learns what changed: an untouched box keeps its id from frame to frame,
  * so a re-walk after a repaint reports the same boxes with new words, states or rects rather than
- * a tree that looks new every time, and a box that no longer appears is one the page retired.
+ * a tree that looks new every time, and a box that no longer appears is one the page retired. The
+ * boxes worth comparing that way are the ones `announce` says are live, and a page whose own state
+ * moved the words inside one asks for the next frame with `cf_request_frame` - the shell's idle
+ * rule cannot see a change the tree was never told about.
  *
  * A context with no view calls nothing. The walk allocates nothing, so an announcement can be fed
  * from a frame that has no room left for one more command.
