@@ -119,7 +119,10 @@ UI sitting in a laptop bag should not be measuring flexbox sixty times a second.
 a timer, and any state a page reports as changed.
 
 **Checked by** the bench suite in `docs/bench.md`, which reports the idle case as a
-number beside the animated one, and `tests/unit/app_run.c`.
+number beside the animated one, and `tests/unit/app_run.c`. The shortcut belongs to the
+shell, so a host that drives `cf_frame_run` writes the test for itself; the one in
+`examples/host_loop.h` is checked by `tests/unit/host_loop.c`, which shows a resting page
+still presenting without building.
 
 ---
 
@@ -259,6 +262,7 @@ purpose — see `docs/maintenance.md` for where that fits.
 | the site carries no borrowed colour | `tools/check_docs.py`, over `examples/site/` |
 | a page renders at every width | `tests/unit/site_headless.c` |
 | the gallery still draws what it drew | `tests/golden/`, `tests/unit/gallery_headless.c` |
+| a host with its own loop gets the same stream | `tests/unit/host_loop.c` |
 | flexbox is right, not approximately right | `tests/conformance/yoga_cases.c` |
 
 If a rule in this file has no row above, it is a preference and should be argued with.
