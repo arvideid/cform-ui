@@ -201,6 +201,39 @@ static void the_recorder_keeps_the_text_input_ask(void) {
     backend.set_text_input(NULL, true);
 }
 
+/*
+ * The candidate box outlives the frame the way the keyboard ask does, and for the same reason:
+ * an input method's window stays where it was put until something moves it, so the recorder's
+ * answer is the state a test reads rather than a command that passed by. The empty rect matters
+ * most - it is how a page says it stopped deciding, and a device left holding a box would stand
+ * its candidates over a field that no longer needs them.
+ */
+static void the_recorder_keeps_the_candidate_box(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = cf_backend_recorder(&recorder);
+
+    CF_CHECK(backend.set_candidate_rect != NULL, "the scripted device offers the candidate slot");
+    CF_CHECK(recorder.candidate.width == 0.0f && recorder.candidate.height == 0.0f,
+             "and starts with nothing being decided");
+
+    backend.set_candidate_rect(backend.user_data, (cf_rect){40.0f, 20.0f, 30.0f, 20.0f});
+    CF_CHECK(recorder.candidate.x == 40.0f && recorder.candidate.width == 30.0f &&
+                 recorder.candidate.height == 20.0f,
+             "the box is kept with the numbers it was given");
+
+    const cf_command stream[] = {fill_at(0.0f, 0.0f, 10.0f, 10.0f, 1u)};
+    backend.submit(backend.user_data, stream, 1u);
+    CF_CHECK(recorder.count == 1u && recorder.candidate.height == 20.0f,
+             "a submit says nothing about the box the page was holding");
+
+    backend.set_candidate_rect(backend.user_data, (cf_rect){0.0f, 0.0f, 0.0f, 0.0f});
+    CF_CHECK(recorder.candidate.width == 0.0f && recorder.candidate.x == 0.0f,
+             "and the empty rect is kept as an answer too");
+
+    backend.set_candidate_rect(NULL, (cf_rect){1.0f, 1.0f, 1.0f, 1.0f});
+    CF_CHECK(recorder.candidate.width == 0.0f, "a device that is not there is not told");
+}
+
 int main(void) {
     printf("backend record\n");
     CF_CHECK(cf_arena_init(&store, 65536u), "the recorder needs an arena");
@@ -213,6 +246,7 @@ int main(void) {
     CF_RUN(a_backend_that_is_not_there_submits_nothing);
     CF_RUN(the_recorder_keeps_the_shape_it_was_asked_for);
     CF_RUN(the_recorder_keeps_the_text_input_ask);
+    CF_RUN(the_recorder_keeps_the_candidate_box);
 
     cf_arena_free(&store);
     return CF_REPORT();

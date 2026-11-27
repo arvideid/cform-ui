@@ -91,6 +91,11 @@ static cf_rect filled_rect(const paint_walk *walk, cf_rect box, float radius) {
  * stands in. */
 #define CARET_WIDTH 1.0f
 
+/* The rule under a marked run, in the same unit: a run is underlined rather than
+ * covered, and one point is what reads as a rule rather than a band at any line height
+ * the walk lays. */
+#define MARKED_RULE 1.0f
+
 /* Where a walk's lines stand: the pen's start after the box's insets and the
  * caret's slide, the rhythm the lines step by, and the clip their commands
  * name. The marks a text box lays read the same four numbers its lines do. */
@@ -150,28 +155,61 @@ static void line_range(const cf_text_content *content, const cf_text_line *line,
 }
 
 /*
- * The band a line's part of a selection lays down. Both ends are read through
- * cf_text_caret_x, which clamps an offset into the line, so a selection that
- * spans lines needs no case for the lines it only passes through: each answers
- * its own two ends.
+ * Where a byte range crosses one laid line, as pen distance from that line's left edge.
+ * False when the range is wholly on another line. Both ends go through
+ * cf_text_caret_x, which clamps an offset into the line, so a range spanning lines needs
+ * no case for the lines it only passes through: each answers its own two ends.
  */
-static void emit_band(paint_walk *walk, cf_color color, const cf_text_content *content,
-                      const cf_text_line *line, uint32_t from, uint32_t to, const text_view *view,
-                      float y) {
+static bool band_edges(const cf_text_content *content, const cf_text_line *line, uint32_t from,
+                       uint32_t to, float *left, float *right) {
     uint32_t first = 0u;
     uint32_t last = 0u;
 
     line_range(content, line, &first, &last);
 
     if (to <= first || from >= last) {
-        return; /* the range sits on another line */
+        return false;
     }
 
-    const float left = cf_text_caret_x(content, line, from);
-    const float right = cf_text_caret_x(content, line, to);
+    *left = cf_text_caret_x(content, line, from);
+    *right = cf_text_caret_x(content, line, to);
+    return true;
+}
+
+/* The band a line's part of a selection lays down, under the glyphs. */
+static void emit_band(paint_walk *walk, cf_color color, const cf_text_content *content,
+                      const cf_text_line *line, uint32_t from, uint32_t to, const text_view *view,
+                      float y) {
+    float left = 0.0f;
+    float right = 0.0f;
+
+    if (!band_edges(content, line, from, to, &left, &right)) {
+        return;
+    }
 
     emit_mark(walk, (cf_rect){view->x + left, y, right - left, view->line_height}, color,
               view->clip);
+}
+
+/*
+ * The rule under a line's part of a marked run. One point along the row's bottom edge
+ * rather than the whole band a selection takes: the bytes under it are readable text the
+ * person is still choosing, and a fill over them would say they had been picked up.
+ */
+static void emit_rule(paint_walk *walk, cf_color color, const cf_text_content *content,
+                      const cf_text_line *line, uint32_t from, uint32_t to, const text_view *view,
+                      float y) {
+    float left = 0.0f;
+    float right = 0.0f;
+
+    if (!band_edges(content, line, from, to, &left, &right)) {
+        return;
+    }
+
+    emit_mark(
+        walk,
+        (cf_rect){view->x + left, y + view->line_height - MARKED_RULE, right - left, MARKED_RULE},
+        color, view->clip);
 }
 
 /*
@@ -183,8 +221,9 @@ static void emit_band(paint_walk *walk, cf_color color, const cf_text_content *c
  * the box without text, which is why the check reads the color first.
  *
  * The marks an editor states ride the same geometry: the band under a selected
- * range goes down before the glyphs so the bytes stay readable over it, and the
- * caret after them. Where the walk states a caret the box slides to hold it,
+ * range goes down before the glyphs so the bytes stay readable over it, with the rule
+ * under a run being decided, and the caret after them. Where the walk states a caret
+ * the box slides to hold it,
  * and a box that clips its content cuts its own text at its padding box, which
  * is what lets a field scroll a value longer than itself.
  */
@@ -265,6 +304,18 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
     for (uint32_t i = 0u; band && i < count; ++i) {
         emit_band(walk, style->selection.value, content, &lines[i], sel_from, sel_to, &view,
                   view.y + (float)i * line_height);
+    }
+
+    /* The run an input method is still deciding, ruled under on every row it reaches.
+     * The pair are offsets in the same bytes the lines lay, so a run a narrow box broke
+     * across rows is ruled on each of them, the way a selection is. */
+    const bool marked = style->marked.present && content->marked_from.present &&
+                        content->marked_to.present &&
+                        content->marked_from.value != content->marked_to.value;
+
+    for (uint32_t i = 0u; marked && i < count; ++i) {
+        emit_rule(walk, style->marked.value, content, &lines[i], content->marked_from.value,
+                  content->marked_to.value, &view, view.y + (float)i * line_height);
     }
 
     for (uint32_t i = 0u; i < count; ++i) {

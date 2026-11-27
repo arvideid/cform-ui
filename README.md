@@ -214,10 +214,19 @@ accepted and ignored — there is no field that pretends to take these things.
   node's `change` handler once, on the event that moved the bytes: an arrow that walks the
   caret, a **Ctrl**+**A** that holds the whole value, and a run the buffer turned away all
   leave it shut. Chapter two counts the reports on its fourth line. There is no caret
-  blink, and an input method's committed words arrive as ordinary text, but the
-  half-composed text is never drawn and the platform is never told where the caret is, so a
-  candidate window lands wherever the desk decides — the composition row of
-  `docs/backlog.md` is the one that closes it.
+  blink, and an input method's settled words arrive as ordinary text.
+- **An input method's run is shown, not taken.** `CF_EVENT_COMPOSITION` hands over the whole
+  text still being decided; the field splices it into the rows it lays, between the offsets of
+  the selection it began on, under the theme's marked tone — and keeps it in the field's own
+  state block rather than in the buffer the page owns. A run is the keyboard's: while one
+  stands, the keys the method already spent (backspace, the arrows, **Enter**) edit nothing, an
+  empty run gives it up whole, and the frame that moves the keyboard to another box takes it
+  back — by a key, by a press, or by the box it was typed into leaving the page. Beside it, the
+  shell reports the run's own row through `set_candidate_rect`, the same numbers the underline
+  is laid from and read against the box this frame laid under it, so the platform's window lands
+  under the letters rather than wherever the desk decides and walks with a page that scrolls.
+  Chapter fifteen lays a strip of its own from those numbers; a real desktop's input method fills
+  the place beside it.
 - **Images are BMP, loaded once.** The reference backend reads BMP through SDL's
   own loader and uploads RGBA pixels; PNG, JPEG and WebP are a dependency this
   repository hands to the host, and the `load_image` slot is where your decoder

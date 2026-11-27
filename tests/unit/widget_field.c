@@ -98,6 +98,60 @@ static void frame_of(cf_ctx *ctx, cf_text_edit *text, bool disabled) {
     frame_watched(ctx, text, disabled, NULL, NULL);
 }
 
+/*
+ * Two boxes that take the keyboard, stacked: the page for the one ask a single field cannot serve,
+ * which is a hand that moves the keyboard onto the box below it. Both state their height, so the
+ * rows are known and a press can be aimed at one of them without measuring anything.
+ */
+static void frame_pair(cf_ctx *ctx, cf_text_edit *first, cf_text_edit *second) {
+    cf_frame_begin(ctx);
+
+    const cf_text_stack stack = {.fonts = &mono, .count = 1u};
+    cf_node a = cf_field(ctx, "first", first, &stack, CF_FIELD_SINGLE);
+    cf_node b = cf_field(ctx, "second", second, &stack, CF_FIELD_SINGLE);
+    a.style.height = CF_PX(20.0f);
+    b.style.height = CF_PX(20.0f);
+
+    const cf_node roots[] = {a, b};
+    cf_node root = {.style = cf_style_default()};
+    root.style.direction = CF_DIRECTION_COLUMN;
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(200.0f);
+    root.children = roots;
+    root.child_count = 2u;
+
+    cf_diff(ctx, &root);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+/*
+ * The same page one frame later with the box on top gone out of it: the name the build stopped
+ * asking for retires, and only the repair at the end of the diff can hand back what that box was
+ * deciding. The box left standing is a field, so the page still takes written text.
+ */
+static void frame_after_the_first_leaves(cf_ctx *ctx, cf_text_edit *second) {
+    cf_frame_begin(ctx);
+
+    const cf_text_stack stack = {.fonts = &mono, .count = 1u};
+    cf_node b = cf_field(ctx, "second", second, &stack, CF_FIELD_SINGLE);
+    b.style.height = CF_PX(20.0f);
+
+    const cf_node roots[] = {b};
+    cf_node root = {.style = cf_style_default()};
+    root.style.direction = CF_DIRECTION_COLUMN;
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(200.0f);
+    root.children = roots;
+    root.child_count = 1u;
+
+    cf_diff(ctx, &root);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
 static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
     const cf_tree *tree = cf_frame_tree(ctx);
 
@@ -112,6 +166,23 @@ static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
  * layout and the input method, and hands over the bytes they agreed on. */
 static void type(cf_ctx *ctx, const char *run, uint32_t length) {
     cf_input(ctx, (cf_event){.type = CF_EVENT_TEXT, .text = {.chars = run, .length = length}});
+}
+
+/*
+ * What an input method says it is holding: the whole run, in place of the one the event before
+ * staged. An empty run is the method finished with it without choosing anything out of it, and a
+ * device sends the keys that made it beside the run, as it does for any typed character.
+ */
+static void compose(cf_ctx *ctx, const char *run) {
+    cf_input(ctx, (cf_event){
+                      .type = CF_EVENT_COMPOSITION,
+                      .text = {.chars = run, .length = run != NULL ? (uint32_t)strlen(run) : 0u}});
+}
+
+/* The hand letting go where it pressed. A press without its release leaves the capture on the box
+ * that answered it, so the next press would be served by that node rather than the one under it. */
+static void lift(cf_ctx *ctx, float x, float y) {
+    cf_input(ctx, (cf_event){.type = CF_EVENT_POINTER_UP, .position = {.x = x, .y = y}});
 }
 
 /* One key that carries no text, with whatever modifiers a desk would have put on it. */
@@ -2274,6 +2345,356 @@ static void an_arrow_past_the_rows_the_walk_holds_stays_on_the_last_one(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The composition protocol, replayed headlessly: what a device stages, what the box does with
+ * it while it stands, and which of the two endings changes the value. A person on a desktop
+ * types these through the desk's own method; the same agreement arrives here as events, which
+ * is the tier that says the wiring holds.
+ */
+static void a_run_being_decided_is_not_the_pages_value(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    moved_note moved = {0};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_doors(&ctx, &text, false, NULL, NULL, NULL, NULL, count_change, &moved);
+    press(&ctx, 10.0f, 10.0f);
+    compose(&ctx, "ni");
+
+    CF_CHECK(text.length == 0u, "the bytes a method is deciding never reach the value");
+    CF_CHECK(moved.calls == 0u, "and the change door hears nothing about them");
+    CF_CHECK(text.refusals == 0u, "a run the field has room for is not a refusal");
+
+    /* Two characters at ten points each, on a row one line height tall: the box the candidates
+     * stand beside is the run's own, not a caret the run has pushed past it. */
+    const cf_rect box = cf_frame_composition_rect(&ctx);
+    CF_CHECK(box.width == 20.0f && box.height == 20.0f, "the box is where the run stands");
+
+    compose(&ctx, "nihao");
+
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 50.0f,
+             "and it follows the run the method rewrote");
+
+    CF_CHECK(moved.calls == 0u, "a rewrite is still not a change the page made");
+
+    compose(&ctx, "");
+
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "an empty run is the method finished with it: the box goes empty");
+    CF_CHECK(text.length == 0u, "and the value is the one it was before any of it");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The same two boxes with room booked above them, which is how a page moves a box without the
+ * keyboard doing anything: scrolling the row a run stands in off the top is the same shift with a
+ * different name. The boxes state their height so the shift is the number the answer moves by.
+ */
+static void frame_pair_below(cf_ctx *ctx, cf_text_edit *first, cf_text_edit *second, float above) {
+    cf_frame_begin(ctx);
+
+    const cf_text_stack stack = {.fonts = &mono, .count = 1u};
+    cf_node a = cf_field(ctx, "first", first, &stack, CF_FIELD_SINGLE);
+    cf_node b = cf_field(ctx, "second", second, &stack, CF_FIELD_SINGLE);
+    a.style.height = CF_PX(20.0f);
+    b.style.height = CF_PX(20.0f);
+
+    cf_node gap = {.style = cf_style_default()};
+    gap.style.height = CF_PX(above);
+
+    const cf_node roots[] = {gap, a, b};
+    cf_node root = {.style = cf_style_default()};
+    root.style.direction = CF_DIRECTION_COLUMN;
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(200.0f);
+    root.children = roots;
+    root.child_count = 3u;
+
+    cf_diff(ctx, &root);
+    cf_frame_resolve(ctx);
+    cf_frame_layout(ctx, (cf_available){.width = CF_PX(200.0f), .height = CF_PX(200.0f)},
+                    (cf_point){.x = 0.0f, .y = 0.0f});
+}
+
+/*
+ * Where the answer comes from: the run's place inside its box is staged when the method speaks,
+ * and the box is read from the frame that is being asked. A page that moved the box while the run
+ * stood - the wheel, a resize, a build that booked room above it - moves the candidate window along
+ * with the letters, rather than leaving it over the row the run was staged on.
+ */
+static void the_box_a_run_stands_in_follows_the_frame_that_lays_it(void) {
+    char head[32] = {0};
+    char tail[32] = {0};
+    cf_text_edit first = {.chars = head, .length = 0u, .capacity = 32u};
+    cf_text_edit second = {.chars = tail, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_pair(&ctx, &first, &second);
+    press(&ctx, 10.0f, 10.0f);
+    lift(&ctx, 10.0f, 10.0f);
+    compose(&ctx, "ni");
+
+    const cf_rect stood = cf_frame_composition_rect(&ctx);
+
+    CF_CHECK(stood.width == 20.0f && stood.height == 20.0f,
+             "the run is decided on a row of its own, wherever that row stands");
+
+    frame_pair_below(&ctx, &first, &second, 60.0f);
+
+    const cf_rect moved = cf_frame_composition_rect(&ctx);
+
+    /* The shift is the whole of the assertion: a box-relative place read against the rect this
+     * frame laid moves by exactly what the box moved by, and an answer that had kept the point the
+     * keystroke landed on would not move at all. */
+    CF_CHECK(moved.y == stood.y + 60.0f && moved.x == stood.x,
+             "and a frame that laid the box lower reports the run lower, with no key between");
+    CF_CHECK(moved.width == stood.width && moved.height == stood.height,
+             "the run itself is the same length the method staged");
+    CF_CHECK(cf_frame_takes_text(&ctx), "the keyboard is still on a box that takes text");
+    CF_CHECK(first.length == 0u, "and nothing reached the value while the page moved");
+
+    /* The box is the claiming field's, so a frame that took the box away takes the answer with it
+     * - and it is the claim's own going, not a rect left over from a layout nobody has. */
+    compose(&ctx, "");
+
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "and the finished run leaves no box standing anywhere on the page");
+
+    cf_ctx_free(&ctx);
+}
+
+static void the_words_chosen_replace_the_bytes_the_run_covered(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+
+    /* Hold the first two bytes: the run a method stages over a selection replaces it, which is
+     * how a person corrects a word they had already typed. */
+    hold(&ctx, CF_KEY_HOME, false);
+    hold(&ctx, CF_KEY_RIGHT, true);
+    hold(&ctx, CF_KEY_RIGHT, true);
+    compose(&ctx, "ni");
+
+    CF_CHECK(text.length == 3u, "the run covers the selection without touching the value");
+    CF_CHECK(text.caret == 2u && text.mark == 0u,
+             "and the selection the commit needs is still the one the box held");
+
+    /* The words the person settled on arrive as text, and they land across the bytes the
+     * preedit was drawn over: two letters out, one ideograph in, the tail untouched. */
+    type(&ctx, "\xE6\x9D\x8E", 3u);
+
+    CF_CHECK(text.length == 4u, "the commit replaces exactly the range the run covered");
+    CF_CHECK(memcmp(bytes,
+                    "\xE6\x9D\x8E"
+                    "c",
+                    4u) == 0,
+             "and the value reads the words chosen");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f, "the run went with its box");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_key_the_method_owns_does_not_reach_the_value(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    uint32_t through = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_watched(&ctx, &text, false, count_keys, &through);
+    press(&ctx, 10.0f, 10.0f);
+    type(&ctx, "abc", 3u);
+    compose(&ctx, "ni");
+
+    /* The rebuild the run has to survive: it rides in the block the field's name keys, and a
+     * build reads it back before the box lays anything, so the key below still lands on it. */
+    frame_watched(&ctx, &text, false, count_keys, &through);
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 3u, "a step back while a run stands takes no byte of the value");
+    CF_CHECK(through == 0u, "and the key is the field's to stop, not the page's to hear");
+
+    hold(&ctx, CF_KEY_BACKSPACE, false);
+
+    CF_CHECK(text.length == 2u,
+             "the run went with that key, so the next one is the box's own again");
+
+    cf_ctx_free(&ctx);
+}
+
+static void the_tree_still_moves_the_keyboard_around_a_run(void) {
+    char bytes[32] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 32u};
+    uint32_t through = 0u;
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_watched(&ctx, &text, false, count_keys, &through);
+    press(&ctx, 10.0f, 10.0f);
+    compose(&ctx, "ni");
+    hold(&ctx, CF_KEY_TAB, false);
+
+    CF_CHECK(text.length == 0u, "walking away commits nothing of the run");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "and the box the candidates were told about goes with the keyboard");
+    CF_CHECK(through == 1u, "the key still climbs, because moving is the tree's ask");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * The claim is what gates the answer, not the reach of the keyboard alone: a hand that moves from
+ * one field to another leaves a page that still takes written text, so an empty box can only mean
+ * the claim went back with the keyboard. A candidate window left standing over the box nobody is
+ * typing into is the mistake this says the tree does not make.
+ */
+static void a_run_goes_back_when_the_keyboard_changes_hands(void) {
+    char first_bytes[32] = {0};
+    char second_bytes[32] = {0};
+    cf_text_edit first = {.chars = first_bytes, .length = 0u, .capacity = 32u};
+    cf_text_edit second = {.chars = second_bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_pair(&ctx, &first, &second);
+
+    const uint32_t a = child_of(&ctx, ctx.root_slot, 0u);
+    const uint32_t b = child_of(&ctx, ctx.root_slot, 1u);
+
+    press(&ctx, 10.0f, 10.0f);
+    lift(&ctx, 10.0f, 10.0f);
+    compose(&ctx, "ni");
+
+    CF_CHECK(cf_focused(&ctx, a), "the first press booked the keyboard into the box on top");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 20.0f, "and that box is deciding a run");
+
+    frame_pair(&ctx, &first, &second);
+    press(&ctx, 10.0f, 30.0f);
+    lift(&ctx, 10.0f, 30.0f);
+
+    CF_CHECK(cf_focused(&ctx, b), "the press below moves it to the other box");
+    CF_CHECK(cf_frame_takes_text(&ctx), "and the page takes written text the whole way across");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "so the box going empty is the claim going back, not the keyboard going away");
+    CF_CHECK(first.length == 0u && second.length == 0u,
+             "and neither buffer was handed the run on the way out");
+
+    cf_ctx_free(&ctx);
+}
+
+/*
+ * A box that was deciding a run can leave the page between two frames - a dialog closes, a row is
+ * culled - and then the repair that hands the keyboard back is the only writer left that can take
+ * the run with it. The keyboard lands on another field, so the gate stays open the whole way: what
+ * is being read here is that a candidate window never outlives the box it was laid beside.
+ */
+static void a_run_goes_back_when_the_box_that_held_it_leaves(void) {
+    char first_bytes[32] = {0};
+    char second_bytes[32] = {0};
+    cf_text_edit first = {.chars = first_bytes, .length = 0u, .capacity = 32u};
+    cf_text_edit second = {.chars = second_bytes, .length = 0u, .capacity = 32u};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    ctx.theme = cf_theme_default();
+    frame_pair(&ctx, &first, &second);
+
+    const uint32_t a = child_of(&ctx, ctx.root_slot, 0u);
+
+    /* Where the keyboard came from is what the repair hands it back to, so the box below is
+     * pressed first and the one that takes the run second. */
+    press(&ctx, 10.0f, 30.0f);
+    lift(&ctx, 10.0f, 30.0f);
+    press(&ctx, 10.0f, 10.0f);
+    lift(&ctx, 10.0f, 10.0f);
+    compose(&ctx, "ni");
+
+    CF_CHECK(cf_focused(&ctx, a), "the box on top holds the keyboard");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 20.0f, "and it is deciding a run");
+
+    frame_after_the_first_leaves(&ctx, &second);
+
+    CF_CHECK(!cf_focused(&ctx, a), "the box that held the run is out of the page");
+    CF_CHECK(cf_frame_takes_text(&ctx), "and the keyboard went to a box that takes written text");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "so the run went with the box rather than staying standing beside another one");
+    CF_CHECK(first.length == 0u && second.length == 0u,
+             "and neither buffer was handed bytes the method never chose");
+
+    cf_ctx_free(&ctx);
+}
+
+static void a_run_over_the_room_the_field_keeps_is_refused_whole(void) {
+    static char bytes[256];
+    /* A field keeps sixty-four bytes for a run. One more is refused whole rather than cut
+     * between a letter and the mark written onto it, the way a paste too long for the buffer
+     * is refused rather than half-inserted. */
+    static char long_run[66];
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = sizeof bytes};
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    memset(long_run, 'a', sizeof long_run - 1u);
+
+    ctx.theme = cf_theme_default();
+    frame_of(&ctx, &text, false);
+    press(&ctx, 10.0f, 10.0f);
+    compose(&ctx, long_run);
+
+    CF_CHECK(text.refusals == 1u, "a run cut between a letter and its mark is refused whole");
+    CF_CHECK(text.length == 0u, "and no part of it reaches the value");
+    CF_CHECK(cf_frame_composition_rect(&ctx).width == 0.0f,
+             "with nothing held there is no box to put candidates beside");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("widget field\n");
 
@@ -2329,6 +2750,14 @@ int main(void) {
     CF_RUN(a_pasted_break_lands_where_the_mode_puts_rows);
     CF_RUN(the_mode_survives_the_box_it_was_pinned_in);
     CF_RUN(an_arrow_past_the_rows_the_walk_holds_stays_on_the_last_one);
+    CF_RUN(a_run_being_decided_is_not_the_pages_value);
+    CF_RUN(the_box_a_run_stands_in_follows_the_frame_that_lays_it);
+    CF_RUN(the_words_chosen_replace_the_bytes_the_run_covered);
+    CF_RUN(a_key_the_method_owns_does_not_reach_the_value);
+    CF_RUN(the_tree_still_moves_the_keyboard_around_a_run);
+    CF_RUN(a_run_goes_back_when_the_keyboard_changes_hands);
+    CF_RUN(a_run_goes_back_when_the_box_that_held_it_leaves);
+    CF_RUN(a_run_over_the_room_the_field_keeps_is_refused_whole);
 
     return CF_REPORT();
 }

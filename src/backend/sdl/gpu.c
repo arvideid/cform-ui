@@ -591,6 +591,18 @@ static bool take_event(const SDL_Event *event, cf_event *out) {
                           .text = {.chars = run, .length = (uint32_t)strlen(run)}};
         return true;
     }
+    case SDL_EVENT_TEXT_EDITING: {
+        /* The preedit arrives as the whole run the input method is holding, which is the
+         * shape this contract wants, and the same lifetime as the text above. What SDL
+         * calls the start and length of the caret inside the run is dropped: the page
+         * puts its caret after the run, which is where a person typing a word expects it
+         * to stand whatever the platform believes about its own cursor. */
+        const char *const run = event->edit.text;
+        *out =
+            (cf_event){.type = CF_EVENT_COMPOSITION,
+                       .text = {.chars = run, .length = run != NULL ? (uint32_t)strlen(run) : 0u}};
+        return true;
+    }
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP:
         *out = (cf_event){.type = event->type == SDL_EVENT_KEY_DOWN ? CF_EVENT_KEY_DOWN
@@ -692,6 +704,31 @@ static void sdl_set_text_input(void *user_data, bool enabled) {
     } else {
         (void)SDL_StopTextInput(state->window);
     }
+}
+
+/*
+ * Where the input method should stand its candidates. SDL takes the area in window
+ * coordinates, which is the space this backend reports its surface in and the space the
+ * commands are laid in, so the box crosses with no density applied - the same agreement
+ * that lets a pointer's position arrive unread.
+ *
+ * A rect of no extent is cleared by handing SDL no area at all, which is the direction the
+ * platform documents for "the page has stopped deciding". The cursor sits at the run's
+ * trailing edge, where the page paints it. A refused ask is not logged for the reason the
+ * cursor's is not: the preedit is drawn by the page either way, so the words on the screen
+ * do not depend on this call landing.
+ */
+static void sdl_set_candidate_rect(void *user_data, cf_rect rect) {
+    sdl_state *state = user_data;
+
+    if (state == NULL) {
+        return;
+    }
+
+    const SDL_Rect area = {(int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height};
+    const bool holds = rect.width > 0.0f && rect.height > 0.0f;
+
+    (void)SDL_SetTextInputArea(state->window, holds ? &area : NULL, (int)rect.width);
 }
 
 /* The window's own size, which is what logical points lay out against; the
@@ -846,5 +883,6 @@ cf_backend cf_backend_sdl(const cf_sdl_config *config) {
                         .release_texture = sdl_release_texture,
                         .set_cursor = sdl_set_cursor,
                         .set_text_input = sdl_set_text_input,
+                        .set_candidate_rect = sdl_set_candidate_rect,
                         .destroy = sdl_destroy};
 }

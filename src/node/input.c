@@ -282,6 +282,19 @@ static void reveal_slot(cf_ctx *ctx, uint32_t slot) {
 }
 
 /*
+ * What a move of the keyboard does to a run an input method was holding: the claim goes back,
+ * because the method feeds the keyboard and the keyboard has changed hands. The box that held
+ * the run finds the claim gone at its next build and drops the run with it, so a preedit never
+ * outlives the box it was being typed into - and a candidate window the shell was told about
+ * goes empty in the same frame, since cf_frame_composition_rect reads the same claim.
+ */
+static void hand_keyboard_back(cf_ctx *ctx) {
+    ctx->composing = CF_NO_NAME;
+    ctx->composition_box = (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    ctx->composition_id = CF_NO_ID;
+}
+
+/*
  * One move of the keyboard, so every door that changes it leaves the same record
  * behind: the box it came from. A move onto the box that already holds it records
  * nothing, because the box would then become its own predecessor and the page
@@ -292,6 +305,7 @@ static void move_focus(cf_ctx *ctx, cf_id next) {
         return;
     }
 
+    hand_keyboard_back(ctx);
     ctx->prior_id = ctx->focus_id;
     ctx->focus_id = next;
 }
@@ -322,6 +336,8 @@ void cf_focus_repair(cf_ctx *ctx) {
     }
 
     const uint32_t prior = live_slot(ctx, ctx->prior_id);
+
+    hand_keyboard_back(ctx);
 
     if (prior != CF_NO_LINK && takes_focus(ctx, prior)) {
         ctx->focus_id = ctx->prior_id;
@@ -553,10 +569,14 @@ void cf_input(cf_ctx *ctx, cf_event event) {
     }
 
     case CF_EVENT_KEY_UP:
-    case CF_EVENT_TEXT: {
+    case CF_EVENT_TEXT:
+    case CF_EVENT_COMPOSITION: {
         /* What the keyboard wrote goes to whoever holds focus, the same way
          * the keys that carry no text do: a widget cannot be asked to sort
-         * what the device already sorted. */
+         * what the device already sorted. A run an input method is deciding walks
+         * the same door because it is the same kind of ask - bytes the keyboard is
+         * producing for one box - and a page with no focus has no box to be deciding
+         * anything in. */
         const uint32_t focused = live_slot(ctx, ctx->focus_id);
 
         if (focused != CF_NO_LINK) {
@@ -654,4 +674,36 @@ bool cf_frame_takes_text(const cf_ctx *ctx) {
      * hidden since it took focus loses the ask along with its reach. Past that
      * gate, the role is the widget's own word for a box that edits bytes. */
     return takes_focus(ctx, focused) && record_of(ctx, focused)->role == CF_ROLE_FIELD;
+}
+
+/*
+ * The box a composition is standing in, and nothing where the keyboard has nowhere for text
+ * to go. Both halves matter: the claim says a box is holding a run, and the gate says the
+ * keyboard is still where a run can be committed. A page that stopped taking text has no
+ * field left to be deciding anything, whatever the last field wrote into the context.
+ *
+ * The field stages where the run sits inside its box; the box is read from the frame this is
+ * asked in, so a page that scrolled or resized under a standing run moves the answer along with
+ * the underline it drew from the same numbers. A slot that no longer holds the claiming box has
+ * no answer: the box is going, and the run goes with it.
+ */
+cf_rect cf_frame_composition_rect(const cf_ctx *ctx) {
+    const cf_rect nothing = {0.0f, 0.0f, 0.0f, 0.0f};
+
+    if (ctx == NULL || ctx->composing == CF_NO_NAME || !cf_frame_takes_text(ctx) ||
+        ctx->rects == NULL) {
+        return nothing;
+    }
+
+    const uint32_t held = live_slot(ctx, ctx->composition_id);
+    const cf_tree *view = cf_frame_tree(ctx);
+
+    if (held == CF_NO_LINK || view == NULL || held >= view->node_count) {
+        return nothing;
+    }
+
+    const cf_rect box = ctx->rects[held];
+
+    return (cf_rect){box.x + ctx->composition_box.x, box.y + ctx->composition_box.y,
+                     ctx->composition_box.width, ctx->composition_box.height};
 }

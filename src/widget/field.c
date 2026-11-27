@@ -11,6 +11,26 @@
 #define FIELD_VISIBLE_LINES 8u
 
 /*
+ * The room a field keeps for a run an input method has not settled on. A run is kept whole
+ * or not kept: half a sequence painted as preedit is bytes the platform no longer
+ * recognises and a rule drawn under nothing an offset answers, so a longer run is refused
+ * the way a run too long for the value buffer is, and said so through the same count.
+ */
+#define FIELD_MARKED_BYTES 64u
+
+/*
+ * The run as one frame sees it: the bytes, and the pair of value offsets they were written
+ * between. Those two are the selection the composition started on, kept so that a cancel
+ * leaves the box holding what it held and a commit replaces exactly that range.
+ */
+typedef struct field_marked {
+    uint32_t length; /* none is a field deciding nothing */
+    uint32_t from;
+    uint32_t to;
+    char bytes[FIELD_MARKED_BYTES];
+} field_marked;
+
+/*
  * What a handler needs and the declaration does not carry: the context to read
  * the box's rect and the interaction off, the buffer to edit, the name the
  * history is keyed under, the fonts to lay the bytes in - the stack the build
@@ -21,6 +41,10 @@
  * `edited` is a fact about the key being served rather than about the box: the value
  * moves once per event however many runs the chord put in, so the edit sites note it and
  * the handler reports once on the way out.
+ *
+ * `marked` is read out of the keyed block once, at the build, so that every walk of the
+ * frame - the paint's, a click's, an arrow's - answers from one copy rather than reaching
+ * into build state each time it wants to know what the input method is holding.
  */
 typedef struct field_data {
     cf_ctx *ctx;
@@ -28,6 +52,7 @@ typedef struct field_data {
     cf_name key;
     cf_text_stack stack;
     cf_field_mode mode;
+    field_marked marked;
     bool edited;
 } field_data;
 
@@ -95,6 +120,30 @@ typedef struct undo_book {
     uint32_t depth;
 } undo_book;
 
+/*
+ * What a field keeps under its own name across frames: the run an input method is
+ * deciding, then the history ring whose images follow its header. `cf_state` serves one
+ * block per name, so the two halves share it, and the marked part is a fixed size and comes
+ * first - it sits at the same address whatever a change of the buffer's capacity did to the
+ * ring's layout, and the ring's own walk keeps reading `(char *)ring + sizeof(undo_ring)`.
+ */
+typedef struct field_state {
+    uint32_t marked; /* bytes held; none is a field deciding nothing */
+    uint32_t from;
+    uint32_t to;
+    char bytes[FIELD_MARKED_BYTES];
+    undo_ring ring;
+} field_state;
+
+/*
+ * The block's head - the marked part that comes before the ring. Every member is word-sized
+ * and the ring is last, so the difference of the two sizes is where the ring begins and the
+ * layout does not depend on a compiler's padding.
+ */
+static size_t field_head(void) {
+    return sizeof(field_state) - sizeof(undo_ring);
+}
+
 /* The bytes an image copies, padded to whole words: the ring's headers follow one
  * another through the block, and an unaligned uint32_t traps on the targets this
  * library is built for. */
@@ -109,11 +158,13 @@ static size_t undo_stride(uint32_t capacity) {
 /*
  * Two images is the fewest worth asking the heap for: one holds where the typing
  * started and the next where it got to, and a ring of one can only ever answer that
- * there is nothing to undo.
+ * there is nothing to undo. The preedit's head is charged to the same budget, so the block
+ * a field holds stays bounded by FIELD_UNDO_BYTES however the buffer changes.
  */
 static uint32_t undo_depth(uint32_t capacity) {
     const uint32_t steps =
-        (uint32_t)(((size_t)FIELD_UNDO_BYTES - sizeof(undo_ring)) / undo_stride(capacity));
+        (uint32_t)(((size_t)FIELD_UNDO_BYTES - field_head() - sizeof(undo_ring)) /
+                   undo_stride(capacity));
 
     if (steps < 2u) {
         return 0u;
@@ -127,9 +178,53 @@ static size_t undo_bytes(uint32_t depth, uint32_t capacity) {
 }
 
 /*
- * The block under the field's own name, laid out for the buffer it rides beside. False
- * is the answer for a field with no name to key it under, no budget that pays for two
- * images, or a heap that said no - and a field with no history serves no undo.
+ * The field's keyed block, sized for the buffer it rides beside, or NULL for a box with nothing to
+ * keep. Asking for it is what keeps both halves alive: a name the builds stop requesting loses its
+ * history and its preedit together, one frame later. `holding` is that word - whether this box is
+ * the one a method is deciding a run for, or has a history at all. A buffer too large for even two
+ * history images asks for nothing while it is also typing no run, so a page of wide read-only boxes
+ * costs no heap beside its bytes, which is what it cost before a preedit existed.
+ */
+static field_state *field_hold(field_data *field, bool holding) {
+    const uint32_t capacity = field->text->capacity;
+
+    if (field->key == CF_NO_NAME || (!holding && undo_depth(capacity) == 0u)) {
+        return NULL;
+    }
+
+    return cf_state(field->ctx, field->key,
+                    field_head() + undo_bytes(undo_depth(capacity), capacity));
+}
+
+/*
+ * The run as this frame's buffer can show it. Offsets the value no longer reaches mean the
+ * bytes were written behind the composition's back - a build that replaced the value, a
+ * buffer that changed size - and a run nobody can place is dropped rather than painted
+ * between letters it no longer belongs to.
+ */
+static void marked_read(field_data *field, field_state *state) {
+    field->marked = (field_marked){0};
+
+    if (state == NULL) {
+        return;
+    }
+
+    if (state->marked == 0u || state->marked > FIELD_MARKED_BYTES || state->from > state->to ||
+        state->to > field->text->length) {
+        state->marked = 0u;
+        return;
+    }
+
+    field->marked.length = state->marked;
+    field->marked.from = state->from;
+    field->marked.to = state->to;
+    memcpy(field->marked.bytes, state->bytes, state->marked);
+}
+
+/*
+ * The block under the field's own name, laid out for the buffer it rides beside. False is the
+ * answer for a field with no name to key it under, no budget that pays for two images, or a
+ * heap that said no - and a field with no history serves no undo.
  */
 static bool undo_open(field_data *field, undo_book *book) {
     const uint32_t capacity = field->text->capacity;
@@ -137,24 +232,24 @@ static bool undo_open(field_data *field, undo_book *book) {
 
     *book = (undo_book){.text = field->text, .ring = NULL, .capacity = capacity, .depth = depth};
 
-    if (field->key == CF_NO_NAME || depth == 0u) {
+    if (depth == 0u) {
         return false;
     }
 
-    undo_ring *ring = cf_state(field->ctx, field->key, undo_bytes(depth, capacity));
+    field_state *state = field_hold(field, true);
 
-    if (ring == NULL) {
+    if (state == NULL) {
         return false;
     }
 
-    if (ring->capacity != capacity) {
-        /* The buffer the field edits is a different size than it was: the images the
-         * block holds were laid out in another stride, and their lengths belong to that
-         * layout rather than to the buffer now asking to be filled from them. */
-        *ring = (undo_ring){.capacity = capacity, .head = 0u, .count = 0u, .pos = 0u};
+    if (state->ring.capacity != capacity) {
+        /* The buffer the field edits is a different size than it was: the images the block
+         * holds were laid out in another stride, and their lengths belong to that layout
+         * rather than to the buffer now asking to be filled from them. */
+        state->ring = (undo_ring){.capacity = capacity, .head = 0u, .count = 0u, .pos = 0u};
     }
 
-    book->ring = ring;
+    book->ring = &state->ring;
     return true;
 }
 
@@ -264,15 +359,48 @@ static bool undo_step(const undo_book *book, bool back) {
  * a click places stands under the pointer that placed it and a caret an arrow moves
  * lands on the row the eye sees. The mode is the only difference: a single-line field
  * refuses to wrap, so only the breaks it holds make rows.
+ *
+ * The run an input method is holding is spliced in between the value offsets it covers, so
+ * the rows lay what a person reads and the caret stands where they see it. It lands in a
+ * display buffer of its own rather than in the value because the value the page owns holds
+ * only what the person settled on: ending a run the person rejected costs a frame instead of
+ * an undo step, and the change door never hears about bytes that were never the page's.
+ * A buffer the frame cannot pay for lays the value alone - the preedit is missing for a
+ * frame rather than half-drawn - which is the answer this field already gives a run the
+ * room cannot hold.
  */
 static cf_text_content content_of(const field_data *field) {
     const cf_text_edit *text = field->text;
+    cf_text_content content = (cf_text_content){.stack = field->stack,
+                                                .text = {text->chars, text->length},
+                                                .caret = {.present = true, .value = text->caret},
+                                                .mark = {.present = true, .value = text->mark},
+                                                .nowrap = field->mode == CF_FIELD_SINGLE};
 
-    return (cf_text_content){.stack = field->stack,
-                             .text = {text->chars, text->length},
-                             .caret = {.present = true, .value = text->caret},
-                             .mark = {.present = true, .value = text->mark},
-                             .nowrap = field->mode == CF_FIELD_SINGLE};
+    if (field->marked.length == 0u) {
+        return content;
+    }
+
+    const uint32_t tail = text->length - field->marked.to;
+    const uint32_t across = field->marked.from + field->marked.length;
+    char *display = cf_alloc(&field->ctx->frame, (size_t)across + tail);
+
+    if (display == NULL) {
+        return content;
+    }
+
+    memcpy(display, text->chars, field->marked.from);
+    memcpy(display + field->marked.from, field->marked.bytes, field->marked.length);
+    memcpy(display + across, text->chars + field->marked.to, tail);
+
+    content.text = (cf_string){display, across + tail};
+    /* The caret follows the run the person is typing, and the mark rides with it: a run
+     * covers the selection it began on rather than adding one of its own. */
+    content.caret = (cf_opt_u32){.present = true, .value = across};
+    content.mark = (cf_opt_u32){.present = true, .value = across};
+    content.marked_from = (cf_opt_u32){.present = true, .value = field->marked.from};
+    content.marked_to = (cf_opt_u32){.present = true, .value = across};
+    return content;
 }
 
 /*
@@ -642,7 +770,7 @@ static bool walk_of(const cf_ctx *ctx, const field_data *field, uint32_t slot, f
     const cf_tree *view = cf_frame_tree(ctx);
 
     if (view == NULL || view->styles == NULL || ctx->rects == NULL || slot >= view->node_count ||
-        field->stack.count == 0u || field->text->length == 0u) {
+        field->stack.count == 0u || (field->text->length == 0u && field->marked.length == 0u)) {
         return false;
     }
 
@@ -699,6 +827,122 @@ static void step_row(field_data *field, uint32_t slot, bool back, bool shift) {
     }
 }
 
+/*
+ * Where the run an input method is holding stands inside the box that carries it, on the row
+ * that holds its end: the place a platform puts its candidate window beside. It is measured along
+ * the same walk the paint painted, which is what lets the window sit under the letters a person is
+ * reading rather than under a caret the preedit has already pushed past them. The answer is kept
+ * relative to the box rather than as a point on the page because the frame that lays the box is the
+ * one that reports it: a page that scrolls or resizes under a run the method has not finished
+ * moves the window along with the underline instead of leaving it over the row the run came from.
+ * Zero extent is the answer when there is nothing to put a window near - no frame has laid the box,
+ * the run reaches no row the walk holds - and a platform told that answer puts its candidates away.
+ */
+static cf_rect run_offset(const field_data *field, uint32_t slot) {
+    field_walk walk;
+
+    if (field->marked.length == 0u || !walk_of(field->ctx, field, slot, &walk)) {
+        return (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+    }
+
+    const cf_point slide =
+        cf_text_scroll(&walk.content, walk.lines, walk.rows, (cf_size){walk.wrap, walk.visible});
+    const uint32_t across = field->marked.from + field->marked.length;
+    const uint32_t row = cf_text_line_of(&walk.content, walk.lines, walk.rows, across);
+    const cf_text_line *line = &walk.lines[row];
+    /* The row's own first byte, read off the bytes the row points into: a run a narrow box
+     * broke across rows is placed on the row its end sits, and what that row shows of the run
+     * begins where the row begins. */
+    const uint32_t start = (uint32_t)(line->text.chars - walk.content.text.chars);
+    const float left = cf_text_caret_x(&walk.content, line,
+                                       field->marked.from > start ? field->marked.from : start);
+    const float right = cf_text_caret_x(&walk.content, line, across);
+
+    return (cf_rect){walk.origin.x - walk.box.x - slide.x + left,
+                     walk.origin.y - walk.box.y - slide.y + (float)row * walk.line_height,
+                     right > left ? right - left : 0.0f, walk.line_height};
+}
+
+/*
+ * The run is over. It goes out of the block the field keeps, out of the walk this frame lays
+ * and out of the box the platform was told to put its candidates beside, and the keyboard's
+ * claim with it - so the page's value is the only thing left standing, and the change door
+ * never heard a word about bytes that were never the page's. Guarded on the frame holding one,
+ * because reaching for the keyed block is a walk of the store and a plain keystroke in a box at
+ * rest has no business paying for it.
+ */
+static void end_mark(field_data *field) {
+    if (field->marked.length == 0u) {
+        return;
+    }
+
+    field_state *state = field_hold(field, true);
+
+    if (state != NULL) {
+        state->marked = 0u;
+    }
+
+    field->marked = (field_marked){0};
+
+    /* Somebody else's claim is not this box's to cancel: the field that owns it ends it in its
+     * own handlers, and a box that lost the keyboard only drops its own bytes. */
+    if (field->ctx->composing == field->key) {
+        field->ctx->composing = CF_NO_NAME;
+        field->ctx->composition_box = (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+        field->ctx->composition_id = CF_NO_ID;
+    }
+}
+
+/*
+ * What the method says it is holding, in place of whatever the previous event staged. The run
+ * never reaches the page's buffer: it goes into the field's own block and out again through the
+ * walk, so a run the person rejects costs a frame and a run they settle on arrives as text and
+ * is the value's. The pair of offsets it covers is the selection the box stood at when the
+ * composing began, and nothing below moves those while a run stands, which is what lets a
+ * commit replace exactly the bytes the preedit was drawn over.
+ */
+static void mark_run(field_data *field, uint32_t slot, cf_string run) {
+    cf_ctx *ctx = field->ctx;
+    field_state *state = field_hold(field, true);
+
+    if (state == NULL) {
+        /* Nowhere to keep a run is no way to show one, and a key that lands nowhere is
+         * otherwise indistinguishable from a key that was never sent: the box says so through
+         * the count the page already reads for bytes the room cannot hold. */
+        field->text->refusals++;
+        return;
+    }
+
+    if (run.chars == NULL || run.length == 0u) {
+        /* The method finished with the run without choosing anything out of it. */
+        end_mark(field);
+        return;
+    }
+
+    if (run.length > FIELD_MARKED_BYTES) {
+        /* Half a sequence is worse than none: bytes cut between a letter and the mark written
+         * onto it paint a rule under nothing an offset answers. */
+        end_mark(field);
+        field->text->refusals++;
+        return;
+    }
+
+    state->from = sel_from(field->text);
+    state->to = sel_to(field->text);
+    memcpy(state->bytes, run.chars, run.length);
+    state->marked = run.length;
+
+    /* Read back rather than trust what was written: the offsets were taken before the copy, and
+     * a build that rewrote the value behind the composition's back can make them lie. */
+    marked_read(field, state);
+    ctx->composing = field->marked.length != 0u ? field->key : CF_NO_NAME;
+    /* The run's place inside the box, and which box: the answer a platform is told is read
+     * against the rect this frame laid under it, so the candidate window follows the page rather
+     * than staying where the keystroke landed. */
+    ctx->composition_box = run_offset(field, slot);
+    ctx->composition_id = cf_store_id(&ctx->nodes, slot);
+}
+
 static void field_key(cf_event *event, void *user_data) {
     field_data *field = user_data;
     cf_text_edit *text = field->text;
@@ -706,7 +950,21 @@ static void field_key(cf_event *event, void *user_data) {
     field->edited = false;
     clamp_marks(text);
 
+    /* What the method is holding is served before anything else, because the run is the state
+     * the rest of this handler reads: the bytes go into the box's own block and out again
+     * through the walk, and the key that carried them is the field's to stop - a page that
+     * heard it would be answering bytes it never received. */
+    if (event->type == CF_EVENT_COMPOSITION) {
+        mark_run(field, event->target, event->text);
+        cf_stop(event);
+        return;
+    }
+
     if (event->type == CF_EVENT_TEXT) {
+        /* The words the person settled on. The run they replace goes first, so the insert lands
+         * across exactly the bytes the preedit was drawn over and the value gains what was
+         * chosen and nothing else. */
+        end_mark(field);
         replace(field, event->text);
         claim(field, event);
         return;
@@ -714,6 +972,25 @@ static void field_key(cf_event *event, void *user_data) {
 
     if (event->type != CF_EVENT_KEY_DOWN) {
         return;
+    }
+
+    /* While a run is open the keyboard belongs to the method that staged it: the same keystroke
+     * arrives as a key and as the bytes it made, and a box that served the key as well would
+     * type it twice or delete a byte the person was still choosing. So the field stops the keys
+     * it has no business answering and keeps the one it does - Tab, which is the tree's move
+     * rather than the method's, and ends the run the way walking away does. Escape needs no
+     * case of its own: the run is already gone and nothing else is served, so the key is
+     * stopped and the box says no more than that. A layout with no method never opens a run,
+     * so a plain keystroke pays nothing here. */
+    if (field->marked.length != 0u) {
+        const uint32_t key = event->key;
+
+        end_mark(field);
+
+        if (key != (uint32_t)CF_KEY_TAB) {
+            cf_stop(event);
+            return;
+        }
     }
 
     /* The chords the field serves itself come before the keys that move the caret:
@@ -891,6 +1168,10 @@ static void field_pointer(cf_event *event, void *user_data) {
         /* The press holds the pointer, so a drag that strays past the box keeps
          * selecting to wherever the hand goes. */
         cf_capture(event);
+
+        /* A caret the hand places is the box's, not the method's: the run that was standing
+         * where the old caret was has nowhere to be committed to any more. */
+        end_mark(field);
         place_at(ctx, field, event->target, event->position, shift);
         cf_stop(event);
         return;
@@ -930,12 +1211,22 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
 
     clamp_marks(text);
 
-    /* Asking for the block is the whole point of the call: a name the builds stop
-     * requesting loses its state the frame after, so declaring the field is what keeps
-     * its history alive. Nothing is noted here - the states the ring holds are the ones
-     * the field's own keys produced, not the ones a build wrote behind them. */
-    undo_book history;
-    (void)undo_open(data, &history);
+    /* Asking for the block is the whole point of the call: a name the builds stop requesting
+     * loses its state the frame after, so declaring the field is what keeps its history and its
+     * preedit alive. Nothing is noted here - the states the ring holds are the ones the field's
+     * own keys produced, not the ones a build wrote behind them. The run the block carries is
+     * read once, so every walk of this frame answers from one copy. */
+    field_state *held = field_hold(data, ctx->composing == data->key);
+
+    marked_read(data, held);
+
+    /* The run is the keyboard's to hold, and the keyboard has moved on: a box that lost it while
+     * a method was deciding hands the bytes back rather than going on painting a preedit nobody
+     * can commit. The claim is gone by the time this build runs, because the events were served
+     * before the frame began. */
+    if (data->marked.length != 0u && ctx->composing != data->key) {
+        end_mark(data);
+    }
 
     node.role = CF_ROLE_FIELD;
     /* A field is a text box to a bridge, and the bytes it lays are its value rather than its

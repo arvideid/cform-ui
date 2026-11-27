@@ -110,6 +110,35 @@ static cf_node typed_page(cf_ctx *ctx) {
     return root;
 }
 
+/* The page an input method is deciding over: a field the keyboard stands on, beside a second field
+ * the keyboard can move to without the written-text answer changing. The second one is the point -
+ * a shell that only ever compared "does this box take text" would leave a candidate window standing
+ * over the field that lost the keyboard, while the page had stopped painting the run already. Both
+ * are real widgets rather than nodes wearing the role, because the box the shell hands over is the
+ * one the field measured. The buffers are the page's, so they outlive the frame that declared them.
+ */
+static char composed_bytes[32];
+static char other_bytes[32];
+static cf_text_edit composed;
+static cf_text_edit other;
+
+static cf_node composing_page(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    cf_node field = cf_field(ctx, "entry", &composed, &fake_fonts, CF_FIELD_SINGLE);
+    cf_node next = cf_field(ctx, "other", &other, &fake_fonts, CF_FIELD_SINGLE);
+
+    field.style.width = CF_PX(20.0f);
+    field.style.height = CF_PX(20.0f);
+    next.style.width = CF_PX(20.0f);
+    next.style.height = CF_PX(20.0f);
+
+    const cf_node children[] = {field, next};
+    root.children = children;
+    root.child_count = 2u;
+
+    return root;
+}
+
 /* The page's own way out: a press inside the box asks the shell to stop, and the
  * counter says how many presses the dispatch ever got. */
 static uint32_t presses;
@@ -287,6 +316,22 @@ static void counted_text(void *user_data, bool enabled) {
     text_asks++;
 }
 
+/* The same count for the box an input method would stand its answers beside: every rect the
+ * shell told the device, in the order it told it. A recorder only keeps the last one, and what
+ * these cases are after is whether the shell told it once per move rather than once per frame. */
+static uint32_t candidate_asks;
+static cf_rect asked_boxes[6u];
+
+static void counted_candidate(void *user_data, cf_rect box) {
+    (void)user_data;
+
+    if (candidate_asks < (uint32_t)(sizeof asked_boxes / sizeof asked_boxes[0])) {
+        asked_boxes[candidate_asks] = box;
+    }
+
+    candidate_asks++;
+}
+
 /* The device the keyboard walk runs on: a hand, a dry ask to end the drain, the same
  * press again now the page has a rect to land on, a press on the box that takes no
  * text, a move that changes nothing, then the quit. */
@@ -298,6 +343,22 @@ static const fake_hand keyboard_walk[] = {
     {{.type = CF_EVENT_POINTER_DOWN, .position = {30.0f, 10.0f}, .button = 1u}, true},
     {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
     {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_QUIT}, true}};
+
+/* The same walk with a run being decided in the middle of it: the field is focused by the second
+ * press, an input method says what it is holding, a frame passes with nothing moved, and the
+ * keyboard then goes to the box beside it - which is the move the run cannot survive. */
+static const fake_hand composition_walk[] = {
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {10.0f, 10.0f}, .button = 1u}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {10.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_COMPOSITION, .text = {.chars = "ni", .length = 2u}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {10.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, true},
+    {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
+    {{.type = CF_EVENT_POINTER_DOWN, .position = {30.0f, 10.0f}, .button = 1u}, true},
     {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 10.0f}}, false},
     {{.type = CF_EVENT_QUIT}, true}};
 
@@ -325,6 +386,14 @@ static void reset(const fake_hand *hands, uint32_t count) {
     cursor_asks = 0u;
     presses = 0u;
     text_asks = 0u;
+    candidate_asks = 0u;
+
+    for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_boxes / sizeof asked_boxes[0]); ++at) {
+        asked_boxes[at] = (cf_rect){-1.0f, -1.0f, -1.0f, -1.0f};
+    }
+
+    composed = (cf_text_edit){.chars = composed_bytes, .capacity = sizeof composed_bytes};
+    other = (cf_text_edit){.chars = other_bytes, .capacity = sizeof other_bytes};
 
     for (uint32_t at = 0u; at < (uint32_t)(sizeof asked_shapes / sizeof asked_shapes[0]); ++at) {
         asked_shapes[at] = CF_CURSOR_DEFAULT;
@@ -654,6 +723,56 @@ static void a_device_with_no_keyboard_slot_still_runs(void) {
     CF_CHECK(recorder.text_input, "and the device was handed no answer at all");
 }
 
+/*
+ * The box the device would stand its candidates against is the frame's third answer, and it
+ * travels the same door as the other two: told once before anything is being decided, told again
+ * when a run appears, told a third time when the keyboard moves and takes the run with it. The
+ * frame between the last two is what the case is for - the pointer left the field and the page
+ * still cost the device no call, because the box had not moved - and the third answer has to be
+ * empty rather than the field beside it's own box, since a keyboard that changed hands is a method
+ * that lost the run it was deciding.
+ *
+ * The numbers are the font's own: a ten-point row and a six-point advance make the two bytes the
+ * method is holding twelve points across, sitting at the start of a field that begins at the
+ * page's origin.
+ */
+static void the_shell_tells_the_device_where_the_run_sits(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_candidate_rect = counted_candidate;
+
+    reset(composition_walk, 11u);
+    cf_app_run(&(cf_app_config){.build = composing_page, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 5u, "five waking drains earned five frames");
+    CF_CHECK(candidate_asks == 3u, "and the device was told three times, not once per frame");
+    CF_CHECK(asked_boxes[0u].width == 0.0f && asked_boxes[0u].height == 0.0f,
+             "the page opened with nothing being decided");
+    CF_CHECK(asked_boxes[1u].width == 12.0f && asked_boxes[1u].height == 10.0f,
+             "the run the method handed over is boxed at the row the page lays it on");
+    CF_CHECK(asked_boxes[2u].width == 0.0f && asked_boxes[2u].height == 0.0f,
+             "and the box goes empty the frame the keyboard changes hands");
+    CF_CHECK(other.length == 0u,
+             "the field the keyboard moved onto takes the run as nothing at all");
+    CF_CHECK(composed.length == 0u, "and the field it left never got the bytes either");
+}
+
+/* A device that places its own window, or has no input method at all, is a legal device: the
+ * page is being decided either way and the preedit is drawn out of the stream, so a shell with
+ * nowhere to send the box runs the frames it would have run and tells the device nothing. */
+static void a_device_with_no_candidate_slot_still_runs(void) {
+    cf_recorder recorder = {.arena = &store};
+    cf_backend backend = driven_backend(&recorder);
+    backend.set_candidate_rect = NULL;
+    recorder.candidate = (cf_rect){7.0f, 7.0f, 7.0f, 7.0f};
+
+    reset(composition_walk, 11u);
+    cf_app_run(&(cf_app_config){.build = composing_page, .backend = backend, .theme = NULL});
+
+    CF_CHECK(frames_built == 5u, "the frames ran with nowhere to send the box");
+    CF_CHECK(recorder.candidate.width == 7.0f, "and the device was handed no rect at all");
+}
+
 /* The two ends of a run differ only in who names them: the window's close button
  * arrives as an event, and a control inside the page has no event to send, so it
  * asks through its context. The frame that answered the press is shown, and the
@@ -700,6 +819,8 @@ int main(void) {
     CF_RUN(a_device_with_no_cursor_slot_still_runs);
     CF_RUN(the_shell_opens_the_keyboard_only_for_a_field);
     CF_RUN(a_device_with_no_keyboard_slot_still_runs);
+    CF_RUN(the_shell_tells_the_device_where_the_run_sits);
+    CF_RUN(a_device_with_no_candidate_slot_still_runs);
     CF_RUN(a_page_that_asks_leaves_after_the_frame_that_answers_it);
     CF_RUN(a_shell_that_cannot_run_sits_idle);
 

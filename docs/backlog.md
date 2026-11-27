@@ -9,7 +9,6 @@ and this file is the record.
 
 | what is missing | what that means on screen | how it gets closed |
 |---|---|---|
-| **IME composition** | the committed words reach the field, but the text still being composed is never drawn and the platform is never told where the caret is, so a candidate window lands wherever the desk decides | a composition event pair from the backend and a marked span the field paints differently, plus the text area the platform asks for. Opening the service is done — `set_text_input` — so what is left is the marked span, and it needs a real desktop to test, so it needs a plan before code |
 | **No platform accessibility bridge** | the page now says what every box is, but nothing carries that to Narrator, VoiceOver or AT-SPI, so a person on a screen reader still hears nothing | `cf_semantic_visit` is the half the adapter reads, and it is tested: ids that hold across frames, whole UTF-8 names, values, selection, states, and only the asks a frame can serve. `gallery_headless` walks the real page as a bridge would. What is left is one OS-side tree walker per platform with its own event queue, which is a desktop a human qualifies and therefore a plan before code |
 
 ## Rough edges that will bite a user
@@ -24,6 +23,7 @@ and this file is the record.
 | A caret is a solid bar | it does not blink, because a blinking caret wants a frame every 500 ms and the idle-frame invariant is the number the bench rig prints. The frame clock exists now (`cf_frame_seconds`, and the loop runs another frame when a build asks for one), so this is a decision to make rather than a wall |
 | Which shape arrives under the pointer is unqualified | the shell asks and the SDL port maps the three shapes onto SDL's own, but SDL's dummy driver makes no cursor at all: the headless case only proves that a refused ask leaves the window drawing. Reading the mapping needs a gallery window — the hand over a button, the I-beam in a field, the arrow elsewhere |
 | Whether a keyboard appears is unqualified | the shell's ask reaches SDL's `SDL_StartTextInput` and `SDL_StopTextInput`, and the dummy driver takes both because it keeps that state for the window rather than for the hardware — so what no tier can see is a screen keyboard rising on a device that has one to show, which is a touch platform's check |
+| Where the platform stands its answers is unqualified | the run an input method is deciding is painted and measured in the page (the protocol is replayed headlessly over the gallery's own field: `widget_field`, `app_run`, `gallery_headless`), the shell hands the same box to SDL's `SDL_SetTextInputArea`, and chapter fifteen lays a strip of its own from those numbers so a tier can check that a page moving under a standing run moves the strip along with the answer. What no tier can show is a candidate list rising under those letters, because the dummy driver has no list to place: reading it needs a gallery window, a field in it and a real input method — typing pinyin into a box on the page and watching the run underline, the strip and the platform's list follow it |
 | Selection by word is the keyboard's | **Ctrl**/**Cmd** with the arrows moves and **Shift** selects over the runs the field reads, but a double-click still selects no word it landed in and a triple-click no line |
 | Image loading is BMP | `SDL_LoadBMP` and nothing else, and the web build ships no file dialog to name a path with |
 
@@ -68,18 +68,18 @@ pretends to take it. Each needs a design conversation before a line of code:
 
 ## Before a 1.0 freezes the ABI
 
-`CF_BACKEND_ABI_VERSION` is 11 and every number after it has been broken on
+`CF_BACKEND_ABI_VERSION` is 12 and every number after it has been broken on
 purpose. A texture release and a backend teardown are what 8 added; 9 added
 `size`, a second number at the front of the struct, so a backend compiled against
 another revision of the header is refused rather than misread; 10 added the cursor, the
 slot `cf_frame_cursor` had been answering into nowhere, and 11 the written-text ask,
 which had the same problem on the keyboard's side — `cf_frame_takes_text` knew the
-field was focused and had nowhere to say so. A change that adds no slot needs no
-number of its own — a font close is one, since the font is not part of the struct, and
-so is the clipboard, which went onto the context as a host-owned pair (`cf_clipboard`)
-instead of into the backend. Composition events are the row left that would want a
-slot, and that row is the one to decide about *now* rather than after a release, because
-a marked span cannot be added from a text event that was already dropped. Enum values
+field was focused and had nowhere to say so. 12 added `set_candidate_rect`, the last of
+the three asks that a frame already answered and a device never heard: an input method
+with nowhere to stand its list is the reason a page has to draw the run itself. A change
+that adds no slot needs no number of its own — a font close is one, since the font is not
+part of the struct, and so is the clipboard, which went onto the context as a host-owned
+pair (`cf_clipboard`) instead of into the backend. Enum values
 are append-only, so the same pressure does not apply to `cf_role`, `cf_key` or
 `cf_intrinsic`.
 

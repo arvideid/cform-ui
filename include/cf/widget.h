@@ -148,6 +148,19 @@ typedef enum cf_field_mode { CF_FIELD_SINGLE, CF_FIELD_MULTILINE } cf_field_mode
  * form that validates as you type reads its buffer there. A key that only moved the caret
  * or the selection, a run the buffer had no room for and a step at the end of the history
  * write nothing, so they report nothing.
+ *
+ * A run an input method is still deciding arrives on `CF_EVENT_COMPOSITION` as the whole text
+ * it holds, and never enters the buffer: the field splices those bytes into the rows it lays,
+ * over the selection the run began on, in the theme's marked tone, so a reader sees what is
+ * being weighed while the value the page owns keeps only what was settled on. The run belongs
+ * to the keyboard that opened it. While one stands every key the method may already have spent
+ * is answered by giving the run up and stopping - a backspace takes no byte out of a value the
+ * person was still choosing - except Tab, which is the tree's move rather than the method's and
+ * takes the run with it. The words chosen out of it arrive afterwards as ordinary text over the
+ * bytes the run covered, an empty run gives it up whole, and a frame that moves the keyboard to
+ * another box hands the run back with it. Where the run stands is `cf_frame_composition_rect`,
+ * the box the shell reports to the device; a run longer than the field's own room is refused
+ * whole, the way a paste too long for the buffer is.
  */
 cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_text_stack *stack,
                  cf_field_mode mode);

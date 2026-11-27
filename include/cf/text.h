@@ -67,6 +67,17 @@ typedef struct cf_text_content {
     cf_opt_u32 caret;
     cf_opt_u32 mark;
     /*
+     * The run an input method is still deciding, as offsets into the text above: the
+     * pair the paint draws under, with a tone of its own (cf_style.marked) because a
+     * reader needs to see that these bytes are not settled yet. A box with nothing
+     * composing leaves them absent and lays nothing. The run is part of the text the
+     * frame lays - it takes room, it breaks lines, the walk slides to hold the caret
+     * after it - and the editor holding it decides what an offset of its value means,
+     * which is why the value a build reads does not carry these bytes.
+     */
+    cf_opt_u32 marked_from;
+    cf_opt_u32 marked_to;
+    /*
      * Only the text's own breaks end a line: nothing wraps, so a walk too wide
      * for its box reports the width it wants rather than the lines it would fit.
      * An editor needs the one behavior and a paragraph the other.

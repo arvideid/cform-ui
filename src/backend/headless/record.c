@@ -109,6 +109,22 @@ static void record_set_text_input(void *user_data, bool enabled) {
     recorder->text_input = enabled;
 }
 
+/*
+ * Where an input method would stand its answers, kept rather than shown. A headless run
+ * has no candidate window and the ask still has an answer to record, because what a test
+ * is after is whether the shell passed the page's box on and with which numbers - and a
+ * rect of no extent is as much of an answer as a place to put one.
+ */
+static void record_set_candidate_rect(void *user_data, cf_rect rect) {
+    cf_recorder *recorder = user_data;
+
+    if (recorder == NULL) {
+        return;
+    }
+
+    recorder->candidate = rect;
+}
+
 cf_backend cf_backend_recorder(cf_recorder *recorder) {
     return (cf_backend){.abi_version = CF_BACKEND_ABI_VERSION,
                         .size = sizeof(cf_backend),
@@ -116,5 +132,6 @@ cf_backend cf_backend_recorder(cf_recorder *recorder) {
                         .submit = record_submit,
                         .present = record_present,
                         .set_cursor = record_set_cursor,
-                        .set_text_input = record_set_text_input};
+                        .set_text_input = record_set_text_input,
+                        .set_candidate_rect = record_set_candidate_rect};
 }

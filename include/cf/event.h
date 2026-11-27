@@ -29,7 +29,18 @@ typedef enum cf_event_type {
      * it reads the release, because the difference between the two is not its to
      * know.
      */
-    CF_EVENT_POINTER_CANCEL = 8
+    CF_EVENT_POINTER_CANCEL = 8,
+    /*
+     * What an input method is holding but has not decided: the run the keyboard has
+     * staged in the box, in `text`, in place of whatever the previous such event
+     * staged. The bytes arrive whole rather than as keystrokes, because the input
+     * method owns the run and rewrites it as the person keeps typing; an empty run is
+     * it saying the run is finished with, which is a cancel rather than a commit - the
+     * words the person settled on arrive as a text event, and that is what lets a
+     * widget tell the two endings apart instead of guessing. A box that shows the run
+     * paints it as marked and keeps it out of its value until the text event comes.
+     */
+    CF_EVENT_COMPOSITION = 9
 } cf_event_type;
 
 typedef enum cf_cursor { CF_CURSOR_DEFAULT, CF_CURSOR_POINTER, CF_CURSOR_TEXT } cf_cursor;
@@ -93,8 +104,8 @@ typedef enum cf_mod {
  * are dispatch state: the engine writes them as the event climbs the tree and a
  * handler reads them.
  *
- * A text event's bytes are UTF-8, borrowed for the handler call alone: whoever
- * keeps them copies them, which is what a field editing a buffer does anyway.
+ * A text or composition event's bytes are UTF-8, borrowed for the handler call alone:
+ * whoever keeps them copies them, which is what a field editing a buffer does anyway.
  * A key scalar is one of the cf_key values the widget can name, and the modifier
  * bits say what was held while it went down.
  */

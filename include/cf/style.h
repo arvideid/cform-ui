@@ -252,6 +252,15 @@ typedef struct cf_style {
      */
     cf_opt_color caret;
     cf_opt_color selection;
+    /*
+     * The tone drawn under the run an input method is still deciding (the text
+     * content's marked pair). It is a third mark rather than a reuse of the selection
+     * because the two mean different things to a reader: one is bytes the person holds,
+     * the other bytes the person has not settled on. A tone that is not stated draws
+     * nothing, so a box with no marked range - every box that is not an editor, and
+     * every editor at rest - paints exactly as it did before the slot existed.
+     */
+    cf_opt_color marked;
 } cf_style;
 
 /* The CSS initial values: shrink 1 and zero margins; all else as the zero state. */
@@ -357,6 +366,7 @@ typedef struct cf_variant {
     cf_opt_color border_color;
     cf_opt_color caret;
     cf_opt_color selection;
+    cf_opt_color marked;
 } cf_variant;
 
 /*

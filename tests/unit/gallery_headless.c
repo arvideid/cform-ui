@@ -378,6 +378,14 @@ static cf_event typed_text(const char *chars) {
     return event;
 }
 
+/* What an input method says it is holding, in the shape the device hands it. An empty run is the
+ * method finished with what it had, without choosing anything out of it. */
+static cf_event holding(const char *run) {
+    cf_event event = {.type = CF_EVENT_COMPOSITION};
+    event.text = cf_string_of(run);
+    return event;
+}
+
 static cf_event key_down(cf_key k) {
     return (cf_event){.type = CF_EVENT_KEY_DOWN, .key = k};
 }
@@ -1046,6 +1054,408 @@ static void the_gallery_field_edits_a_joined_picture_as_one_character(void) {
     step(typed_text("Q"));
 
     CF_CHECK(typed.length == 1u && typed_bytes[0] == 'Q', "and what is written replaces it");
+
+    end_session();
+}
+
+/*
+ * Whether the page is ruling the run it says it is holding. The box comes off the frame rather
+ * than out of a guess, so this is the check that says the paint and the geometry agree: the rule
+ * the walk lays and the rect the shell would hand a candidate window are the same numbers, and a
+ * change to one that left the other behind would fail here rather than on someone's desktop.
+ */
+static cf_rect wanted_rule;
+
+static bool accept_marked_rule(const cf_command *command) {
+    return fabsf(command->rect.x - wanted_rule.x) < 0.5f &&
+           fabsf(command->rect.y - wanted_rule.y) < 0.5f &&
+           fabsf(command->rect.width - wanted_rule.width) < 0.5f &&
+           fabsf(command->rect.height - wanted_rule.height) < 0.5f;
+}
+
+static bool the_run_is_ruled(void) {
+    const cf_rect box = cf_frame_composition_rect(&session);
+
+    if (box.width <= 0.0f || box.height <= 0.0f) {
+        return false;
+    }
+
+    /* One point along the row's bottom edge, the width the run took. */
+    wanted_rule = (cf_rect){box.x, box.y + box.height - 1.0f, box.width, 1.0f};
+
+    bool found = false;
+    (void)find_fill_rect(accept_marked_rule, &found);
+    return found;
+}
+
+static bool holds_the_bytes(const cf_command *command, const char *bytes, size_t want) {
+    if (command->text.chars == NULL || command->text.length < (uint32_t)want) {
+        return false;
+    }
+
+    for (uint32_t at = 0u; at + (uint32_t)want <= command->text.length; ++at) {
+        if (memcmp(command->text.chars + at, bytes, want) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Whether the entry box itself paints the bytes in a line it lays. The hunt has to stay inside the
+ * box to mean anything - the page's own prose carries the letters of any short run, and a hunt over
+ * the whole stream would answer for a sentence nobody was deciding. The row's text is also the only
+ * place a run can be seen once the keyboard has moved: the composition rect reads empty either
+ * way, because the claim gates the answer rather than the bytes. A box that went on underlining
+ * letters nobody can commit any more is a ghost the reader watches vanish under their own fingers.
+ */
+static bool the_entry_paints(const char *bytes) {
+    bool boxed = false;
+    const cf_rect box = find_fill_rect(accept_field_box, &boxed);
+    const size_t want = strlen(bytes);
+
+    if (!boxed) {
+        return false;
+    }
+
+    for (uint32_t i = 0u; i < recorded_count; ++i) {
+        const cf_command command = recorded[i];
+
+        if (command.kind == CF_COMMAND_TEXT && rect_inside(command.rect, box) &&
+            holds_the_bytes(&command, bytes, want)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Chapter two's memo, hunted in the frame the page is standing on rather than in the one an earlier
+ * reveal left behind: the press that moves the keyboard has to land inside a box the reader can
+ * actually see. False says the chapter is not in the fold, which the caller reports.
+ */
+static bool memo_box_in_view(cf_rect *out) {
+    bool found = false;
+    const cf_rect caption = find_text_prefix("the memo holds", &found);
+
+    if (!found) {
+        return false;
+    }
+
+    memo_caption_y = caption.y;
+    const cf_rect box = find_fill_rect(accept_memo_box, &found);
+
+    if (!found || !reaches_pointer(box)) {
+        return false;
+    }
+
+    *out = box;
+    return true;
+}
+
+/*
+ * Chapter two's entry, hunted in the frame the page is standing on. The echo is re-read first
+ * because the box is found relative to it, and a walk that moved the page leaves the old number
+ * pointing at whatever row happens to sit there now.
+ */
+static bool entry_box_in_view(cf_rect *out) {
+    bool found = false;
+    const cf_rect echo = find_text_prefix("the buffer holds", &found);
+
+    if (!found) {
+        return false;
+    }
+
+    field_echo_y = echo.y;
+    const cf_rect box = find_fill_rect(accept_field_box, &found);
+
+    if (!found || !reaches_pointer(box)) {
+        return false;
+    }
+
+    *out = box;
+    return true;
+}
+
+/*
+ * The protocol an input method walks, replayed over the page the window shows: the method says
+ * what it is holding, the page underlines it without taking it for the value, the keystroke that
+ * built it never arrives twice, the chosen character lands where the run stood, and a run given up
+ * leaves no bytes and no rule behind. Every step is its own frame, so this is also the case that
+ * says the preedit rides the keyed block across builds rather than the arena a frame ends in.
+ */
+static void the_gallery_field_decides_a_run_the_method_hands_it(void) {
+    start_session(current_size());
+
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "the page opens with nothing being decided");
+
+    step(holding("ni"));
+
+    CF_CHECK(typed.length == 0u && typed.refusals == 0u,
+             "a run still being weighed is not the value the page reads back");
+    CF_CHECK(page_reads("the buffer holds 0 bytes (0 refused)"),
+             "and the echo line says so beside letters it does not hold");
+
+    const cf_rect held = cf_frame_composition_rect(&session);
+    CF_CHECK(held.width == 20.0f && held.height == 20.0f,
+             "the two bytes sit across one row the page's own font lays");
+    CF_CHECK(the_run_is_ruled(), "and they are underlined where the page says they stand");
+    CF_CHECK(the_entry_paints("ni"), "and the letters themselves reach the line the box paints");
+
+    /* A notch of the wheel under a run the method has not finished is the case a candidate window
+     * feels most: the page carries the entry away while the letters are still being chosen. The
+     * answer is read against the rect the frame laid under the box, so it rides the page, and
+     * comparing it with the rule the same frame paints is what catches an answer that stayed over
+     * the row the keystroke came in on. */
+    const float stood_on = held.y;
+
+    /* One notch, which the scroller walks as forty-eight pixels of the document. */
+    step(wheel_at(held.x + held.width / 2.0f, held.y + held.height / 2.0f, 1.0f));
+
+    const cf_rect ridden = cf_frame_composition_rect(&session);
+
+    CF_CHECK(ridden.width == 20.0f && ridden.height == 20.0f,
+             "the notch takes nothing away from the run still being weighed");
+    CF_CHECK(ridden.y == stood_on - 48.0f,
+             "and a page that moved under the run moved the box the candidates stand beside");
+    CF_CHECK(the_run_is_ruled(),
+             "the rule the paint lays and the box a platform is told are still the same numbers");
+    CF_CHECK(typed.length == 0u, "and none of it reached the value");
+
+    step(holding("nihao"));
+
+    CF_CHECK(cf_frame_composition_rect(&session).width == 50.0f,
+             "the next run the method states replaces the one it held");
+
+    step(typed_text("\xE6\x9D\x8E"));
+
+    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+             "the character chosen out of it goes in where the run stood");
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "and the run it was decided from is gone");
+    CF_CHECK(!the_run_is_ruled(), "with nothing left to underline");
+    CF_CHECK(page_reads("changes the page heard: 1"), "and the commit is the one change it heard");
+
+    /* A desk hands the keys and the preedit for the same physical press. Asked against a buffer
+     * that holds a byte, the ask is the sharp one: a key that got through would take the committed
+     * character back out, which is the letter nobody typed. */
+    step(holding("si"));
+    step(key_down(CF_KEY_BACKSPACE));
+
+    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+             "a key the method already spent takes no byte the value holds");
+
+    step(holding(""));
+
+    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+             "a run given up takes its bytes back and adds none");
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "and the box it stood in goes empty the same frame");
+    CF_CHECK(!the_entry_paints("si"), "and the given-up letters stop being painted with it");
+    CF_CHECK(page_reads("changes the page heard: 1"),
+             "and giving up on a run is no change to the value at all");
+
+    step(holding("san"));
+    step(tab_key(false));
+
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "Tab walks the ring and takes the run with it");
+    CF_CHECK(typed.length == 3u, "and a run nobody committed never reached the buffer behind it");
+    CF_CHECK(the_entry_paints("\xE6\x9D\x8E"),
+             "and the box the keyboard left goes on painting what it is actually holding");
+    CF_CHECK(!the_entry_paints("san"), "nor is the run left standing on it");
+
+    /* The other way the keyboard leaves a box, and the one the field cannot serve for itself: a
+     * hand that presses somewhere else. Tab reaches the field holding the run, which ends it in its
+     * own handler; a press onto the memo reaches it as nothing at all, so only the frame's reading
+     * of the claim can take the run back. The memo is a field too, which is what makes the answer
+     * worth reading - with the keyboard still standing on a box that takes text, an empty box can
+     * only mean the claim went back with the keyboard.
+     *
+     * The walk asks for the memo's caption first and reads both boxes out of the frame that answer
+     * produced. A press at a stale point lands on whatever row the scroll left there: this case
+     * once handed its run to the memo that way and still read the width it wanted, because the
+     * width says nothing about which box claimed it. */
+    if (!reveal_to("the memo holds", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "the memo caption can be reached in the frame the run stands in");
+        end_session();
+        return;
+    }
+
+    cf_rect entry_box;
+    cf_rect memo_box;
+
+    if (!entry_box_in_view(&entry_box)) {
+        CF_CHECK(false, "the entry box is reachable in the same frame as the memo");
+        end_session();
+        return;
+    }
+
+    if (!memo_box_in_view(&memo_box)) {
+        CF_CHECK(false, "and the memo box is under a pointer there too");
+        end_session();
+        return;
+    }
+
+    step(press_at(entry_box.x + 30.0f, entry_box.y + entry_box.height / 2.0f));
+    step(release_at(entry_box.x + 30.0f, entry_box.y + entry_box.height / 2.0f));
+    step(holding("si"));
+
+    const cf_rect claimed = cf_frame_composition_rect(&session);
+
+    CF_CHECK(claimed.width == 20.0f && claimed.y >= entry_box.y &&
+                 claimed.y < entry_box.y + entry_box.height,
+             "the entry is deciding a run again, on its own row under its own keyboard");
+    CF_CHECK(the_entry_paints("si"), "and the run reaches the line the entry paints");
+
+    step(press_at(memo_box.x + 30.0f, memo_box.y + memo_box.height / 2.0f));
+    step(release_at(memo_box.x + 30.0f, memo_box.y + memo_box.height / 2.0f));
+
+    CF_CHECK(cf_frame_takes_text(&session), "and the keyboard is still on a box that takes text");
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "yet the run is gone the frame the hand moved off its box");
+    CF_CHECK(!the_entry_paints("si"),
+             "and the box it was typed into stops painting letters nobody can commit any more");
+    CF_CHECK(the_entry_paints("\xE6\x9D\x8E"),
+             "while that box goes on painting the character it was given");
+    CF_CHECK(page_reads("the memo holds 0 bytes"),
+             "and the box the keyboard moved to took no byte of a run it never decided");
+    CF_CHECK(typed.length == 3u && memcmp(typed_bytes, "\xE6\x9D\x8E", 3) == 0,
+             "what the person settled on stays, whoever the keyboard went to next");
+
+    end_session();
+}
+
+/* Where chapter fifteen's caption was painted, so the box hunted above it is the one on that card
+ * rather than a field on some chapter the page has not scrolled past yet. */
+static float composed_caption_y;
+
+static bool accept_composed_box(const cf_command *command) {
+    return command->rect.y + command->rect.height <= composed_caption_y + 1.0f &&
+           command->rect.width > 100.0f && command->rect.height > FIELD_HEIGHT - 1.0f &&
+           command->rect.height < 2.0f * FIELD_HEIGHT;
+}
+
+/* The strip chapter fifteen stands under a run, last read from the frame the page is on. */
+static cf_rect wanted_strip;
+
+static bool accept_composed_strip(const cf_command *command) {
+    return fabsf(command->rect.x - wanted_strip.x) < 0.5f &&
+           fabsf(command->rect.y - wanted_strip.y) < 0.5f &&
+           fabsf(command->rect.width - wanted_strip.width) < 0.5f &&
+           fabsf(command->rect.height - wanted_strip.height) < 0.5f;
+}
+
+/* Whether the strip is painted where the frame says it belongs, whoever the frame now says anything
+ * to: once a run is given up the answer is empty, so the hunt that says the strip went with it has
+ * to read against the numbers the strip stood on rather than against a rect that no longer arrives.
+ */
+static bool a_strip_stands(void) {
+    bool found = false;
+    (void)find_fill_rect(accept_composed_strip, &found);
+    return found;
+}
+
+static bool the_strip_stands_under_the_run(void) {
+    const cf_rect told = cf_frame_composition_rect(&session);
+
+    if (told.width <= 0.0f || told.height <= 0.0f) {
+        return false;
+    }
+
+    wanted_strip = (cf_rect){told.x, told.y + told.height, told.width, CANDIDATE_BAND};
+    return a_strip_stands();
+}
+
+/*
+ * The agreement a candidate window lives on, checked against the page a person looks at: the box
+ * the shell is handed and the place the page stands its own list are the same numbers. The chapter
+ * lays its strip from the run's offsets inside its box, which is all a build can read before the
+ * frame has laid anything, and the shell is handed those offsets plus the rect this frame put under
+ * them. A notch of the wheel between the two readings is what says the strip was laid against the
+ * frame rather than remembered from the keystroke that started the run.
+ */
+static void the_gallery_page_lays_its_strip_where_the_shell_is_told(void) {
+    start_session(current_size());
+
+    if (!reveal_to("no run is standing in this box", REVEAL_MAX_STEPS)) {
+        CF_CHECK(false, "chapter fifteen's box can be reached on the page");
+        end_session();
+        return;
+    }
+
+    bool found = false;
+    const cf_rect caption = find_text_prefix("no run is standing in this box", &found);
+
+    if (!found) {
+        CF_CHECK(false, "and its caption is painted on the frame the reveal stopped on");
+        end_session();
+        return;
+    }
+
+    composed_caption_y = caption.y;
+    const cf_rect box = find_fill_rect(accept_composed_box, &found);
+
+    if (!found || !reaches_pointer(box)) {
+        CF_CHECK(false, "the box to compose in is painted above its own caption, under a pointer");
+        end_session();
+        return;
+    }
+
+    composed.length = 0u;
+    composed.refusals = 0u;
+    composed.caret = 0u;
+    composed.mark = 0u;
+
+    step(press_at(box.x + 30.0f, box.y + box.height / 2.0f));
+    step(release_at(box.x + 30.0f, box.y + box.height / 2.0f));
+
+    CF_CHECK(
+        cf_frame_composition_rect(&session).width == 0.0f,
+        "a box the keyboard has just been handed answers no run, so the page has nothing to lay");
+
+    step(holding("ni"));
+
+    const cf_rect told = cf_frame_composition_rect(&session);
+
+    CF_CHECK(told.width == 20.0f && told.height == 20.0f,
+             "the run the box is deciding measures the bytes it was handed, on a row of its own");
+    CF_CHECK(the_run_is_ruled(), "and the page rules those bytes from under");
+    CF_CHECK(the_strip_stands_under_the_run(),
+             "the strip the page lays stands on the box a platform is told to put its list beside");
+
+    /* One notch the other way, which the scroller walks as forty-eight logical points of the
+     * document - the case a person on a touchpad makes without meaning to. */
+    step(wheel_at(box.x + 30.0f, box.y + box.height / 2.0f, -1.0f));
+
+    const cf_rect moved = cf_frame_composition_rect(&session);
+
+    CF_CHECK(moved.width == 20.0f && moved.height == 20.0f,
+             "the notch takes nothing away from the run still being weighed");
+    CF_CHECK(moved.y == told.y + 48.0f,
+             "and a page that moved under a run the method has not finished moves the box with it");
+    CF_CHECK(the_strip_stands_under_the_run(),
+             "so the strip the page paints and the box the shell is told are still one number");
+    CF_CHECK(composed.length == 0u, "and none of it reached the value while the page moved");
+
+    step(holding(""));
+
+    CF_CHECK(cf_frame_composition_rect(&session).width == 0.0f,
+             "a run given up answers no box, which is where a platform puts its list away");
+    CF_CHECK(!a_strip_stands(),
+             "and the strip the page stood is gone along with the rule under it");
+    CF_CHECK(!the_run_is_ruled(), "nothing is ruled under any more");
+    CF_CHECK(page_reads("no run is standing in this box"),
+             "the line under the box says what it said before the method started");
+    CF_CHECK(composed.length == 0u, "and giving up leaves no bytes behind in the value");
 
     end_session();
 }
@@ -2009,7 +2419,11 @@ static void a_bridge_hears_the_page_the_way_a_person_reads_it(void) {
                  entry->selection_start.value == 1u && entry->selection_end.value == 1u,
              "and where the caret is, as offsets into the bytes");
 
-    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 3u,
+    /* The three single-line boxes the page builds - chapter two's entry, chapter fourteen's
+     * signature and chapter fifteen's box to compose in - beside the one field declared to break
+     * lines. Four is the whole page: a box that takes typed text and is not one of those is
+     * claiming something it does not do. */
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 4u,
              "every field the page builds answers, and no other box claims to take typed text");
     CF_CHECK(entry != NULL && entry->announce == CF_ANNOUNCE_NONE,
              "a field is not a news line: no region covers what a person is typing into");
@@ -2248,6 +2662,8 @@ int main(void) {
     CF_RUN(the_gallery_field_walks_its_own_typing_back);
     CF_RUN(the_gallery_field_steps_a_word_and_holds_the_value);
     CF_RUN(the_gallery_field_edits_a_joined_picture_as_one_character);
+    CF_RUN(the_gallery_field_decides_a_run_the_method_hands_it);
+    CF_RUN(the_gallery_page_lays_its_strip_where_the_shell_is_told);
     CF_RUN(the_gallery_field_says_what_it_had_no_room_for);
     CF_RUN(the_gallery_field_saves_on_enter_and_types_a_space);
     CF_RUN(the_gallery_page_hears_the_value_move_and_not_the_caret);

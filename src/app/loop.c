@@ -47,6 +47,15 @@ static float frame_interval(const struct timespec *last, const struct timespec *
     return seconds > FRAME_SECONDS_CAP ? FRAME_SECONDS_CAP : seconds;
 }
 
+/*
+ * Whether the shell's last answer is this frame's. Two floats are compared rather than
+ * the structs handed around, because a rect the page restated with the same four numbers
+ * is the same place to stand a window and costs no call.
+ */
+static bool rect_is(cf_rect a, cf_rect b) {
+    return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height;
+}
+
 void cf_app_run(const cf_app_config *config) {
     if (config == NULL || config->build == NULL || config->backend.submit == NULL) {
         return;
@@ -99,6 +108,11 @@ void cf_app_run(const cf_app_config *config) {
      * type, on the one platform where the guess costs a keystroke. */
     bool told_text = false;
     bool asked_text = false;
+    /* The box the backend was last told to hold its candidates against, and whether it
+     * has been told at all: a window opens with no input method standing anywhere, so
+     * there is nothing to assume about the first answer. */
+    bool told_candidates = false;
+    cf_rect asked_candidates = {0.0f, 0.0f, 0.0f, 0.0f};
     cf_size offer = {0.0f, 0.0f};
     struct timespec last;
     timespec_get(&last, TIME_UTC);
@@ -195,6 +209,21 @@ void cf_app_run(const cf_app_config *config) {
                 told_text = true;
                 asked_text = wants_text;
                 config->backend.set_text_input(config->backend.user_data, wants_text);
+            }
+        }
+
+        /* And the same for where the device should stand its answers while a run is
+         * being decided: an input method with nowhere to put its list is the reason a
+         * page draws the preedit itself, so an output that cannot be told is no worse off
+         * than one that never asked. A rect of no extent travels the same door to say the
+         * page has finished deciding. */
+        if (config->backend.set_candidate_rect != NULL) {
+            const cf_rect box = cf_frame_composition_rect(&ctx);
+
+            if (!told_candidates || !rect_is(box, asked_candidates)) {
+                told_candidates = true;
+                asked_candidates = box;
+                config->backend.set_candidate_rect(config->backend.user_data, box);
             }
         }
 

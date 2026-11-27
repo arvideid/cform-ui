@@ -838,6 +838,53 @@ static void a_range_across_lines_bands_every_one_it_touches(void) {
     CF_NEAR(list.commands[2].rect.width, 10.0f);
 }
 
+/*
+ * A run an input method is still deciding is ruled under rather than covered: the bytes
+ * beneath a rule are readable text the person is choosing, and a fill over them would say
+ * they had been picked up. The pair are offsets in the same bytes the lines lay, so a run
+ * a narrow box broke across rows is ruled on each of them, as a selection is.
+ */
+static void a_marked_run_is_ruled_under_the_rows_it_touches(void) {
+    fixture f;
+    begin(&f);
+    cf_text_content edited = label_text;
+    edited.marked_from = (cf_opt_u32){.present = true, .value = 1u};
+    edited.marked_to = (cf_opt_u32){.present = true, .value = 5u};
+
+    f.styles[0] = cf_style_default();
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.styles[0].marked = (cf_opt_color){.present = true, .value = (cf_color){37u, 99u, 235u, 255u}};
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&edited;
+    f.node_count = 1u;
+    f.rects[0] = box_at(0.0f, 0.0f, 30.0f, 60.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+
+    CF_CHECK(list.count == 5u, "the run's two rows and three lines, and nothing else");
+    CF_CHECK(list.commands[0].kind == CF_COMMAND_FILL, "a rule goes down before the glyphs");
+    CF_NEAR(list.commands[0].rect.x, 10.0f);
+    CF_NEAR(list.commands[0].rect.y, 19.0f);
+    CF_NEAR(list.commands[0].rect.width, 10.0f);
+    CF_NEAR(list.commands[0].rect.height, 1.0f);
+    CF_NEAR(list.commands[1].rect.y, 39.0f);
+    CF_NEAR(list.commands[1].rect.width, 20.0f);
+
+    /* A pair the editor states as equal holds no bytes, and a tone the style does not hand
+     * out is a rule nothing draws - which is how a label with no run stays a label. */
+    edited.marked_to = (cf_opt_u32){.present = true, .value = 1u};
+    list.count = 0u;
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+    CF_CHECK(list.count == 3u, "a run of no bytes rules nothing");
+
+    edited.marked_to = (cf_opt_u32){.present = true, .value = 5u};
+    f.styles[0].marked.present = false;
+    list.count = 0u;
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+    CF_CHECK(list.count == 3u, "and a run with no tone goes unpainted");
+}
+
 /* A value wider than the box that shows it: the walk keeps the line's true rect
  * and names the clip that cuts it, and the box slides along the line to hold the
  * caret the content states. */
@@ -905,6 +952,7 @@ int main(void) {
     CF_RUN(an_image_at_a_clip_names_the_clip_it_is_cut_by);
     CF_RUN(a_stated_caret_and_selection_paint_with_the_lines);
     CF_RUN(a_range_across_lines_bands_every_one_it_touches);
+    CF_RUN(a_marked_run_is_ruled_under_the_rows_it_touches);
     CF_RUN(a_caret_past_the_edge_slides_the_line_and_is_cut_at_it);
 
     cf_arena_free(&scratch);

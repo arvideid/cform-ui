@@ -137,6 +137,10 @@ static void variant_apply(const cf_variant *variant, cf_style *style) {
     if (variant->selection.present) {
         style->selection = variant->selection;
     }
+
+    if (variant->marked.present) {
+        style->marked = variant->marked;
+    }
 }
 
 cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states) {

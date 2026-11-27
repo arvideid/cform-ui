@@ -97,7 +97,12 @@ static const cf_theme
                                       * ink the bytes are drawn in, which is CSS's default
                                       * for caret-color. */
                                      .caret = {.present = true, .value = RGBA(10, 10, 10)},
-                                     .selection = {.present = true, .value = RGBA(191, 219, 254)}},
+                                     .selection = {.present = true, .value = RGBA(191, 219, 254)},
+                                     /* A run an input method is deciding is drawn under rather
+                                      * than banded, and in a tone darker than the selection it
+                                      * sits beside: two light bands over the same letters would
+                                      * read as one selection. */
+                                     .marked = {.present = true, .value = RGBA(37, 99, 235)}},
                          .disabled =
                              {.background = {.present = true, .value = RGBA(229, 229, 229)}}},
                     [CF_ROLE_LIST] = {.hovered = {.background = {.present = true,

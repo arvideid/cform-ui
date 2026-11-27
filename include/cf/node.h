@@ -205,6 +205,22 @@ typedef struct cf_ctx {
      * not un-asked by the frame after, and a host that reads it late must not
      * miss it. Only freeing the context puts it back. */
     bool quit_requested;
+    /*
+     * The keyboard's run an input method is still deciding, named by the field that is
+     * holding it: the name is the claim, and no field shows a preedit the claim is not
+     * pointing at. A move of the keyboard hands the claim back (a run the box never got to
+     * commit is the previous box's to forget), and a field clears it when the method ends the
+     * run or the person cancels it. The run's place inside its box is `composition_box`, in
+     * logical points, and `composition_id` is the box that was standing when the claim was
+     * taken: together they let a platform put its candidate window beside the text rather than
+     * beside a caret the preedit has already pushed past it, and let the window follow a page
+     * that scrolls under a run the method has not finished. The claim belongs to the keyboard
+     * rather than to one frame, which is what `cf_frame_composition_rect` answers the shell
+     * with.
+     */
+    cf_name composing;
+    cf_rect composition_box;
+    cf_id composition_id;
     /* The reason the last boundary refused since this frame began, or NULL.
      * Every message is a literal the library owns, so the answer outlives the
      * call that recorded it. */
@@ -630,5 +646,21 @@ cf_cursor cf_frame_cursor(const cf_ctx *ctx);
  * loop.
  */
 bool cf_frame_takes_text(const cf_ctx *ctx);
+
+/*
+ * The box the run an input method is holding stands in, in the logical points the rects were
+ * laid in, or a rect of no extent when the page is deciding nothing. A platform drawing its own
+ * candidate window puts it beside this; cf_app_run hands it to the backend's
+ * `set_candidate_rect` whenever it moves, and a host running the pipeline itself asks the same
+ * question in its own loop. Nothing is answered once the keyboard has moved or gone nowhere text
+ * can go, which is what retires a window that stood beside a box the person clicked away from
+ * mid-composition.
+ *
+ * The answer is measured on the frame it is read from: the run's place inside its box is what
+ * the field staged, and the box is the one this frame laid under it, so a page that scrolls or
+ * resizes while a method is still deciding carries the candidate window along with the letters it
+ * belongs to. A box that has left the view answers nothing, which is the run leaving with it.
+ */
+cf_rect cf_frame_composition_rect(const cf_ctx *ctx);
 
 #endif

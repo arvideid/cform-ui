@@ -60,6 +60,12 @@
  * keeps open until something is typed into it. */
 #define FIELD_HEIGHT 34.0f
 
+/* The strip chapter fifteen stands under a run an input method is still deciding. Its height is
+ * stated so the headless tier can ask for the strip by the box it was given, and the room under
+ * the field is the same number plus a point or two so the strip lands on the card rather than on
+ * the line below it. */
+#define CANDIDATE_BAND 6.0f
+
 /* What the text demo pinches its well to. Stated in points rather than as a
  * percentage: a percentage declared inside a measuring pass waits for the
  * arranging one, so an auto-height ancestor books the height of the wider run
@@ -103,6 +109,11 @@ static cf_text_edit typed = {.chars = typed_bytes, .capacity = sizeof typed_byte
 static char memo_chars[96];
 static cf_text_edit memo = {.chars = memo_chars, .capacity = sizeof memo_chars};
 
+/* The buffer of the box a method is deciding: the run it hands over is kept beside the value
+ * rather than inside it, so committing is the only way the bytes get in. */
+static char composed_chars[48];
+static cf_text_edit composed = {.chars = composed_chars, .capacity = sizeof composed_chars};
+
 /* The buffer of the field that has a caption named rather than drawn inside it. */
 static char related_chars[48];
 static cf_text_edit related = {.chars = related_chars, .capacity = sizeof related_chars};
@@ -141,6 +152,7 @@ static char live_bytes[64];
 static char again_bytes[64];
 static char caption_bytes[96];
 static char relate_bytes[96];
+static char compose_bytes[128];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -1360,9 +1372,63 @@ static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
 
+/* Chapter fifteen: the run a method has not finished. The bytes arrive through a door of their own,
+ * are ruled under rather than taken in, and the box they stand in is the answer a platform is given
+ * so its candidate list can stand beside the letters. The page lays its strip from the same numbers
+ * the shell is handed, which is the part a person can check without an input method at all. */
+static cf_node make_composed_demo(cf_ctx *ctx) {
+    cf_node entry = cf_field(ctx, "composed", &composed, &body, CF_FIELD_SINGLE);
+    entry.name = cf_string_of("A box to compose in");
+    entry.style.width = CF_PERCENT(100.0f);
+    entry.style.height = CF_PX(FIELD_HEIGHT);
+
+    /* A build runs before the frame has laid anything, so where a run stands on the page is not
+     * knowable here - only where it stands inside its box, which is what the widget staged and
+     * what an out-of-flow child measures its insets from. The shell is handed the sum. */
+    const bool weighing = ctx->composing == entry.key;
+    const cf_rect inside = weighing ? ctx->composition_box : (cf_rect){0.0f, 0.0f, 0.0f, 0.0f};
+
+    cf_style strip = cf_style_default();
+    strip.position = CF_POSITION_ABSOLUTE;
+    strip.inset = (cf_box){CF_PX(inside.x), CF_PX(inside.y + inside.height), CF_AUTO, CF_AUTO};
+    strip.width = CF_PX(inside.width);
+    strip.height = CF_PX(CANDIDATE_BAND);
+    strip.background = (cf_opt_color){.present = true, .value = theme->ink};
+
+    const cf_node band = (cf_node){.style = strip};
+
+    /* Two sentences rather than one format chosen at run time: the line says different things about
+     * a box that is deciding and one that is not, and the numbers only mean something in the first
+     * reading. */
+    const int length =
+        weighing
+            ? snprintf(compose_bytes, sizeof compose_bytes,
+                       "a run stands %g points across its row and %g down, %g wide and %g tall",
+                       inside.x, inside.y, inside.width, inside.height)
+            : snprintf(compose_bytes, sizeof compose_bytes,
+                       "no run is standing in this box, so no strip is laid under it");
+
+    const cf_node caption =
+        cf_label(ctx, (cf_string){compose_bytes, (uint32_t)length}, &body, theme->muted);
+
+    /* The box the strip is placed against: an absolute child counts its insets from the nearest
+     * ancestor that says it frames them, and without the wrapper here the strip would be laid
+     * against the card - a few hundred points from the letters it belongs to. The room underneath
+     * is for the strip, which takes no place in the flow it hangs out of. */
+    cf_style frame = cf_style_default();
+    frame.position = CF_POSITION_RELATIVE;
+    frame.direction = CF_DIRECTION_COLUMN;
+    frame.padding.bottom = CF_PX(CANDIDATE_BAND + 2.0f);
+
+    const cf_node holding = weighing ? cf_col(ctx, frame, (cf_node[]){entry, band}, 2u)
+                                     : cf_col(ctx, frame, &entry, 1u);
+
+    return demo_column(ctx, 8.0f, (cf_node[]){holding, caption}, 2u);
+}
+
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("fourteen rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("fifteen rules, each with something to try"),
                                   &body, theme->muted);
 
     cf_style row = cf_style_default();
@@ -1613,6 +1679,20 @@ static cf_node build(cf_ctx *ctx) {
             "field "
             "still names the same caption it did, whatever that line happens to be saying.",
             make_related_demo(ctx)),
+        make_chapter(
+            ctx, "15", "The run a method has not finished",
+            "What a person types and what a person means are not always the same keystroke. An "
+            "input method offers a syllable first and the character later, so it hands the box the "
+            "run it is holding through a door of its own: the page rules the bytes from under "
+            "without putting them in the value, and the value changes only when a character is "
+            "chosen. Giving up on a run leaves nothing - no bytes, and no rule left behind to "
+            "watch vanish. What comes back the other way is where the run stands, so a platform "
+            "can put its list of candidates beside the letters rather than under the pointer, and "
+            "the box follows a page that scrolls while the method is still weighing the same "
+            "syllable. Turn on the input method your system has and type a syllable in this box: "
+            "the underline the page draws and the strip it lays under the run are the numbers a "
+            "platform is handed, so a machine with no method on it can still see the rule hold.",
+            make_composed_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "

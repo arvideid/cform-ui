@@ -18,7 +18,7 @@ engine ──submit──▶ shapes ──▶ backend ──▶ screen
        ◀─poll──── input  ◀──── size ──── device
 ```
 
-## The eight functions
+## The eleven functions
 
 ```c
 typedef struct cf_backend {
@@ -34,11 +34,16 @@ typedef struct cf_backend {
     bool (*load_image)(void *user_data, const char *path, cf_image_content *out);
     void (*release_texture)(void *user_data, uint32_t texture);
     void (*destroy)(void *user_data);
+    void (*set_cursor)(void *user_data, cf_cursor cursor);
+    void (*set_text_input)(void *user_data, bool enabled);
+    void (*set_candidate_rect)(void *user_data, cf_rect rect);
 } cf_backend;
 ```
 
 Every one takes `user_data` first, so all of your state hangs off a single
-pointer that you allocate.
+pointer that you allocate. The last three are the newest asks, appended after the
+resource slots: a struct built against an older header is shorter, and that is
+exactly what `size` is there to catch.
 
 | Function | Job | Can be left NULL |
 |---|---|---|
@@ -50,6 +55,9 @@ pointer that you allocate.
 | `load_image` | Decode a file, upload it, name its texture and its extent | Yes — the app uploads its own pixels through `create_texture` |
 | `release_texture` | Hand back the bytes behind an id the page stopped showing (the host calls it) | Yes — a backend that keeps every upload says so by leaving it NULL |
 | `destroy` | Free the backend's own state: the uploads still held, the window, the bytes beside them (the host calls it once the shell has returned) | Yes — a backend with no state of its own has nothing to free |
+| `set_cursor` | Show the pointer shape the frame named | Yes — a page keeps the shape the desk already had |
+| `set_text_input` | Open or shut the device's written-text service (screen keyboard, input method) | Yes — the words arrive as `CF_EVENT_TEXT` either way |
+| `set_candidate_rect` | Move the input method's answer box beside the run being decided; a rect of no extent says the page stopped deciding | Yes — the page draws the run itself, so a desk told nothing loses nothing |
 
 There is no error code to return, and no callback from the engine into your code
 beyond the four it calls. A backend that can't open its window returns a struct whose
@@ -64,15 +72,15 @@ checks both before the first frame and idles if either disagrees. A program call
 
 A capability is advertised by the function that would provide it: you test the
 pointer and a NULL means this backend does not offer that service. That is why only
-`submit`, `present` and `surface` have to be filled — the rest are optional by their
-own value. A separate table of bits saying the same thing would be a second answer
-to keep in agreement, so there isn't one yet. Bits earn their place when a single
-call has to speak for several services at once, which is what `set_cursor` came
-closest to — it cannot say *which* shapes this desk draws. It does not have to: a
-shape the platform will not make is refused by the platform, the pointer keeps the
-shape it had, and the caller has nothing to do differently. Until a service needs
-one call to mean several things, every one of the ten slots is asked directly, and
-the host's own clipboard pair below answers for itself by refusing.
+`submit` and `present` have to be filled — the shell checks those two and reads the
+rest by their own value. A separate table of bits saying the same thing would be a
+second answer to keep in agreement, so there isn't one yet. Bits earn their place
+when a single call has to speak for several services at once, which is what
+`set_cursor` came closest to — it cannot say *which* shapes this desk draws. It does
+not have to: a shape the platform will not make is refused by the platform, the
+pointer keeps the shape it had, and the caller has nothing to do differently. Until a
+service needs one call to mean several things, every one of the eleven slots is asked
+directly, and the host's own clipboard pair below answers for itself by refusing.
 
 ## What you may keep, and what you must copy
 
@@ -315,6 +323,33 @@ frame's answer to arrive whether or not it matches what you opened with: the she
 guesses nothing about a device it has not spoken to, and a page that opens focused on a
 field would otherwise have no way to say so.
 
+## Where the answers to type go
+
+While an input method is still deciding a run, `cf_frame_composition_rect` answers where
+that run stands, and `cf_app_run` puts the box on `set_candidate_rect` so the platform can
+stand its list of candidates beside the letters rather than under the pointer. Four things
+a port can rely on:
+
+- **The box is the run, not the caret.** Its width is what the laid line measured for the
+  bytes the method handed over and its height is that row's, so it is the same numbers the
+  page's underline is drawn from. It is read against the box the frame laid under it, so a
+  page that scrolls or resizes while a run stands moves the answer along with those letters.
+  A backend that wants a caret may use its bottom-left corner; nothing else in the frame
+  offers one.
+- **Only a moved answer arrives**, on the terms the two sections above use: the shell
+  remembers the rect it last handed over and asks again when the frame disagrees.
+- **A rect of no extent is the answer for "nothing is being decided"**, and it travels the
+  same door as the box itself. Clear whatever you had asked the platform to hold rather
+  than waiting for a second call — a list left standing over a finished run is the bug this
+  row exists to prevent.
+- **NULL is a normal backend.** The page paints the run it was handed, so a device with no
+  input method — or one that places its own window — loses nothing by leaving the slot out.
+
+The rect is in logical points like every shape in the stream: multiply by the pixel density
+before you hand it to a platform that measures in device pixels. Where the platform wants
+the caret in *screen* coordinates, add the window's own origin; the frame knows only its
+page, and an offset the shell invented would be wrong for a widget inside another window.
+
 ## Porting, in order
 
 1. Fill the struct, set `abi_version` and `size`, keep your state in `user_data`.
@@ -337,9 +372,10 @@ field would otherwise have no way to say so.
    use-after-free the other way round. Both are the host's to call, so a page like
    `examples/gallery.c` is the pattern: upload before the loop, release and destroy
    after it.
-9. `set_cursor` and `set_text_input`, the two asks the frame answers for the device
-   rather than for the picture: show the shape the page named or refuse it, open the
-   written-text service or shut it. Leave either one out on an output that has nothing
+9. `set_cursor`, `set_text_input` and `set_candidate_rect`, the three asks the frame
+   answers for the device rather than for the picture: show the shape the page named or
+   refuse it, open the written-text service or shut it, move the answer box beside the run
+   the method is deciding or take it away. Leave any one out on an output that has nothing
    to show, and expect the shell to ask only when the answer moves.
 10. A font constructor whose table measures and whose handle your `submit` can
     draw.
@@ -347,12 +383,12 @@ field would otherwise have no way to say so.
     `cf_paint cf_text` and your device library. Only `src/backend/*/` and
     `src/app/` may name a platform header.
 
-`src/backend/headless/record.c` does four of the ten and is a legal backend — the two a
-shell has to have, and the two device asks it keeps rather than acts on. It takes no
+`src/backend/headless/record.c` does five of the eleven and is a legal backend — the two
+a shell has to have, and the three device asks it keeps rather than acts on. It takes no
 uploads and keeps no device state, so its resource slots stay NULL; a host that releases
-through a backend has to ask the slot first either way. Keeping the shape and the
-written-text answer instead of showing them is how the app tests tell a decision the
-shell made from one nobody read.
+through a backend has to ask the slot first either way. Keeping the shape, the written-text
+answer and the candidate box instead of showing them is how the app tests tell a decision
+the shell made from one nobody read.
 
 ## Checking your work
 

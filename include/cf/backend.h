@@ -21,8 +21,11 @@
  *
  * 11 added the text-input ask: whether the page currently has a box that takes
  * written text, which a device with no keyboard to show can leave unanswered.
+ *
+ * 12 added the candidate box: where an input method should stand its answers while a
+ * run is being decided, which a device with no input method can leave unanswered.
  */
-#define CF_BACKEND_ABI_VERSION 11u
+#define CF_BACKEND_ABI_VERSION 12u
 
 typedef struct cf_backend {
     uint32_t abi_version;
@@ -103,6 +106,19 @@ typedef struct cf_backend {
      * `CF_EVENT_TEXT` either way.
      */
     void (*set_text_input)(void *user_data, bool enabled);
+    /*
+     * Moves, or puts away, the box an input method stands its candidates beside: the
+     * run it is deciding, in the same logical points the commands arrive in. A rect of
+     * no extent is the page saying it has stopped deciding, and a backend that is
+     * passed one should clear whatever it had asked the platform to hold.
+     *
+     * The shell calls only when the answer moves, so a page at rest costs no platform
+     * call per frame. The ask rides the same door as the text-input one above and is
+     * worth nothing on its own: a run a platform cannot see is still drawn by the page,
+     * which paints the bytes it was handed, so a device with no input method - or one
+     * that places its own window - leaves the slot NULL and is no worse for it.
+     */
+    void (*set_candidate_rect)(void *user_data, cf_rect rect);
 } cf_backend;
 
 /*
@@ -126,7 +142,9 @@ typedef struct cf_backend {
  * for a third-party backend that reclaims nothing. It keeps the last cursor it
  * was asked to show, which is how a test tells "the shell applied the frame's
  * answer" from "someone read the frame's answer", and it keeps the last
- * text-input ask for the same reason.
+ * text-input ask for the same reason. It keeps the last candidate box too, where a
+ * zero-extent rect is the answer that says the page stopped deciding - the state the
+ * recorder starts in, and the one a test reads after the run takes the field away.
  */
 typedef struct cf_recorder {
     cf_arena *arena;
@@ -137,6 +155,8 @@ typedef struct cf_recorder {
     cf_cursor cursor;
     /* Whether the shell last asked this device to take written text. */
     bool text_input;
+    /* Where the shell last asked this device to stand an input method's answers. */
+    cf_rect candidate;
 } cf_recorder;
 
 /* A backend that records instead of draws. A NULL recorder submits nothing. */
