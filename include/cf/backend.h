@@ -170,11 +170,12 @@ cf_backend cf_backend_recorder(cf_recorder *recorder);
  * Rects arrive in logical points; the window's pixel density is the
  * backend's to apply.
  *
- * The four SDL-shaped names below (cf_backend_sdl, cf_sdl_install_log_sink,
- * cf_clipboard_sdl and cf_font_sdl) belong to the source tree. cmake --install
- * packages the headless backend only, because the SDL target's interface names
- * SDL3::SDL3, a FetchContent artifact that lives inside a build tree and nowhere
- * else.
+ * The names below - the four SDL-shaped ones (`cf_backend_sdl`,
+ * `cf_sdl_install_log_sink`, `cf_clipboard_sdl`, `cf_font_sdl`), the font close
+ * and the two browser-shaped route calls - belong to the source tree. cmake
+ * --install packages the headless backend only, because the SDL target's
+ * interface names SDL3::SDL3, a FetchContent artifact that lives inside a build
+ * tree and nowhere else.
  * A consumer taking the installed package either builds cform with
  * CFORM_WITH_SDL_BACKEND=ON and links cf_backend_sdl from the same tree, or
  * writes its own backend against the cf_backend struct above. The
@@ -240,5 +241,30 @@ cf_font cf_font_sdl(const char *file_path, float point_size);
  * belongs to the platform, and the teardown may be the thing that stops it.
  */
 void cf_font_sdl_close(cf_font *font);
+
+/*
+ * The route in the browser's address bar: the text after the `#`, which is what
+ * lets one page served once carry a whole site and still hand out a link that
+ * opens on the page a reader meant. Reading fills `out` with up to `size` bytes,
+ * terminates it, and answers false when there was no route or the buffer could
+ * not hold the one there was - a caller that reads false shows its first page.
+ * Writing takes the route without its `#` and leaves the address bar where the
+ * page the reader is on actually is.
+ *
+ * Both are answered by the SDL backend's link, because the browser is the
+ * platform that has an address bar and it is the platform that backend is built
+ * for. Everywhere else the write does nothing and the read always answers false,
+ * so a page can navigate through these without a conditional of its own and a
+ * host without a browser picks its page some other way.
+ *
+ * `cf_web_open_url` is the same seam pointed outward: a drawing has no anchor
+ * element, so the only way a page can hand a reader to something that is not this
+ * document is to ask the browser for a tab. Where there is no browser it does
+ * nothing, which is the honest answer rather than a failure - a link that cannot
+ * go anywhere is a link the host should not have shown.
+ */
+bool cf_web_read_hash(char *out, uint32_t size);
+void cf_web_write_hash(const char *route);
+void cf_web_open_url(const char *url);
 
 #endif
