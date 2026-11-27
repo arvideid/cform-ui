@@ -41,6 +41,7 @@ static void on_pointer(cf_event *event, void *user_data) {
     case CF_EVENT_KEY_DOWN:
     case CF_EVENT_KEY_UP:
     case CF_EVENT_TEXT:
+    case CF_EVENT_COMPOSITION:
     case CF_EVENT_QUIT:
         break;
     }
