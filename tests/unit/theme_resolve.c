@@ -35,6 +35,14 @@ static bool color_is(cf_opt_color color, uint8_t red) {
            color.value.blue == red;
 }
 
+/* The style the resolver left a slot, read the way a caller outside src/node has to: from
+ * the view this frame answered with, and no style at all where there is no view. */
+static cf_style frame_style(const cf_ctx *ctx, uint32_t slot) {
+    const cf_tree *view = cf_frame_tree(ctx);
+
+    return view != NULL && slot < view->node_count ? view->styles[slot] : (cf_style){0};
+}
+
 static void a_variant_states_only_its_differences(void) {
     const cf_variants variants = {
         .hovered = {.background = {.present = true, .value = CF_COLOR(40, 40, 40)}}};
@@ -305,6 +313,62 @@ static void resolve_without_a_theme_or_a_view_is_a_no_op(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * What a host that starts without a design system and names one later gets: the frame before
+ * the naming resolves nothing, the frame after wears the theme, and taking it back leaves the
+ * page with exactly what it declared. A resolved style lives in the frame that computed it, so
+ * there is no cache here that could keep an un-named theme answering.
+ */
+static void a_theme_named_between_frames_styles_the_frame_after(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    cf_node root = node_of(CF_NO_NAME);
+    root.style = cf_style_default();
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(60.0f);
+
+    /* A switch off is the state a resting box has no variant for: the theme's well is what
+     * arrives, and nothing else in this file's fixtures could answer for it being absent. */
+    cf_node button = styled_of(CF_NO_NAME, CF_ROLE_BUTTON);
+    button.style = cf_style_default();
+    button.style.width = CF_PX(100.0f);
+    button.style.height = CF_PX(40.0f);
+    button.disabled = true;
+
+    const cf_node children[] = {button};
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_frame_tree(&ctx) == NULL, "a frame that has diffed nothing hands out no view");
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the first frame claims the declaration");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(!frame_style(&ctx, 1u).background.present,
+             "a page with no theme named wears nothing it did not declare");
+
+    cf_use_theme(&ctx, cf_theme_default());
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the next frame keeps the slot");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(color_is(frame_style(&ctx, 1u).background, 229),
+             "the theme named between the frames styles the frame after it");
+
+    cf_use_theme(&ctx, NULL);
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "and the frame after that keeps it");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(!frame_style(&ctx, 1u).background.present,
+             "a theme taken back leaves the declaration standing again");
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_state_change_between_frames_changes_the_variant(void) {
     cf_ctx ctx;
 
@@ -406,6 +470,7 @@ int main(void) {
     CF_RUN(a_disabled_node_resolves_its_disabled_variant);
     CF_RUN(a_node_without_a_role_keeps_its_declared_style);
     CF_RUN(resolve_without_a_theme_or_a_view_is_a_no_op);
+    CF_RUN(a_theme_named_between_frames_styles_the_frame_after);
     CF_RUN(a_state_change_between_frames_changes_the_variant);
     CF_RUN(flipping_the_disabled_switch_marks_the_node_dirty);
 

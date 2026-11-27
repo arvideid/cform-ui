@@ -443,6 +443,50 @@ static void the_frame_answers_its_root_its_box_and_its_claim(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The two things a context borrows are named, replaced and given back through the context's own
+ * door, and a name handed to no context is thrown away rather than crashing: a host that walks
+ * possible contexts cannot be the one that has to know which of them is real.
+ */
+static void a_borrowed_pair_is_named_through_the_context(void) {
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    const cf_clipboard nowhere = {0};
+    const cf_clipboard board = {0};
+    /* Two design systems the page could be wearing, so "replaced" is something this case can
+     * see rather than a claim about which theme the library ships with. */
+    static const cf_theme plain = {0};
+    static const cf_theme other = {0};
+
+    CF_CHECK(cf_theme_of(&ctx) == NULL, "a context starts with no design system named");
+    CF_CHECK(cf_clipboard_of(&ctx) == NULL, "and nowhere to send a copy");
+
+    cf_use_theme(&ctx, &plain);
+    cf_use_clipboard(&ctx, &board);
+    CF_CHECK(cf_theme_of(&ctx) == &plain, "the theme named is the theme answered");
+    CF_CHECK(cf_clipboard_of(&ctx) == &board, "and so is the board");
+
+    cf_use_theme(&ctx, &other);
+    CF_CHECK(cf_theme_of(&ctx) == &other, "naming a second theme replaces the first");
+
+    cf_use_theme(NULL, &plain);
+    cf_use_clipboard(NULL, &nowhere);
+    CF_CHECK(cf_theme_of(&ctx) == &other, "a name handed to no context leaves this one's");
+    CF_CHECK(cf_clipboard_of(&ctx) == &board, "and this one's board where it was");
+
+    cf_use_theme(&ctx, NULL);
+    cf_use_clipboard(&ctx, NULL);
+    CF_CHECK(cf_theme_of(&ctx) == NULL, "a named theme can be given back");
+    CF_CHECK(cf_clipboard_of(&ctx) == NULL, "and so can a named board");
+
+    cf_ctx_free(&ctx);
+}
+
 int main(void) {
     printf("node state\n");
 
@@ -459,6 +503,7 @@ int main(void) {
     CF_RUN(a_nameless_request_is_refused);
     CF_RUN(the_context_answers_its_own_key_and_frame_bytes);
     CF_RUN(the_frame_answers_its_root_its_box_and_its_claim);
+    CF_RUN(a_borrowed_pair_is_named_through_the_context);
 
     return CF_REPORT();
 }

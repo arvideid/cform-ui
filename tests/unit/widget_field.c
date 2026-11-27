@@ -1084,6 +1084,44 @@ static void copy_puts_the_selection_where_the_host_keeps_bytes(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The board is the host's to name whenever it decides, and a field reads the answer per chord:
+ * what a page with no board gets is the copy and cut keys left unserved - not a failed edit and
+ * not a silent write somewhere else - and what it gets the frame after the board is named is the
+ * same keys reaching the host. Nothing is reopened to get the second half.
+ */
+static void a_cut_reaches_the_board_the_page_named_later(void) {
+    char bytes[16] = {0};
+    cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
+    fake_board board = {0};
+    const cf_clipboard clipboard = board_of(&board);
+    cf_ctx ctx;
+
+    if (!cf_ctx_init(&ctx, 64u * 1024u)) {
+        CF_CHECK(false, "the context starts");
+        return;
+    }
+
+    cf_use_theme(&ctx, cf_theme_default());
+    frame_of(&ctx, &text, false);
+    select_tail(&ctx, "abc", 2u);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.writes == 0u, "a page with no board named asks nothing of one");
+    CF_CHECK(text.length == 3u && text.caret == 1u && text.mark == 3u,
+             "and the cut with nowhere to go leaves the range selected");
+
+    cf_use_clipboard(&ctx, &clipboard);
+    chord(&ctx, 'x', (uint32_t)CF_MOD_CONTROL);
+
+    CF_CHECK(board.writes == 1u, "the same key after the board is named asks it once");
+    CF_CHECK(board.length == 2u && board.text[0] == 'b' && board.text[1] == 'c',
+             "and the run that was already selected crosses");
+    CF_CHECK(text.length == 1u && bytes[0] == 'a', "and the page keeps what was not cut");
+
+    cf_ctx_free(&ctx);
+}
+
 static void cut_offers_the_bytes_before_it_drops_them(void) {
     char bytes[16] = {0};
     cf_text_edit text = {.chars = bytes, .length = 0u, .capacity = 16u};
@@ -2807,6 +2845,7 @@ int main(void) {
     CF_RUN(a_press_below_the_rows_the_field_holds_stands_on_the_last_one);
     CF_RUN(a_press_lands_on_the_row_of_the_box_rather_than_the_row_of_the_page);
     CF_RUN(copy_puts_the_selection_where_the_host_keeps_bytes);
+    CF_RUN(a_cut_reaches_the_board_the_page_named_later);
     CF_RUN(cut_offers_the_bytes_before_it_drops_them);
     CF_RUN(a_refused_write_leaves_the_range_selected);
     CF_RUN(paste_inserts_what_the_host_holds_over_the_selection);
