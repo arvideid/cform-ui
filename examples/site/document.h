@@ -39,6 +39,57 @@
  * them, and a row of the table is what the table has already agreed to hold. */
 #define SITE_STEP_BYTES 96u
 
+/* The key the document's own scroller is declared under, and the one the state is walked by. */
+#define SITE_PAGE_KEY "page"
+
+/*
+ * Going where the address says.
+ *
+ * Every section heading on a page is keyed by its own slug, so an address ending in `#slug` names
+ * a box this document already holds. Reaching it is the same move a wheel notch and the Tab key
+ * make, asked of the box the key finds: the frame that measures the page is the one that brings
+ * the heading in, and the frame after shows it, so the ask is what calls for that second frame.
+ *
+ * Once per address, and only once: a reader who wheels away from a section has to be allowed to
+ * stay there, so the name last walked to is kept in the page's own state and an address still
+ * naming it asks for nothing. A fragment naming a box the page has never held is given up on the
+ * same terms - the first frame of a run declares its headings after it can find them, so a box
+ * that is missing while the document itself is missing is retried, and one missing from a page
+ * that is standing is a section this site does not have.
+ */
+static inline void site_walk_to(cf_ctx *ctx, const char *address) {
+    char slug[SITE_SLUG_BYTES];
+    cf_name *walked = cf_state(ctx, cf_ctx_key(ctx, "cf/site/section"), sizeof *walked);
+
+    if (walked == NULL) {
+        return;
+    }
+
+    if (!site_section_of(address, slug, sizeof slug)) {
+        *walked = CF_NO_NAME;
+
+        return;
+    }
+
+    const cf_name section = cf_ctx_key(ctx, slug);
+
+    if (section == *walked) {
+        return;
+    }
+
+    if (cf_reveal(ctx, cf_slot_named(ctx, section))) {
+        *walked = section;
+
+        return;
+    }
+
+    if (cf_slot_named(ctx, cf_ctx_key(ctx, SITE_PAGE_KEY)) == CF_NO_LINK) {
+        cf_request_frame(ctx);
+    } else {
+        *walked = section;
+    }
+}
+
 /*
  * The mark: a rounded square in the accent tone with two columns of the tone a
  * button's label carries inside it. Drawn, not loaded - the repository carries no
@@ -285,9 +336,13 @@ static inline cf_node site_pager(cf_ctx *ctx, const site_view *view, const site_
  * below the fold is reachable but invisible without it - and the theme's scroll family
  * states a resting box and no marks for the pointer's states, so restating the style
  * whole takes the page's tone and leaves nothing to paint over it.
+ *
+ * `address` is the whole of what the bar says, fragment included: an address naming one of the
+ * page's sections is walked to it here, so a link copied out of the bar lands on the heading it
+ * was cut from rather than at the top of the page.
  */
 static inline cf_node site_document(cf_ctx *ctx, const site_view *view, const site_entry *current,
-                                    cf_node page, cf_on_press go_to) {
+                                    cf_node page, cf_on_press go_to, const char *address) {
     cf_style prose = cf_style_default();
     prose.direction = CF_DIRECTION_COLUMN;
     prose.row_gap = CF_PT(DOC_GAP);
@@ -336,7 +391,7 @@ static inline cf_node site_document(cf_ctx *ctx, const site_view *view, const si
     /* Restated whole, the way a scroller's viewport is always restated: the widget asked
      * for the clip and the direction, and a style handed back over it keeps the wheel
      * handler it installed on the node. */
-    cf_node root = cf_scroller(ctx, "page", &document, 1u);
+    cf_node root = cf_scroller(ctx, SITE_PAGE_KEY, &document, 1u);
     root.style = view->surface;
     root.style.width = CF_PERCENT(100.0f);
     root.style.height = CF_PERCENT(100.0f);
@@ -347,6 +402,10 @@ static inline cf_node site_document(cf_ctx *ctx, const site_view *view, const si
      * by the auto margin above. */
     root.style.align_items = CF_ALIGN_STRETCH;
     root.style.clips_content = true;
+
+    /* After the blocks are handed over, because the ask is about where the reader wants to be
+     * rather than about what the page is: nothing declared here depends on it. */
+    site_walk_to(ctx, address);
 
     return root;
 }

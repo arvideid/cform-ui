@@ -28,6 +28,11 @@
  * spelled twice is two routes. */
 #define SITE_PREFIX "/docs/"
 
+/* How long the part of an address naming a section can be and still be copied out whole. The
+ * longest slug the pages spell is a dozen-odd characters, so a fragment longer than this names
+ * nothing the site holds. */
+#define SITE_SLUG_BYTES 64u
+
 /* One page: what the row says, where it lives, who declares it. */
 typedef struct site_entry {
     const char *group;
@@ -110,19 +115,52 @@ static inline uint32_t site_index_of(const site_entry *entry) {
     return SITE_NAV_COUNT;
 }
 
-/* The row a route names, or NULL for an address this site does not hold. */
+/*
+ * The row a route names, or NULL for an address this site does not hold. Which page the reader
+ * is on is decided up to the `#` that starts a section: a fragment says where in the page to
+ * land, not which page the address is for, and a reader who pastes a link with one still gets
+ * the page it was cut from.
+ */
 static inline const site_entry *site_entry_for_route(const char *route) {
     if (route == NULL) {
         return NULL;
     }
 
     for (uint32_t i = 0u; i < SITE_NAV_COUNT; ++i) {
-        if (strcmp(site_nav[i].route, route) == 0) {
+        const size_t length = strlen(site_nav[i].route);
+
+        if (strncmp(site_nav[i].route, route, length) == 0 &&
+            (route[length] == '\0' || route[length] == '#')) {
             return &site_nav[i];
         }
     }
 
     return NULL;
+}
+
+/*
+ * The section an address names, copied out in the words it spells it with - a slug is interned
+ * by whoever reaches for it, and the address itself belongs to the shell. Answers false for an
+ * address with no fragment, an empty one, and one too long to be a slug this site could hold.
+ */
+static inline bool site_section_of(const char *address, char *out, size_t cap) {
+    const char *mark = address != NULL ? strchr(address, '#') : NULL;
+
+    if (mark == NULL || mark[1] == '\0') {
+        return false;
+    }
+
+    ++mark;
+
+    const size_t length = strlen(mark);
+
+    if (length >= cap) {
+        return false;
+    }
+
+    memcpy(out, mark, length + 1u);
+
+    return true;
 }
 
 /*

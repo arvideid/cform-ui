@@ -59,12 +59,10 @@ static inline cf_node site_eyebrow(cf_ctx *ctx, const site_view *view, const cha
 /*
  * The page's title and a section's heading, each keyed by its own slug.
  *
- * The key is the honest half of an anchor: it is what makes the heading the same
- * node across every rebuild, which is what a later scroll-to-heading needs. The
- * offset is the part this build cannot state - a declaration is made before any
- * layout has run, and the tree hands a caller no way back from a name to a slot -
- * so the rule a reader can copy out of an address bar is the one named in
- * docs/backlog.md rather than one pretended to here.
+ * The key does two jobs at once. It is what keeps the heading the same node across every rebuild,
+ * and it is what a reader can name: an address ending in `#slug` is walked to that heading by
+ * site_walk_to, which finds the box by the key and brings it into the pane the document scrolls
+ * in. The rule copied out of the bar and the reach a program has are therefore the same one.
  */
 static inline cf_node site_title(cf_ctx *ctx, const site_view *view, const char *chars,
                                  const char *slug) {

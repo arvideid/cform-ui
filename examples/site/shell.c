@@ -60,6 +60,10 @@
  *
  * cf_state hands a fresh block zeroed, and an empty route is the table's first page, so
  * the block needs no seeding to be readable.
+ *
+ * One string carries both halves of where the reader is: a section named past a `#` rides along
+ * with the route, because which page the address is for is the table's question and where in it to
+ * stand is the document's. A press writes the route alone, so going to a page starts it at the top.
  */
 #define ROUTE_KEY "cf/site/route"
 
@@ -179,7 +183,7 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
     follow_address_bar(held);
 
     const site_entry *entry = site_entry_or_first(held);
-    cf_node root = site_document(ctx, view, entry, entry->page(ctx, view), go_to);
+    cf_node root = site_document(ctx, view, entry, entry->page(ctx, view), go_to, held);
     root.handlers.key = route_key;
     root.handlers.key_data = ctx;
 
