@@ -98,6 +98,40 @@ static const cf_text_content label_text = {
     .stack = {.fonts = mono_stack, .count = 1u},
     .text = {label_bytes, (uint32_t)(sizeof label_bytes - 1u)}};
 
+/*
+ * A stack that actually falls back: the primary draws latin and nothing else, the
+ * answer for the rest costs eight rather than ten. The measure walks already count
+ * those eight points, so the widths a frame lays are the fallback's - and a line
+ * drawn end to end in the primary paints letters at distances nothing measured.
+ */
+static bool latin_has_glyph(void *font, uint32_t codepoint) {
+    (void)font;
+    return codepoint < 0x80u;
+}
+
+static float wide_advance(void *font, uint32_t codepoint, uint32_t previous) {
+    (void)font;
+    (void)codepoint;
+    (void)previous;
+    return 8.0f;
+}
+
+static const cf_text_ops latin_ops = {
+    .metrics = mono_metrics, .advance = mono_advance, .has_glyph = latin_has_glyph};
+static const cf_text_ops wide_ops = {
+    .metrics = mono_metrics, .advance = wide_advance, .has_glyph = mono_has_glyph};
+static const cf_font latin_font = {.handle = NULL, .ops = &latin_ops};
+static const cf_font wide_font = {.handle = NULL, .ops = &wide_ops};
+static const cf_font mixed_stack[] = {latin_font, wide_font};
+
+/* "ab" the ideograph U+65E5 "c": two fonts across one line. The ideograph closes the
+ * literal it starts, or its last byte would swallow the following letter. */
+static const char mixed_bytes[] = "ab\xe6\x97\xa5"
+                                  "c";
+static const cf_text_content mixed_text = {
+    .stack = {.fonts = mixed_stack, .count = 2u},
+    .text = {mixed_bytes, (uint32_t)(sizeof mixed_bytes - 1u)}};
+
 static const cf_image_content image_content = {.texture = 7u, .width = 32.0f, .height = 16.0f};
 
 static cf_rect box_at(float x, float y, float width, float height) {
@@ -260,6 +294,61 @@ static void a_text_node_paints_one_command_per_line(void) {
     CF_CHECK(list.commands[1].text.length == 2u && list.commands[1].text.chars[0] == 'c',
              "each command carries its own line's bytes");
     CF_CHECK(list.commands[0].color.red == 10u, "the stated tone rides the command");
+}
+
+/*
+ * What the measure counted is what the page has room for, so the fonts a line needed
+ * are the fonts its commands carry: one command per stretch the same font draws, each
+ * standing where the runs before it ended. A page whose stack never falls back lays one
+ * command per line just as it did, which is what keeps the golden scenes still.
+ */
+static void a_line_the_fallback_splits_paints_one_command_per_font_it_needed(void) {
+    fixture f;
+    begin(&f);
+    f.styles[0] = cf_style_default();
+    f.styles[0].color = (cf_opt_color){.present = true, .value = (cf_color){10u, 10u, 10u, 255u}};
+    f.measures[0] = cf_text_measure;
+    f.measure_data[0] = (void *)&mixed_text;
+    f.node_count = 1u;
+    f.rects[0] = box_at(10.0f, 10.0f, 100.0f, 30.0f);
+
+    cf_command_list list = {0};
+    paint(&f, box_at(0.0f, 0.0f, 200.0f, 200.0f), &list);
+
+    CF_CHECK(list.count == 3u,
+             "latin, the ideograph, latin again: three stretches, three commands");
+
+    for (uint32_t i = 0u; i < list.count; ++i) {
+        CF_CHECK(list.commands[i].kind == CF_COMMAND_TEXT, "every stretch is a text command");
+        CF_NEAR(list.commands[i].rect.y, 10.0f);
+        CF_NEAR(list.commands[i].rect.height, 20.0f);
+    }
+
+    CF_NEAR(list.commands[0].rect.x, 10.0f);
+    CF_NEAR(list.commands[0].rect.width, 20.0f);
+    CF_CHECK(list.commands[0].text.length == 2u && list.commands[0].text.chars[0] == 'a',
+             "the first command holds the bytes the primary drew");
+    CF_CHECK(list.commands[0].font.ops == &latin_ops, "and the font that measured them");
+
+    CF_NEAR(list.commands[1].rect.x, 30.0f);
+    CF_NEAR(list.commands[1].rect.width, 8.0f);
+    CF_CHECK(list.commands[1].text.length == 3u &&
+                 (unsigned char)list.commands[1].text.chars[0] == 0xe6u,
+             "the ideograph travels as its own bytes");
+    CF_CHECK(list.commands[1].font.ops == &wide_ops,
+             "and the font that took the glyph it could not draw");
+
+    CF_NEAR(list.commands[2].rect.x, 38.0f);
+    CF_NEAR(list.commands[2].rect.width, 10.0f);
+    CF_CHECK(list.commands[2].font.ops == &latin_ops, "the last stretch returns to the primary");
+
+    float painted = 0.0f;
+
+    for (uint32_t i = 0u; i < list.count; ++i) {
+        painted += list.commands[i].rect.width;
+    }
+
+    CF_NEAR(painted, 38.0f); /* the runs together are the width the measure promised */
 }
 
 static void text_wraps_inside_the_content_box_the_style_insets(void) {
@@ -929,6 +1018,7 @@ int main(void) {
     CF_RUN(a_box_outside_the_viewport_paints_nothing);
     CF_RUN(children_paint_after_their_parent);
     CF_RUN(a_text_node_paints_one_command_per_line);
+    CF_RUN(a_line_the_fallback_splits_paints_one_command_per_font_it_needed);
     CF_RUN(text_wraps_inside_the_content_box_the_style_insets);
     CF_RUN(a_text_node_without_a_color_paints_nothing);
     CF_RUN(a_capped_text_node_flags_the_line_the_ellipsis_closes);

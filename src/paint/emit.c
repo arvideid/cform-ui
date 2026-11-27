@@ -212,6 +212,44 @@ static void emit_rule(paint_walk *walk, cf_color color, const cf_text_content *c
         color, view->clip);
 }
 
+/* Where the runs of one line land: the row the line holds, the tone its box states, and the
+ * view that carries the row's left edge, its rhythm and the clip that cuts it. */
+typedef struct line_sink {
+    paint_walk *walk;
+    const text_view *view;
+    cf_color color;
+    float y;
+} line_sink;
+
+/*
+ * One run of a laid line becomes one command: the bytes a single font drew, the font itself,
+ * and the rect that starts where the runs before it ended. A line one font draws whole is one
+ * run, so a page whose stack never falls back keeps laying one command per line.
+ */
+static void emit_run(void *user, const cf_text_run *run) {
+    const line_sink *sink = user;
+    paint_walk *walk = sink->walk;
+
+    if (walk->truncated) {
+        return;
+    }
+
+    cf_command *command = next_command(walk);
+
+    if (command == NULL) {
+        return;
+    }
+
+    *command =
+        (cf_command){.kind = CF_COMMAND_TEXT,
+                     .rect = {sink->view->x + run->x, sink->y, run->width, sink->view->line_height},
+                     .clip = sink->view->clip,
+                     .color = sink->color,
+                     .text = run->text,
+                     .font = run->font,
+                     .ellipsis = run->ellipsis};
+}
+
 /*
  * A box whose measure slot is the text walk paints its own lines. The wrap
  * width is the content box the style insets from the rect - percentages
@@ -329,19 +367,9 @@ static void emit_text(paint_walk *walk, uint32_t slot, const cf_style *style, cf
             break; /* the lines only descend */
         }
 
-        cf_command *command = next_command(walk);
+        line_sink sink = {.walk = walk, .view = &view, .color = style->color.value, .y = y};
 
-        if (command == NULL) {
-            return;
-        }
-
-        *command = (cf_command){.kind = CF_COMMAND_TEXT,
-                                .rect = {view.x, y, lines[i].width, line_height},
-                                .clip = clip,
-                                .color = style->color.value,
-                                .text = lines[i].text,
-                                .font = font,
-                                .ellipsis = lines[i].ellipsis};
+        cf_text_each_run(content, &lines[i], emit_run, &sink);
     }
 
     if (style->caret.present && content->caret.present) {

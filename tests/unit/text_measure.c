@@ -60,6 +60,20 @@ static const cf_text_ops wide_ops = {
 static const cf_font latin_font = {.handle = NULL, .ops = &latin_ops};
 static const cf_font wide_font = {.handle = NULL, .ops = &wide_ops};
 static const cf_font fallback_stack[] = {latin_font, wide_font};
+static const cf_font wide_stack[] = {wide_font};
+
+/* A face that draws the capital A and nothing else. Stacked over the kerned one it
+ * splits an AV pair across an edge, which is the only way to ask whether a font
+ * may charge kerning for a letter another font drew. */
+static bool only_a_has_glyph(void *font, uint32_t codepoint) {
+    (void)font;
+    return codepoint == 'A';
+}
+
+static const cf_text_ops only_a_ops = {
+    .metrics = mono_metrics, .advance = mono_advance, .has_glyph = only_a_has_glyph};
+static const cf_font only_a_font = {.handle = NULL, .ops = &only_a_ops};
+static const cf_font kerning_stack[] = {only_a_font, kerned_font};
 
 static cf_text_content content_of(cf_string text) {
     return (cf_text_content){.stack = {.fonts = mono_stack, .count = 1u}, .text = text};
@@ -415,6 +429,182 @@ static void well_formed_multibyte_stays_whole(void) {
     CF_NEAR(four_byte.width, 10.0f); /* F0 9F 98 80 is U+1F600 */
 }
 
+/* The runs a line is drawn in, counted even past what the sink can hold - the
+ * same over-count the walk that fills lines reports. */
+typedef struct run_sink {
+    cf_text_run runs[8u];
+    uint32_t count;
+} run_sink;
+
+static void collect_runs(void *user_data, const cf_text_run *run) {
+    run_sink *sink = user_data;
+
+    sink->count++;
+    if (sink->count <= 8u) {
+        sink->runs[sink->count - 1u] = *run;
+    }
+}
+
+/*
+ * A line the fallback split is drawn by more than one font. Its runs carry the
+ * bytes each font drew and the pen distance it stands at, so the widths add up
+ * to the line's own and a painter never has to re-derive the measure.
+ */
+static void the_runs_of_a_line_split_where_the_font_changes(void) {
+    /* "ab", the ideograph U+65E5, "c". The ideograph closes the literal it
+     * starts, or its last byte would swallow the following letter. */
+    const cf_text_content content = {
+        .stack = {.fonts = fallback_stack, .count = 2u},
+        .text = cf_string_of("ab\xe6\x97\xa5"
+                             "c"),
+    };
+    cf_text_line lines[4u];
+    const uint32_t count = cf_text_lines(&content, 100.0f, lines, 4u);
+    run_sink sink = {0};
+
+    CF_CHECK(count == 1u, "the whole line fits at that width");
+
+    cf_text_each_run(&content, &lines[0], collect_runs, &sink);
+
+    CF_CHECK(sink.count == 3u, "latin, the ideograph, latin again");
+    CF_CHECK(sink.runs[0].text.length == 2u, "the primary keeps the letters it draws");
+    CF_NEAR(sink.runs[0].x, 0.0f);
+    CF_NEAR(sink.runs[0].width, 20.0f);
+    CF_CHECK(sink.runs[0].font.ops == &latin_ops, "and names the font that measured them");
+    CF_CHECK(sink.runs[1].text.length == 3u, "the fallback takes the three bytes it drew");
+    CF_NEAR(sink.runs[1].x, 20.0f);
+    CF_NEAR(sink.runs[1].width, 8.0f);
+    CF_CHECK(sink.runs[1].font.ops == &wide_ops, "the face that has the glyph");
+    CF_NEAR(sink.runs[2].x, 28.0f);
+    CF_NEAR(sink.runs[2].width, 10.0f);
+    CF_CHECK(sink.runs[2].font.ops == &latin_ops, "the primary again once the ideograph is past");
+    CF_NEAR(sink.runs[0].width + sink.runs[1].width + sink.runs[2].width, lines[0].width);
+}
+
+/*
+ * Kerning belongs to the font that drew both letters of a pair, so a run edge
+ * costs the pair its kern. The walk that measured the line already applies that
+ * rule, and the runs have to agree with it or the drawn line would be wider
+ * than the box that was sized for it.
+ */
+static void a_run_edge_gives_way_to_the_kerning_a_pair_would_have_had(void) {
+    cf_text_line lines[4u];
+    const cf_text_content whole = {
+        .stack = {.fonts = kerned_stack, .count = 1u},
+        .text = cf_string_of("AV"),
+    };
+    run_sink kept = {0};
+
+    CF_CHECK(cf_text_lines(&whole, 100.0f, lines, 4u) == 1u, "the pair lies on one line");
+
+    cf_text_each_run(&whole, &lines[0], collect_runs, &kept);
+
+    CF_CHECK(kept.count == 1u, "one font drew both letters, so one run carries them");
+    CF_NEAR(kept.runs[0].width, 16.0f); /* A 10, V 6 after the A */
+
+    run_sink split = {0};
+    const cf_text_content straddled = {
+        .stack = {.fonts = kerning_stack, .count = 2u},
+        .text = cf_string_of("AV"),
+    };
+
+    CF_CHECK(cf_text_lines(&straddled, 100.0f, lines, 4u) == 1u, "and so does the pair apart");
+
+    cf_text_each_run(&straddled, &lines[0], collect_runs, &split);
+
+    CF_CHECK(split.count == 2u, "the face that drew the A has no V, so the pair splits");
+    CF_NEAR(split.runs[0].width, 10.0f);
+    CF_NEAR(split.runs[1].width, 10.0f); /* the V sits loose: its font never drew the A */
+    CF_NEAR(split.runs[0].width + split.runs[1].width, lines[0].width);
+}
+
+/*
+ * The sign that closes a capped line belongs to whichever font the stack sends
+ * it to. Where that font is the one already drawing the line's last letters,
+ * the cap rides in the same run, so a page that never falls back is still one
+ * command per line. Where it is another face, the sign stands in a run of no
+ * bytes, because the glyph is not in the text and the room it measures is.
+ */
+static void the_sign_that_closes_a_line_belongs_to_the_font_that_draws_it(void) {
+    cf_text_line lines[4u];
+    const cf_text_content same_font = {
+        .stack = {.fonts = wide_stack, .count = 1u},
+        .text = cf_string_of("abcd"),
+        .max_lines = (cf_opt_u32){.present = true, .value = 1u},
+        .ellipsis = true,
+    };
+    run_sink joined = {0};
+
+    CF_CHECK(cf_text_lines(&same_font, 30.0f, lines, 4u) == 1u, "the cap holds one line");
+
+    cf_text_each_run(&same_font, &lines[0], collect_runs, &joined);
+
+    CF_CHECK(joined.count == 1u, "the face that drew the letters draws the sign too");
+    CF_CHECK(joined.runs[0].text.length == 2u, "the bytes the walk kept");
+    CF_NEAR(joined.runs[0].width, 24.0f); /* ab at 8 each, the cap inside the same run */
+    CF_CHECK(joined.runs[0].ellipsis, "and the run says it closes the line");
+    CF_NEAR(joined.runs[0].width, lines[0].width);
+
+    run_sink apart = {0};
+    const cf_text_content third_font = {
+        .stack = {.fonts = fallback_stack, .count = 2u},
+        .text = cf_string_of("abcd"),
+        .max_lines = (cf_opt_u32){.present = true, .value = 1u},
+        .ellipsis = true,
+    };
+
+    CF_CHECK(cf_text_lines(&third_font, 30.0f, lines, 4u) == 1u, "the same cap on the same bytes");
+
+    cf_text_each_run(&third_font, &lines[0], collect_runs, &apart);
+
+    CF_CHECK(apart.count == 2u, "a sign the primary cannot draw opens a run of its own");
+    CF_CHECK(apart.runs[0].font.ops == &latin_ops, "the letters keep their font");
+    CF_NEAR(apart.runs[0].width, 20.0f);
+    CF_CHECK(apart.runs[0].ellipsis == false, "the letters' run closes nothing by itself");
+    CF_NEAR(apart.runs[1].x, 20.0f);
+    CF_NEAR(apart.runs[1].width, 8.0f);
+    CF_CHECK(apart.runs[1].text.length == 0u, "the sign's run carries no bytes");
+    CF_CHECK(apart.runs[1].font.ops == &wide_ops, "the face the stack sends the sign to");
+    CF_CHECK(apart.runs[1].ellipsis, "and it is the run that closes the line");
+    CF_NEAR(apart.runs[0].width + apart.runs[1].width, lines[0].width);
+}
+
+/*
+ * A run is read out of the content that laid the line, so anything that could
+ * not have come from that walk visits nothing - a painter handed a stale line
+ * draws no garbage, exactly as a layout handed one gets no rect.
+ */
+static void a_line_this_content_never_laid_opens_no_run(void) {
+    const cf_text_content content = {
+        .stack = {.fonts = mono_stack, .count = 1u},
+        .text = cf_string_of("aa"),
+    };
+    const cf_text_content fontless = {.text = content.text};
+    const cf_text_line whole = {.text = content.text, .width = 20.0f, .ellipsis = false};
+    const cf_text_line foreign = {
+        .text = {content.text.chars + 9u, 1u}, .width = 10.0f, .ellipsis = false};
+    const cf_text_line blank = {.text = {content.text.chars, 0u}, .width = 0.0f, .ellipsis = false};
+    run_sink sink = {0};
+
+    cf_text_each_run(NULL, &whole, collect_runs, &sink);
+    CF_CHECK(sink.count == 0u, "no content visits nothing");
+
+    cf_text_each_run(&fontless, &whole, collect_runs, &sink);
+    CF_CHECK(sink.count == 0u, "a stack that answers for no glyph draws no run");
+
+    cf_text_each_run(&content, &foreign, collect_runs, &sink);
+    CF_CHECK(sink.count == 0u, "bytes outside the content are refused");
+
+    cf_text_each_run(&content, NULL, collect_runs, &sink);
+    CF_CHECK(sink.count == 0u, "no line visits nothing");
+
+    cf_text_each_run(&content, &blank, collect_runs, &sink);
+    CF_CHECK(sink.count == 0u, "a line with no bytes has no run to draw");
+
+    cf_text_each_run(&content, &whole, NULL, &sink);
+    CF_CHECK(sink.count == 0u, "a walk with no visitor is asked nothing");
+}
+
 int main(void) {
     printf("text measure\n");
 
@@ -443,6 +633,10 @@ int main(void) {
     CF_RUN(a_box_slides_along_its_value_only_to_hold_the_caret);
     CF_RUN(malformed_sequences_walk_byte_by_byte);
     CF_RUN(well_formed_multibyte_stays_whole);
+    CF_RUN(the_runs_of_a_line_split_where_the_font_changes);
+    CF_RUN(a_run_edge_gives_way_to_the_kerning_a_pair_would_have_had);
+    CF_RUN(the_sign_that_closes_a_line_belongs_to_the_font_that_draws_it);
+    CF_RUN(a_line_this_content_never_laid_opens_no_run);
 
     return CF_REPORT();
 }

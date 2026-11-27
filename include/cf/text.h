@@ -120,6 +120,36 @@ uint32_t cf_text_lines(const cf_text_content *content, float max_width, cf_text_
                        uint32_t capacity);
 
 /*
+ * A stretch of a laid line that one font draws: its bytes, the pen distance from the line's
+ * left edge where they stand, the width they measure, and the font that measured them. The
+ * bytes point inside the line, so they live as long as the line's do.
+ */
+typedef struct cf_text_run {
+    cf_font font;
+    cf_string text;
+    float x;
+    float width;
+    /* True of the stretch that closes a capped walk. The sign is not in the text, so a run
+     * that carries nothing else arrives with no bytes and a width all the same. */
+    bool ellipsis;
+} cf_text_run;
+
+/*
+ * The runs a laid line is drawn from, handed to `visit` in the order the pen travels them.
+ * Where the stack's first font cannot draw a codepoint the next one takes it, and the run ends
+ * there - so the widths add up to the line's own width, and a renderer draws every glyph with
+ * the font whose advance placed it rather than with the primary's. Kerning holds inside a run
+ * and gives way across its edge, which is the rule the walk measured with: the distance a
+ * letter stands from its line's edge is the same answer here and in cf_text_caret_x, because
+ * both read the same fonts in the same order.
+ *
+ * Nothing is allocated, so a walk that is out of room can stop mid-line. A line this content
+ * never laid, a stack with no usable font and a run of no bytes all visit nothing.
+ */
+void cf_text_each_run(const cf_text_content *content, const cf_text_line *line,
+                      void (*visit)(void *user_data, const cf_text_run *run), void *user_data);
+
+/*
  * The pen distance from a laid line's left edge to a byte offset of the
  * content's own text, clamped into the line: an offset the line does not hold
  * stands at one of its ends, because a caret that floats past the ink is a caret

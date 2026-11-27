@@ -200,6 +200,9 @@ if(CFORM_WITH_SDL_BACKEND)
     # desktop automation - and reads what upload, release and teardown do, and what
     # a teardown may not touch.
     cf_add_layer_test(sdl_lifecycle unit/sdl_lifecycle.c cf_backend_sdl cf_backend_headless)
+    # The drawn-word case rasterizes through a real face, so it reads the file the
+    # font case reads and skips itself where the download never landed.
+    target_compile_definitions(sdl_lifecycle PRIVATE CFORM_FONT_PATH="${CFORM_FONT_FILE}")
     set_tests_properties(sdl_lifecycle PROPERTIES ENVIRONMENT "SDL_VIDEO_DRIVER=dummy")
 
     if(WIN32)

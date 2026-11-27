@@ -16,8 +16,11 @@
 typedef enum cf_command_kind {
     CF_COMMAND_FILL,   /* rect filled with color, corners rounded by radius */
     CF_COMMAND_BORDER, /* rect stroked by widths, inside rect, rounded by radius */
-    /* One laid line of text, drawn from rect's left edge in the font's own
-     * rhythm; the ellipsis glyph follows the bytes when the flag says so. */
+    /* One run of a laid line: the stretch one font draws, set from rect's left edge
+     * in that font's own rhythm. A line the stack fell back across arrives as one
+     * command per face it needed, so the advances the measure paid for are the
+     * advances the device sets. The ellipsis glyph follows the bytes when the flag
+     * says so, and a run that carries the sign alone carries no bytes. */
     CF_COMMAND_TEXT,
     /* A texture drawn into rect: the upload the image's content names. */
     CF_COMMAND_IMAGE
@@ -40,7 +43,7 @@ typedef struct cf_command {
      * a side with no width paints nothing. Zero for a fill. */
     cf_edges widths;
     float radius;
-    /* The line's own bytes and the font that draws them, on a text command.
+    /* The run's own bytes and the font that draws them, on a text command.
      * The bytes are borrowed for the submit alone; the font's handle and ops
      * point at objects that outlive the frame they paint. */
     cf_string text;
@@ -88,8 +91,8 @@ cf_size cf_image_measure(void *content, cf_available available, cf_intrinsic kin
  * Walks the subtree rooted at `root` in paint order and appends what each box
  * paints: a stated background fills the box layout placed at `rects[slot]`, a
  * stated border color with a width strokes it, a box whose measure slot is
- * cf_text_measure lays its content's lines over its own paint, one command
- * per line, and a box whose measure slot is cf_image_measure paints its
+ * cf_text_measure lays its content's lines over its own paint, one command per
+ * run of a line, and a box whose measure slot is cf_image_measure paints its
  * content's texture into its rect. A box that does not
  * reach `viewport` paints nothing; one that straddles a clip keeps its whole
  * rect and names that clip in `cf_command.clip`, because cutting a rounded

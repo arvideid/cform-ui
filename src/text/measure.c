@@ -384,6 +384,92 @@ static float run_to(const cf_text_content *content, cf_string line, uint32_t at)
     return x;
 }
 
+/* The run a line is being cut into: the font it stands in, where its bytes began, how far the
+ * runs before it moved the pen, and how wide it has come out. */
+typedef struct open_run {
+    const cf_font *font;
+    uint32_t start;
+    float x;
+    float width;
+} open_run;
+
+static void flush_run(void (*visit)(void *, const cf_text_run *), void *user, cf_string bytes,
+                      const open_run *run, uint32_t end, bool ellipsis) {
+    visit(user, &(cf_text_run){.font = *run->font,
+                               .text = {bytes.chars + run->start, end - run->start},
+                               .x = run->x,
+                               .width = run->width,
+                               .ellipsis = ellipsis});
+}
+
+void cf_text_each_run(const cf_text_content *content, const cf_text_line *line,
+                      void (*visit)(void *user_data, const cf_text_run *run), void *user_data) {
+    uint32_t first = 0u;
+    uint32_t last = 0u;
+
+    if (visit == NULL || !line_bounds(content, line, &first, &last)) {
+        return;
+    }
+
+    const cf_text_stack *stack = &content->stack;
+    const cf_string bytes = {line->text.chars, last - first};
+    open_run run = {0};
+    text_pen pen = {0};
+    uint32_t offset = 0u;
+
+    while (offset < bytes.length) {
+        uint32_t next = 0u;
+        const uint32_t codepoint = utf8_decode_at(bytes, offset, &next);
+        const cf_font *took = font_of(stack, codepoint);
+
+        if (run.font == NULL) {
+            run = (open_run){.font = took, .start = offset, .x = 0.0f, .width = 0.0f};
+        } else if (took != run.font) {
+            /* The stack changed hands, so the stretch the old font drew closes where the
+             * new one's first letter stands. */
+            flush_run(visit, user_data, bytes, &run, offset, false);
+            run = (open_run){.font = took, .start = offset, .x = run.x + run.width, .width = 0.0f};
+        }
+
+        /* The same pen the walk that laid the line carried: a run opens without the kerning
+         * of a letter its font never drew, which is what makes the widths add up. */
+        const uint32_t previous = took == pen.font ? pen.previous : 0u;
+        run.width += took->ops->advance(took->handle, codepoint, previous);
+        pen = (text_pen){.font = took, .previous = codepoint};
+        offset = next;
+    }
+
+    if (run.font == NULL) {
+        return; /* the line held no codepoint for a font to draw */
+    }
+
+    if (!line->ellipsis) {
+        flush_run(visit, user_data, bytes, &run, offset, false);
+        return;
+    }
+
+    const cf_font *closing = font_of(stack, CF_ELLIPSIS);
+    const float closing_width = closing->ops->advance(closing->handle, CF_ELLIPSIS, 0u);
+
+    if (closing == run.font) {
+        /* One font drew the letters and draws the sign that closes them, so the cap belongs
+         * to the stretch it follows: one command carries both, exactly as a stack that never
+         * falls back does. */
+        run.width += closing_width;
+        flush_run(visit, user_data, bytes, &run, offset, true);
+        return;
+    }
+
+    /* The closing sign's own font is a third party to the line: it stands in a run of no
+     * bytes, because the glyph is not in the text and the room it measures is. */
+    flush_run(visit, user_data, bytes, &run, offset, false);
+    visit(user_data, &(cf_text_run){.font = *closing,
+                                    .text = {bytes.chars + offset, 0u},
+                                    .x = run.x + run.width,
+                                    .width = closing_width,
+                                    .ellipsis = true});
+}
+
 float cf_text_caret_x(const cf_text_content *content, const cf_text_line *line, uint32_t offset) {
     uint32_t first = 0u;
     uint32_t last = 0u;

@@ -158,18 +158,23 @@ that is the entire compositing rule.
 |---|---|
 | `CF_COMMAND_FILL` | `rect`, `clip`, `color`, `radius` |
 | `CF_COMMAND_BORDER` | `rect`, `clip`, `color`, `radius`, `widths` (one per side, drawn inside `rect`) |
-| `CF_COMMAND_TEXT` | `rect` (one line), `clip`, `text`, `font`, `color`, `ellipsis` |
+| `CF_COMMAND_TEXT` | `rect` (one run of a line), `clip`, `text`, `font`, `color`, `ellipsis` |
 | `CF_COMMAND_IMAGE` | `rect`, `clip`, `texture` |
 
 A radius larger than half the shorter side means a half-circle; the sender
 intends that, so don't clamp it away. A side with no `widths` entry draws
 nothing.
 
-Text lines arrive **already broken and measured** — one command per line,
-`rect.width` the width the layout charged for it, `rect.height` the line spacing.
-Don't re-wrap them, or you'll draw lines the layout never made room for. When
-`ellipsis` is set, the bytes stop short and you append `…` (U+2026,
-`CF_ELLIPSIS`); the width already includes it.
+Text arrives **already broken and measured** — one command per *run* of a line, a
+run being the stretch one font draws. A line whose stack fell back part-way is
+therefore several commands: set each at its own `rect.x` and the word comes out as
+wide as the layout charged for it, because the advances in the stream are the
+advances the measure paid. `rect.width` is that run's width, `rect.height` the line
+spacing. Don't re-wrap or re-measure them, or you'll draw lines the layout never
+made room for. When `ellipsis` is set, the bytes stop short and you append `…`
+(U+2026, `CF_ELLIPSIS`); the width already includes it. A run whose closing sign
+came from a face the line's own letters never used carries no bytes at all — draw
+the glyph at `rect.x` and nothing before it.
 
 **`clip` is the part that trips people up.** A shape that sticks out of a
 scrolling box keeps its full size, because `cf_paint` only drops shapes that miss

@@ -131,8 +131,9 @@ accepted and ignored — there is no field that pretends to take these things.
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
 - **Text is Latin-shaped only.** Wrapping honours spaces, hyphens, ideographs and
-  the text's own breaks, and a font stack falls back glyph by glyph. There is no
-  right-to-left, no bidirectional text, no shaping for Arabic or Indic, no
+  the text's own breaks, and a font stack falls back glyph by glyph — the line is
+  drawn in the same faces it was measured in, one command per run of it. There is
+  no right-to-left, no bidirectional text, no shaping for Arabic or Indic, no
   justification, no ligatures and no variable fonts.
 - **Accessibility is a tree, not a screen reader.** `cf_semantic_visit` hands a
   caller one typed row for every box that declared what it is: the role

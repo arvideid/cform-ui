@@ -35,6 +35,27 @@ static int fake_font_handle;
 static const cf_font fake_font = {.handle = &fake_font_handle, .ops = &fake_ops};
 static const cf_text_stack fake_fonts = {.fonts = &fake_font, .count = 1u};
 
+/* A stack that has to fall back: the first face draws ascii at six points and
+ * sends everything else to the second, which charges four. Both widths are
+ * unlike the primary's, so a command drawn in the wrong font shows up as a
+ * distance the box was never sized for. */
+static bool ascii_has_glyph(void *font, uint32_t codepoint) {
+    (void)font, (void)codepoint;
+    return codepoint < 0x80u;
+}
+
+static float broad_advance(void *font, uint32_t codepoint, uint32_t previous) {
+    (void)font, (void)codepoint, (void)previous;
+    return 4.0f;
+}
+
+static const cf_text_ops narrow_ops = {fake_metrics, fake_advance, ascii_has_glyph};
+static const cf_text_ops broad_ops = {fake_metrics, broad_advance, fake_has_glyph};
+static const cf_font narrow_font = {.handle = &fake_font_handle, .ops = &narrow_ops};
+static const cf_font broad_font = {.handle = &fake_font_handle, .ops = &broad_ops};
+static const cf_font split_fonts[] = {narrow_font, broad_font};
+static const cf_text_stack split_fonts_stack = {.fonts = split_fonts, .count = 2u};
+
 static cf_node counting_box(cf_ctx *ctx) {
     frames_built++;
     (void)ctx;
@@ -135,6 +156,24 @@ static cf_node composing_page(cf_ctx *ctx) {
     const cf_node children[] = {field, next};
     root.children = children;
     root.child_count = 2u;
+
+    return root;
+}
+
+/* "a", the ideograph U+65E5, "b" - a word no single face of the stack could draw
+ * on its own. The ideograph closes the literal it starts, or its last byte would
+ * swallow the letter after it. The bytes outlive the frame because the label
+ * borrows them and the recorder copies them. */
+static const char mixed_value[] = "a\xe6\x97\xa5"
+                                  "b";
+
+static cf_node mixed_page(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    cf_node label = cf_label(ctx, cf_string_of(mixed_value), &split_fonts_stack, CF_COLOR(1, 2, 3));
+
+    const cf_node children[] = {label};
+    root.children = children;
+    root.child_count = 1u;
 
     return root;
 }
@@ -493,6 +532,51 @@ static void the_inspector_toggles_on_f12(void) {
 }
 
 /*
+ * The measure charged the ideograph the fallback's advance, so the stream has to
+ * name that fallback for it. A device handed every command in the first font of
+ * the stack would set the glyph in a width its box was never sized for - and this
+ * is the whole route that had to agree, widget through shell to device, rather
+ * than the paint call on its own.
+ */
+static void the_stream_names_the_font_that_measured_each_run(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 3u);
+
+    cf_app_run(&(cf_app_config){
+        .build = mixed_page, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
+
+    const cf_command *runs[4u] = {NULL, NULL, NULL, NULL};
+    uint32_t texts = 0u;
+
+    for (uint32_t at = 0u; at < recorder.count; ++at) {
+        if (recorder.commands[at].kind == CF_COMMAND_TEXT && texts < 4u) {
+            runs[texts++] = &recorder.commands[at];
+        }
+    }
+
+    CF_CHECK(texts == 3u, "a word three faces had to draw arrives as three commands");
+
+    if (texts != 3u) {
+        return;
+    }
+
+    CF_CHECK(runs[0]->font.ops == &narrow_ops, "the primary draws the letters it has");
+    CF_CHECK(runs[1]->font.ops == &broad_ops, "the fallback draws the glyph it lacks");
+    CF_CHECK(runs[2]->font.ops == &narrow_ops, "and the primary closes the word");
+    CF_CHECK(runs[1]->text.length == 3u, "the fallback's command carries the whole glyph");
+    /* The advances the measure paid for, added back along the pen. */
+    CF_NEAR(runs[0]->rect.width + runs[1]->rect.width + runs[2]->rect.width, 16.0f);
+    CF_NEAR(runs[1]->rect.x - runs[0]->rect.x, 6.0f);
+    CF_NEAR(runs[2]->rect.x - runs[1]->rect.x, 4.0f);
+}
+
+/*
  * The panel's last line is the bridge walk read back rather than a second, weaker rule: the box
  * the keyboard stands on, named by the build, printed as the words a person would hear. A developer
  * catches a control nobody named by seeing the difference between the dash and the name, so both
@@ -812,6 +896,7 @@ int main(void) {
     CF_RUN(the_shell_skips_undamaged_frames);
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
+    CF_RUN(the_stream_names_the_font_that_measured_each_run);
     CF_RUN(the_inspector_prints_the_words_a_bridge_would_say);
     CF_RUN(the_shell_leaves_the_backend_to_its_host);
     CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);

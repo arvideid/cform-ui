@@ -26,11 +26,28 @@
  *
  * Where even that cannot open a window the case says so and leaves, the way the
  * font case does.
+ *
+ * A drawn word is the third thing a device has to take without losing its next frame: a run with
+ * bytes, a run that carries only the sign a fallback font closes a capped line with, and a run with
+ * neither. Which of those stand under each other on screen is a person's call in the gallery window
+ * - what a headless run can say is that none of them costs the device its renderer.
  */
 
 /* A shape cf_cursor does not name: what a host built against a wider list would
  * hand to a port that indexes a table by the number it was given. */
 #define UNNAMED_SHAPE 9u
+
+/* What the device said while the case was watching it. The library keeps no
+ * counter of its own, and a word about a command the backend refused to even
+ * try is the one thing a headless run can see of a draw call. */
+static uint32_t backend_words;
+
+static void count_backend_words(cf_log_channel channel, const char *message, void *user_data) {
+    (void)message, (void)user_data;
+    if (channel == CF_LOG_BACKEND) {
+        backend_words++;
+    }
+}
 
 /* Two RGBA8888 pixels, the layout create_texture promises. */
 static const uint8_t pixels[4u * 2u * 2u] = {255u, 0u,   0u, 255u, 0u, 0u,
@@ -176,6 +193,67 @@ static void the_keyboard_takes_both_asks(const cf_backend *backend) {
     backend->set_text_input(backend->user_data, true);
 }
 
+/*
+ * A word drawn through a real device. The three shapes the paint layer can emit - bytes, bytes and
+ * the sign that caps them, the sign alone - are all of them rasterized through the same call, and a
+ * run the stack handed to a second face arrives with no bytes at all. A refusal has to stay a
+ * refusal: a command with no font draws nothing and loses neither the frame nor the upload after
+ * it.
+ */
+static void a_run_of_text_never_loses_the_next_frame(const cf_backend *backend) {
+    FILE *probe = fopen(CFORM_FONT_PATH, "rb");
+
+    if (probe == NULL) {
+        printf("      skipped: no font at " CFORM_FONT_PATH "\n");
+        return;
+    }
+    fclose(probe);
+
+    cf_font font = cf_font_sdl(CFORM_FONT_PATH, 16.0f);
+
+    if (font.ops == NULL) {
+        printf("      skipped: no font this backend can open\n");
+        return;
+    }
+
+    static const char word[] = "run";
+    cf_command commands[4u] = {0};
+
+    for (uint32_t at = 0u; at < 4u; ++at) {
+        commands[at].kind = CF_COMMAND_TEXT;
+        commands[at].rect = (cf_rect){0.0f, 0.0f, 40.0f, 16.0f};
+        commands[at].font = font;
+        commands[at].text = (cf_string){word, 3u};
+    }
+
+    commands[1u].ellipsis = true; /* the bytes and the sign in one command */
+    commands[2u] = (cf_command){.kind = CF_COMMAND_TEXT,
+                                .rect = commands[0u].rect,
+                                .font = font,
+                                .text = {word, 0u},
+                                .ellipsis = true}; /* the sign the fallback drew, alone */
+    commands[3u].font = (cf_font){0};              /* no font: drawn as nothing, not as a crash */
+
+    /* The three words a face can be asked for are taken, and the fourth is refused
+     * before it reaches the rasterizer - which is what leaves no complaint behind.
+     * A port that handed the fontless command to SDL instead would answer here. */
+    backend_words = 0u;
+    cf_log_install(count_backend_words, NULL);
+    backend->submit(backend->user_data, commands, 4u);
+    backend->present(backend->user_data);
+    cf_log_install(NULL, NULL);
+
+    CF_CHECK(backend_words == 0u, "the device drew the runs it could and complained about none");
+
+    cf_font_sdl_close(&font);
+    CF_CHECK(font.ops == NULL, "the words give the font back on the way out");
+
+    const uint32_t live = upload(backend);
+    CF_CHECK(live != 0u, "the frame after the words still uploads");
+    draw_texture(backend, live);
+    backend->release_texture(backend->user_data, live);
+}
+
 /* Every ask that names nothing the backend holds: a host should not have to know
  * which of these it is, and none of them may reach a texture to destroy. */
 static void a_release_naming_nothing_changes_nothing(cf_backend *backend) {
@@ -258,6 +336,7 @@ int main(void) {
     a_release_naming_nothing_changes_nothing(&backend);
     asking_for_a_shape_survives_a_desk_that_has_none(&backend);
     the_keyboard_takes_both_asks(&backend);
+    a_run_of_text_never_loses_the_next_frame(&backend);
 
     /* Last, because nothing may be submitted through a destroyed backend: what a
      * teardown that skips this leaves behind is bytes the host has no way to reach
