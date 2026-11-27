@@ -129,7 +129,7 @@ accepted and ignored — there is no field that pretends to take these things.
 
 - **Not production-ready.** Version 1.0 is in development, and the API numbers
   still move: the backend contract is at ABI 12 and has been broken on purpose.
-- **Six widgets**: label, button, field, list, scroller, image. No checkbox,
+- **Seven widgets**: label, button, field, list, scroller, image, checkbox. No
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
 - **Text is Latin-shaped only.** Wrapping honours spaces, hyphens, ideographs and
@@ -159,8 +159,9 @@ accepted and ignored — there is no field that pretends to take these things.
   a box that is not declared this frame answers no box rather than the one that
   left.
 - **Keyboard focus is declared, not assumed.** A box takes the keyboard when it
-  says so — `cf_node.focusable`, which `cf_button` and `cf_field` state for their
-  callers. A press focuses the box it landed on, **Tab** and shift+**Tab** walk the
+  says so — `cf_node.focusable`, which `cf_button`, `cf_field` and `cf_checkbox`
+  state for their callers. A press focuses the box it landed on, **Tab** and
+  shift+**Tab** walk the
   declared boxes in document order, and **Enter** or the space bar asks the focused box
   to do its job — with no chord held, since **Ctrl**+**Enter** is a binding the page made
   rather than the plain ask. A dialog keeps the keyboard by answering **Tab** itself, and a
@@ -170,6 +171,15 @@ accepted and ignored — there is no field that pretends to take these things.
   way to type: the frame's
   `cf_frame_takes_text` answer reaches `set_text_input`, so a screen keyboard or an
   input method is offered while a box can take the words and not while it cannot.
+- **A switch's bit belongs to the page.** `cf_checkbox` is handed the `bool` your
+  build already keeps and flips that, storing no copy a rebuild would have to be
+  told about: the frame after a click declares the box from the bit you read. What
+  on and off look like is the theme's `checked` variant, laid under the pointer's
+  own marks so a hovered switch still reads as hovered, and a box declared with no
+  handler still moves. **Enter** and the space bar ask it the same question a
+  release does, and a box the build switched off answers neither hand and stays out
+  of the ring. A radio, slider or progress bar is the same shape around a value
+  rather than a bit; none of them is here yet.
 - **A box a key names can be reached.** `cf_slot_named` answers a key a build
   declared with the slot the retained tree carries that box at, and `cf_reveal`
   brings it inside every pane which scrolls it — the move **Tab** makes when the
@@ -281,7 +291,7 @@ and a C17 compiler ([GCC](https://gcc.gnu.org/) or
 ```sh
 cmake --preset dev -DCFORM_WITH_SDL_BACKEND=ON   # set up a Debug build
 cmake --build --preset dev                        # compile everything
-ctest --preset dev                                # run the 38 tiers and the 4 benches
+ctest --preset dev                                # run the 39 tiers and the 4 benches
 build/dev/bin/gallery                             # open the demo window
 ```
 
@@ -461,7 +471,7 @@ SDL itself.
 
 | Option | Default | Does |
 | --- | --- | --- |
-| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 36 checks, 38 once the SDL backend is on |
+| `CFORM_BUILD_TESTS` | `OFF` (`dev` turns it on) | the test tiers `ctest` runs — 37 checks, 39 once the SDL backend is on |
 | `CFORM_BUILD_EXAMPLES` | `OFF` (`dev` turns it on) | `layout_only` and `host_loop`, and beside the SDL backend `gallery` and `site` |
 | `CFORM_WITH_SDL_BACKEND` | `OFF` | the SDL window backend, and the SDL download |
 | `CFORM_WITH_SANITIZERS` | `OFF` | memory and undefined-behaviour checkers |
