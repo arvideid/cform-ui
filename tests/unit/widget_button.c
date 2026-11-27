@@ -95,6 +95,14 @@ static uint32_t child_of(const cf_ctx *ctx, uint32_t slot, uint32_t index) {
     return tree->child_slots[tree->child_start[slot] + index];
 }
 
+/* The style the resolver left a slot, read from the view this frame answered with: no view,
+ * no style. */
+static cf_style frame_style(const cf_ctx *ctx, uint32_t slot) {
+    const cf_tree *view = cf_frame_tree(ctx);
+
+    return view != NULL && slot < view->node_count ? view->styles[slot] : (cf_style){0};
+}
+
 static void a_click_fires_on_the_release_that_ends_inside(void) {
     cf_ctx ctx;
 
@@ -266,10 +274,10 @@ static void the_button_declares_the_theme_s_resting_box(void) {
 
     const uint32_t button_slot = child_of(&ctx, cf_frame_root(&ctx), 0u);
     const uint32_t label_slot = child_of(&ctx, button_slot, 0u);
-    const cf_style resting = ctx.layout.styles[button_slot];
+    const cf_style resting = frame_style(&ctx, button_slot);
 
     CF_CHECK(tone_is(resting.background, 23, 23, 23), "the button rests on the theme's accent");
-    CF_CHECK(tone_is(ctx.layout.styles[label_slot].color, 250, 250, 250),
+    CF_CHECK(tone_is(frame_style(&ctx, label_slot).color, 250, 250, 250),
              "the label carries the tone the build stated");
 
     cf_ctx_free(&ctx);

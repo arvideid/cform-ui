@@ -69,7 +69,7 @@ static void the_image_declares_its_texture_and_rests_on_the_theme(void) {
     CF_NEAR(box_of(&ctx, slot).height, 24.0f);
     CF_NEAR(box_of(&ctx, slot).width, 100.0f);
 
-    const cf_style resting = ctx.layout.styles[slot];
+    const cf_style resting = tree->styles[slot];
 
     CF_CHECK(resting.background.present, "the theme's image box rests on its own tone");
 

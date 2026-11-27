@@ -276,17 +276,20 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
     cf_command_list small_list = {0};
     cf_frame_run(&ctx, leaves_build, NULL, (cf_size){200.0f, 200.0f}, 0.0f, &small_list);
 
+    const cf_tree *view = cf_frame_tree(&ctx);
+
     CF_CHECK(peak > 2u, "the big tree pushed the store past the small one");
-    CF_CHECK(ctx.layout.node_count == peak, "the view covers the store, not just the live slots");
+    CF_CHECK(view != NULL, "the frame answers with a view");
+    CF_CHECK(view->node_count == peak, "the view covers the store, not just the live slots");
 
     /* Walk preorder from the root to name the live slots; every slot outside
      * the walk is one the current claim did not fill. */
     bool live[SHRINK_LEAVES + 2u] = {0};
     uint32_t live_count = 0u;
 
-    for (uint32_t edge = 0u; edge < ctx.layout.child_start[ctx.layout.node_count]; ++edge) {
-        const uint32_t child = ctx.layout.child_slots[edge];
-        CF_CHECK(child < ctx.layout.node_count, "a child edge stays inside the view");
+    for (uint32_t edge = 0u; edge < view->child_start[view->node_count]; ++edge) {
+        const uint32_t child = view->child_slots[edge];
+        CF_CHECK(child < view->node_count, "a child edge stays inside the view");
 
         if (!live[child]) {
             live[child] = true;
@@ -304,16 +307,16 @@ static void a_shrunk_declaration_zeroes_the_view_rows_it_leaves_behind(void) {
     /* Every unclaimed row must read as a documented start, not as what the
      * big tree left behind. A zeroed length is CF_LENGTH_AUTO, and the two
      * callbacks become NULL; that is what keeps measure_cache_init safe. */
-    for (uint32_t slot = 0u; slot < ctx.layout.node_count; ++slot) {
+    for (uint32_t slot = 0u; slot < view->node_count; ++slot) {
         if (live[slot]) {
             continue;
         }
 
-        CF_CHECK(ctx.layout.styles[slot].width.kind == CF_LENGTH_AUTO &&
-                     ctx.layout.styles[slot].height.kind == CF_LENGTH_AUTO,
+        CF_CHECK(view->styles[slot].width.kind == CF_LENGTH_AUTO &&
+                     view->styles[slot].height.kind == CF_LENGTH_AUTO,
                  "a retired style row reads as AUTO lengths");
-        CF_CHECK(ctx.layout.measures[slot] == NULL, "a retired measure callback is NULL");
-        CF_CHECK(ctx.layout.measure_data[slot] == NULL, "a retired measure datum is NULL");
+        CF_CHECK(view->measures[slot] == NULL, "a retired measure callback is NULL");
+        CF_CHECK(view->measure_data[slot] == NULL, "a retired measure datum is NULL");
     }
 
     /* Layout of the small tree after the big one must match the small tree

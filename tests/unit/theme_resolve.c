@@ -178,7 +178,7 @@ static void a_focused_node_resolves_its_focused_variant(void) {
 
     cf_frame_resolve(&ctx);
 
-    const cf_style resolved = ctx.layout.styles[slot];
+    const cf_style resolved = frame_style(&ctx, slot);
     CF_CHECK(color_is(resolved.border_color, 10), "focus recolors the border to ink");
     CF_CHECK(color_is(resolved.background, 250), "the focused field keeps its fill");
 
@@ -215,7 +215,7 @@ static void a_hovered_node_resolves_after_the_pointer_moves(void) {
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the second frame keeps the slot");
     cf_frame_resolve(&ctx);
 
-    const cf_style resolved = ctx.layout.styles[1u];
+    const cf_style resolved = frame_style(&ctx, 1u);
     CF_CHECK(color_is(resolved.background, 46), "the hovered button lightens");
 
     cf_ctx_free(&ctx);
@@ -246,7 +246,7 @@ static void a_disabled_node_resolves_its_disabled_variant(void) {
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
     cf_frame_resolve(&ctx);
 
-    const cf_style resolved = ctx.layout.styles[1u];
+    const cf_style resolved = frame_style(&ctx, 1u);
     CF_CHECK(color_is(resolved.background, 229), "the disabled button drops to the well");
     CF_CHECK(color_is(resolved.border_color, 212), "the disabled button edges in the hairline");
 
@@ -278,7 +278,7 @@ static void a_node_without_a_role_keeps_its_declared_style(void) {
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
     cf_frame_resolve(&ctx);
 
-    const cf_style resolved = ctx.layout.styles[1u];
+    const cf_style resolved = frame_style(&ctx, 1u);
     CF_CHECK(color_is(resolved.background, 7), "the declared fill stands");
     CF_CHECK(resolved.radius == 0.0f, "the theme's radii never reach a roleless box");
 
@@ -297,17 +297,15 @@ static void resolve_without_a_theme_or_a_view_is_a_no_op(void) {
     cf_node root = node_of(CF_NO_NAME);
     root.style = cf_style_default();
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
-    const cf_style before = ctx.layout.styles[0u];
     cf_frame_resolve(&ctx);
-    CF_CHECK(ctx.layout.styles[0u].background.present == before.background.present,
-             "a themeless frame resolves nothing");
+    CF_CHECK(!frame_style(&ctx, 0u).background.present, "a themeless frame resolves nothing");
 
     /* No view: a frame the diff never built. */
     cf_ctx empty;
     context_of(&empty);
     cf_use_theme(&empty, cf_theme_default());
     cf_frame_resolve(&empty);
-    CF_CHECK(empty.layout.styles == NULL, "a frame without a diff has no view to rewrite");
+    CF_CHECK(cf_frame_tree(&empty) == NULL, "a frame without a diff publishes no view");
 
     cf_ctx_free(&empty);
     cf_ctx_free(&ctx);
@@ -353,6 +351,7 @@ static void a_theme_named_between_frames_styles_the_frame_after(void) {
     cf_use_theme(&ctx, cf_theme_default());
 
     cf_frame_begin(&ctx);
+    CF_CHECK(cf_frame_tree(&ctx) == NULL, "the frame break takes the view it published back");
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the next frame keeps the slot");
     cf_frame_resolve(&ctx);
     CF_CHECK(color_is(frame_style(&ctx, 1u).background, 229),
@@ -405,7 +404,7 @@ static void a_state_change_between_frames_changes_the_variant(void) {
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the diff claims the declaration");
     cf_focus(&ctx, cf_node_id(&ctx, 1u));
     cf_frame_resolve(&ctx);
-    CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 10), "the focused field reads ink");
+    CF_CHECK(color_is(frame_style(&ctx, 1u).border_color, 10), "the focused field reads ink");
 
     /* The focus goes to the other field rather than nowhere: a box holds it until
      * a control takes it, which is how a dialog hands it back. */
@@ -413,9 +412,9 @@ static void a_state_change_between_frames_changes_the_variant(void) {
     CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the rebuild keeps the slot");
     cf_focus(&ctx, cf_node_id(&ctx, 2u));
     cf_frame_resolve(&ctx);
-    CF_CHECK(color_is(ctx.layout.styles[1u].border_color, 212),
+    CF_CHECK(color_is(frame_style(&ctx, 1u).border_color, 212),
              "the blurred field reads the hairline again");
-    CF_CHECK(color_is(ctx.layout.styles[2u].border_color, 10),
+    CF_CHECK(color_is(frame_style(&ctx, 2u).border_color, 10),
              "and the field that took it reads ink");
 
     cf_ctx_free(&ctx);
