@@ -164,6 +164,30 @@ target_include_directories(gallery_headless PRIVATE "${CMAKE_SOURCE_DIR}/example
 set_source_files_properties(unit/gallery_headless.c PROPERTIES
     OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/examples/gallery_page.h")
 
+# The documentation site, drawn the same way: every row of the navigation table
+# driven through one frame at three surfaces, the stream checked for the geometry
+# invariants above and the page checked for the heading it promises. The pages are
+# real translation units rather than a header, so they are compiled in here exactly
+# as examples/ builds them, and the file that answers the address bar on a machine
+# with no browser comes along so the routing fallback is the one the site links.
+cf_add_layer_test(site_headless unit/site_headless.c
+    cf_app cf_widget cf_theme cf_backend_headless cf_base)
+
+target_sources(site_headless PRIVATE
+    "${CMAKE_SOURCE_DIR}/examples/site/page_getting_started.c"
+    "${CMAKE_SOURCE_DIR}/examples/site/page_concepts.c"
+    "${CMAKE_SOURCE_DIR}/examples/site/page_api.c"
+    "${CMAKE_SOURCE_DIR}/examples/site/page_project.c"
+    "${CMAKE_SOURCE_DIR}/examples/site/page_showcase.c"
+    "${CMAKE_SOURCE_DIR}/src/backend/sdl/web_nav_none.c")
+
+target_include_directories(site_headless PRIVATE "${CMAKE_SOURCE_DIR}/examples/site")
+
+# Four headers carry the blocks, the values and the table every page reads, so a
+# change to any of them has to rebuild the tier that draws the result.
+set_source_files_properties(unit/site_headless.c PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/examples/site/nav.h;${CMAKE_SOURCE_DIR}/examples/site/pages.h;${CMAKE_SOURCE_DIR}/examples/site/blocks.h;${CMAKE_SOURCE_DIR}/examples/site/tokens.h")
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
