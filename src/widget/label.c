@@ -22,6 +22,9 @@ cf_node cf_label(cf_ctx *ctx, cf_string text, const cf_text_stack *stack, cf_col
 
     node.measure = cf_text_measure;
     node.measure_data = content;
+    /* A label is the words: it announces itself, and a control that carries one takes the name
+     * from it instead of asking the build to repeat the sentence. */
+    node.access = CF_ACCESS_LABEL;
     node.style.color = (cf_opt_color){.present = true, .value = color};
     return node;
 }

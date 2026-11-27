@@ -47,6 +47,12 @@ typedef struct node_record {
     cf_handlers handlers;
     cf_role role;
     bool disabled;
+    /* Booked from the declaration for the bridge walk: what the box is called, in the
+     * build's own UTF-8 bytes, borrowed for the frame that declared them the way the
+     * measured text beside them is. */
+    cf_access access;
+    cf_string name;
+    cf_string description;
     /* Booked from the declaration: the keyboard reaches the boxes that say so,
      * and neither the role nor a handler is the question. */
     bool focusable;

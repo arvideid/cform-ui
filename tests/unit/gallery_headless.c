@@ -1494,14 +1494,19 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
     CF_CHECK(page_reads("the keyboard last asked: chip two"),
              "reverse Tab walks back and the space bar asks the same way Enter does");
 
-    /* Three steps forward from the second chip: the third, the page's own way out at
-     * the end of the document, and one past it - the ring wraps to its first box, the
-     * only control whose ask moves the count the first chapter keeps. */
-    step(tab_key(false));
-    step(tab_key(false));
-    step(tab_key(false));
-    step(key_down(CF_KEY_ENTER));
+    /* Onward from the second chip the ring runs out the rest of the page and comes back round to
+     * its start. Stepping until the count moves is what keeps this about the wrap rather than about
+     * how many controls happen to sit below the chips - a chapter added at the end of the document
+     * lengthens the run without changing the rule. */
+    uint32_t around = 0u;
 
+    while (*click_count(&session) == 1u && around < 24u) {
+        step(tab_key(false));
+        step(key_down(CF_KEY_ENTER));
+        around++;
+    }
+
+    CF_CHECK(around < 24u, "the walk reached a control whose ask the first chapter counts");
     CF_CHECK(*click_count(&session) == 2u, "a walk off the end of the page returns to its start");
     CF_CHECK(!cf_frame_takes_text(&session),
              "and the box it stopped on takes the keyboard without asking for one to show");
@@ -1714,6 +1719,293 @@ static void the_inspector_lays_its_numbers_over_the_page(void) {
     cf_arena_free(&store);
 }
 
+/*
+ * The bridge a screen reader would be.
+ *
+ * Everything below is what a host outside the framework could do with the walk alone: ask after a
+ * frame, copy the announcements out into its own table, and work out what moved by comparing two
+ * asks by identity. Nothing here reads the painted stream, so a page that moved words from one box
+ * to another would show up as a row whose name changed underneath an id the bridge was holding.
+ */
+
+#define SPOKEN_MAX 512u
+#define SPOKEN_BYTES 48u
+
+typedef struct announced {
+    cf_id id;
+    uint32_t slot;
+    cf_access access;
+    char name[SPOKEN_BYTES];
+    char value[SPOKEN_BYTES];
+    cf_id labelled_by;
+    cf_opt_u32 selection_start;
+    cf_opt_u32 selection_end;
+    uint32_t states;
+    uint32_t actions;
+} announced;
+
+static announced spoken[SPOKEN_MAX];
+static uint32_t spoken_count;
+
+/* Copied out because the visit borrows: a bridge that means to read a name after the frame has gone
+ * has to keep its own bytes, exactly as a build keeps its text in a buffer it owns. */
+static void take_words(char *out, cf_string text) {
+    const uint32_t length = text.chars != NULL && text.length < SPOKEN_BYTES - 1u
+                                ? text.length
+                                : (text.chars != NULL ? SPOKEN_BYTES - 1u : 0u);
+
+    if (length != 0u) {
+        memcpy(out, text.chars, length);
+    }
+
+    out[length] = '\0';
+}
+
+static void keep_the_visit(const cf_semantic *node, void *user_data) {
+    (void)user_data;
+
+    if (spoken_count == SPOKEN_MAX) {
+        return;
+    }
+
+    announced *row = &spoken[spoken_count++];
+    *row = (announced){.id = node->id,
+                       .slot = node->slot,
+                       .access = node->access,
+                       .labelled_by = node->labelled_by,
+                       .selection_start = node->selection_start,
+                       .selection_end = node->selection_end,
+                       .states = node->states,
+                       .actions = node->actions};
+    take_words(row->name, node->name);
+    take_words(row->value, node->value);
+}
+
+/* Ask the walk what the frame a person is looking at announces. The page has been laid out and
+ * painted before this runs, so the rects come from the same frame the paint read. */
+static void ask_the_page(void) {
+    spoken_count = 0u;
+    cf_semantic_visit(&session, keep_the_visit, NULL);
+}
+
+static const announced *row_with(const announced *rows, uint32_t count, cf_access access,
+                                 const char *name) {
+    for (uint32_t i = 0u; i < count; ++i) {
+        if (rows[i].access == access && strcmp(rows[i].name, name) == 0) {
+            return &rows[i];
+        }
+    }
+
+    return NULL;
+}
+
+static const announced *row_by_id(const announced *rows, uint32_t count, cf_id id) {
+    for (uint32_t i = 0u; i < count; ++i) {
+        if (cf_id_equal(rows[i].id, id)) {
+            return &rows[i];
+        }
+    }
+
+    return NULL;
+}
+
+static const announced *heard_as(cf_access access, const char *name) {
+    return row_with(spoken, spoken_count, access, name);
+}
+
+static uint32_t count_of_access(const announced *rows, uint32_t count, cf_access access) {
+    uint32_t seen = 0u;
+
+    for (uint32_t i = 0u; i < count; ++i) {
+        seen += rows[i].access == access ? 1u : 0u;
+    }
+
+    return seen;
+}
+
+/*
+ * What the page says about itself, read the way an outside reader would read it. Every claim here
+ * is the acceptance the roadmap sets for the bridge: a button's name comes from the label painted
+ * on it, a field exports the bytes it holds along with the run a hand is holding, a box that
+ * declared nothing is passed through rather than announced, and a control nobody named is announced
+ * with nothing to say - which is the bug a person who cannot see the page cannot tell apart from a
+ * control that is not there at all.
+ */
+static void a_bridge_hears_the_page_the_way_a_person_reads_it(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+    ask_the_page();
+
+    CF_CHECK(spoken_count > 20u, "a whole page of controls is announced");
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_NONE) == 0u,
+             "and no row of the reading is a box that declared nothing");
+
+    const cf_tree *tree = cf_frame_tree(&session);
+
+    CF_CHECK(tree != NULL && spoken_count < tree->node_count,
+             "the wrappers a layout needed stay out of the reading");
+
+    const announced *count = heard_as(CF_ACCESS_BUTTON, "count");
+    const announced *clear = heard_as(CF_ACCESS_BUTTON, "clear");
+
+    CF_CHECK(count != NULL, "a button is announced by the words painted on it");
+    CF_CHECK(clear != NULL, "and so is the one beside it");
+
+    const announced *labelled =
+        count != NULL ? row_by_id(spoken, spoken_count, count->labelled_by) : NULL;
+
+    CF_CHECK(labelled != NULL && labelled->access == CF_ACCESS_LABEL,
+             "the name came from a label the same reading carries, reachable by its id");
+    CF_CHECK(labelled != NULL && !labelled->selection_start.present &&
+                 !labelled->selection_end.present,
+             "and text nobody types into is announced with no selection at all, rather than one "
+             "sitting at offset zero");
+    CF_CHECK(count != NULL && (count->actions & (uint32_t)CF_SEMANTIC_ACTIVATE) != 0u,
+             "and the ask the frame really has is the one offered");
+
+    bool painted = false;
+    (void)find_text_rect(count != NULL ? count->name : "count", &painted);
+    CF_CHECK(painted, "the words handed to a bridge are the words the page shows");
+
+    CF_CHECK(heard_as(CF_ACCESS_IMAGE, "The cform mark") != NULL,
+             "a picture is announced by the sentence its build wrote for it");
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_SCROLL_AREA) == 2u,
+             "both boxes that scroll their content say so - the page and the pane in it");
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_LIST) == 1u,
+             "and the list that holds the rows is announced as the run, above its items");
+
+    const announced *mute = NULL;
+
+    for (uint32_t i = 0u; i < spoken_count && mute == NULL; ++i) {
+        if (spoken[i].access == CF_ACCESS_BUTTON && spoken[i].name[0] == '\0') {
+            mute = &spoken[i];
+        }
+    }
+
+    CF_CHECK(mute != NULL && cf_id_is_none(mute->labelled_by),
+             "the control nobody named is announced with nothing to say and no label behind it");
+
+    /* The rows the list built rather than the rows the list holds: what a bridge is told about a
+     * virtualized run is what this frame declared. */
+    const uint32_t items = count_of_access(spoken, spoken_count, CF_ACCESS_ITEM);
+
+    CF_CHECK(items > 0u && items < LIST_ROWS,
+             "only the rows the frame built are announced as items of the list");
+
+    /* The field the keyboard is standing on: its stated name, the bytes typed into it, the run the
+     * caret marks, and the two states a reader needs to know where they are. */
+    if (!focus_the_field()) {
+        end_session();
+        return;
+    }
+
+    step(typed_text("hi"));
+    step(key_down(CF_KEY_LEFT));
+    ask_the_page();
+
+    const announced *entry = heard_as(CF_ACCESS_TEXT_BOX, "Display name");
+
+    CF_CHECK(entry != NULL, "the field is announced by the name its build stated");
+    CF_CHECK(entry != NULL && strcmp(entry->value, "hi") == 0, "and by the bytes it holds");
+    CF_CHECK(entry != NULL && (entry->states & (uint32_t)CF_SEMANTIC_FOCUSED) != 0u,
+             "with the keyboard standing on it");
+    CF_CHECK(entry != NULL && (entry->states & (uint32_t)CF_SEMANTIC_EDITABLE) != 0u,
+             "and the fact that a person can type into it");
+    CF_CHECK(entry != NULL && (entry->actions & (uint32_t)CF_SEMANTIC_SET_VALUE) != 0u,
+             "a bridge is offered the ask a field actually takes");
+    CF_CHECK(entry != NULL && entry->selection_start.present && entry->selection_end.present &&
+                 entry->selection_start.value == 1u && entry->selection_end.value == 1u,
+             "and where the caret is, as offsets into the bytes");
+
+    CF_CHECK(count_of_access(spoken, spoken_count, CF_ACCESS_TEXT_BOX) == 2u,
+             "both of the page's fields answer, and no other box claims to take typed text");
+
+    uint32_t focused = 0u;
+
+    for (uint32_t i = 0u; i < spoken_count; ++i) {
+        focused += (spoken[i].states & (uint32_t)CF_SEMANTIC_FOCUSED) != 0u ? 1u : 0u;
+    }
+
+    CF_CHECK(focused == 1u, "exactly one box holds the keyboard in the reading");
+
+    end_session();
+}
+
+/*
+ * The other half of the agreement: a bridge does not rebuild its world each frame, it asks twice
+ * and paints the difference. Identity is the store's generational id, so the box that stayed is the
+ * same id saying the same words, the box that came is an id nothing was held for, and the box that
+ * left is simply not answered - which is also why a row that later took the same slot cannot
+ * inherit what the bridge knew about the one that went.
+ */
+static void a_bridge_asking_twice_sees_which_boxes_moved(void) {
+    static announced before[SPOKEN_MAX];
+    uint32_t before_count = 0u;
+
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    if (!reveal_to("open the box", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+    CF_CHECK(spoken_count < SPOKEN_MAX, "the page fits the table a bridge would keep");
+    memcpy(before, spoken, (size_t)spoken_count * sizeof before[0]);
+    before_count = spoken_count;
+
+    const announced *opener = row_with(before, before_count, CF_ACCESS_BUTTON, "open the box");
+
+    CF_CHECK(opener != NULL, "the opener is announced before the box it adds exists");
+
+    if (!tap("open the box")) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    const announced *added = heard_as(CF_ACCESS_BUTTON, "close the box");
+
+    CF_CHECK(added != NULL, "the control the page added is announced");
+    CF_CHECK(added != NULL && row_by_id(before, before_count, added->id) == NULL,
+             "under an id the earlier ask never heard, which is the whole of the notification");
+
+    uint32_t retired = 0u;
+    uint32_t reworded = 0u;
+
+    for (uint32_t i = 0u; i < before_count; ++i) {
+        const announced *still = row_by_id(spoken, spoken_count, before[i].id);
+
+        if (still == NULL) {
+            retired++;
+        } else if (still->access != before[i].access || strcmp(still->name, before[i].name) != 0) {
+            reworded++;
+        }
+    }
+
+    CF_CHECK(retired == 0u, "nothing the page kept stopped being announced");
+    CF_CHECK(reworded == 0u, "and every box that stayed says the words it said before");
+
+    const cf_id gone = added != NULL ? added->id : CF_NO_ID;
+
+    if (!tap("close the box")) {
+        end_session();
+        return;
+    }
+
+    ask_the_page();
+
+    CF_CHECK(row_by_id(spoken, spoken_count, gone) == NULL,
+             "the box that left is not answered at all rather than answered empty");
+
+    const announced *kept = heard_as(CF_ACCESS_BUTTON, "open the box");
+
+    CF_CHECK(kept != NULL && cf_id_equal(kept->id, opener != NULL ? opener->id : CF_NO_ID),
+             "and the box that stayed through it all is the same box to the bridge");
+
+    end_session();
+}
+
 int main(void) {
     printf("gallery headless\n");
 
@@ -1742,6 +2034,8 @@ int main(void) {
     CF_RUN(a_narrow_window_reflows_without_spilling_geometry);
     CF_RUN(a_bigger_output_still_bounds_every_box);
     CF_RUN(the_inspector_lays_its_numbers_over_the_page);
+    CF_RUN(a_bridge_hears_the_page_the_way_a_person_reads_it);
+    CF_RUN(a_bridge_asking_twice_sees_which_boxes_moved);
 
     end_sessions();
     return CF_REPORT();

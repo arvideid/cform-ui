@@ -44,6 +44,26 @@ typedef struct cf_handlers {
 } cf_handlers;
 
 /*
+ * What a box is to a person who cannot see it, named for the answer a bridge gives rather than
+ * for the style that painted it. The values are append-only, because a bridge reads the number: a
+ * role added later must not move the ones a shipped screen reader already knows.
+ *
+ * Not every box has one. CF_ACCESS_NONE is the honest answer for a wrapper that groups boxes for
+ * the painter, and a walk that named every div would read a page as a list of nothing.
+ */
+typedef enum cf_access {
+    CF_ACCESS_NONE,
+    CF_ACCESS_GROUP,      /* a box that holds other boxes and means nothing alone */
+    CF_ACCESS_BUTTON,     /* a press that does a thing */
+    CF_ACCESS_TEXT_BOX,   /* a box whose bytes a person types into */
+    CF_ACCESS_LABEL,      /* text meant to be read, not edited */
+    CF_ACCESS_IMAGE,      /* a picture, named by the build or by nothing */
+    CF_ACCESS_LIST,       /* a scrollable run of items */
+    CF_ACCESS_ITEM,       /* one row of a list */
+    CF_ACCESS_SCROLL_AREA /* a box that scrolls its content */
+} cf_access;
+
+/*
  * One declared node: a value the build assembles and the diff reads, never
  * the engine's to keep. `children`, `measure_data` and the handler data stay
  * borrowed through the frame that declared them: the diff reads the child
@@ -66,6 +86,21 @@ typedef struct cf_node {
      * both after the diff and before the layout. */
     cf_role role;
     bool disabled;
+
+    /* What the box is to a person who cannot see it. The theme family above is what
+     * the painter reads, and the two are not the same question: a box themed as a
+     * button can be a picture of one, and a box the build made from plain nodes can
+     * be the control. A widget declares this for its callers; CF_ACCESS_NONE leaves
+     * the box out of the announcement a bridge makes, which is what a wrapper is.
+     *
+     * `name` and `description` are the words to say, in UTF-8 as the build wrote them. A box that
+     * holds words rather than boxes - a button, a row, a picture, a field - is announced by the
+     * label it carries when it states none; a container is announced by the words its build gave
+     * it, or by nothing. The bytes are borrowed for the frame, the same rule the declared text
+     * follows. */
+    cf_access access;
+    cf_string name;
+    cf_string description;
 
     /* Whether this box takes keyboard focus. A role is not the answer: a box
      * themed as a button can be a picture of one, and a box with no role at all
@@ -386,8 +421,86 @@ const char *cf_error_message(const cf_ctx *ctx);
  * it sits at, and a `disabled` suffix where it is switched off. The bytes
  * land in `out`, terminated, up to `capacity`. A context without a view, or
  * a tree the buffer cannot hold, answers false with the lines that fit.
+ *
+ * This is the diagnostic, not the bridge protocol: an excerpt is a debugging
+ * convenience, and a screen reader needs the whole UTF-8 value and an id it can
+ * hold. cf_semantic_visit is that.
  */
 bool cf_semantic_export(const cf_ctx *ctx, char *out, size_t capacity);
+
+/*
+ * What a box is doing, as far as the frame can tell. The bits are a set rather than a field
+ * because a box is several at once: switched off, reachable by Tab, and the one the keyboard
+ * stands on.
+ */
+typedef enum cf_semantic_state {
+    CF_SEMANTIC_DISABLED = 1 << 0,
+    CF_SEMANTIC_FOCUSABLE = 1 << 1,
+    CF_SEMANTIC_FOCUSED = 1 << 2,
+    CF_SEMANTIC_PRESSED = 1 << 3,
+    CF_SEMANTIC_HOVERED = 1 << 4,
+    CF_SEMANTIC_EDITABLE = 1 << 5 /* the bytes belong to a buffer a person types into */
+} cf_semantic_state;
+
+/*
+ * What a bridge may ask the box to do. Each bit names a door the frame has behind it: an
+ * activation runs the node's `activate`, a value goes in by the path the keyboard takes, and a
+ * focus ask is `cf_focus`, which refuses a box that did not say it takes focus.
+ */
+typedef enum cf_semantic_action {
+    CF_SEMANTIC_ACTIVATE = 1 << 0,
+    CF_SEMANTIC_SET_VALUE = 1 << 1,
+    CF_SEMANTIC_SET_FOCUS = 1 << 2
+} cf_semantic_action;
+
+/*
+ * One box as a bridge reads it. `id` is the store's generational identity and `slot` is where
+ * this frame dispatches: a bridge keeps the id and forgets the slot, because the frame after may
+ * hand its box a different one, and a box that left the tree leaves its slot behind for someone
+ * else. `name` is the words to say: what the build stated, or for a box that holds words rather
+ * than boxes the text of the label it carries, in which case `labelled_by` names that label.
+ * `value` is the bytes the box holds, `selection` the run of them a person is holding, and every
+ * string is UTF-8 as declared - nothing cut, nothing replaced - borrowed for the duration of the
+ * visit alone.
+ *
+ * `rect` is in logical points from the frame that laid out, and is zero before the first layout.
+ */
+typedef struct cf_semantic {
+    cf_id id;
+    /* This frame's dispatch handle, valid for the visit: `cf_focus` and `cf_input` read a slot,
+     * not an id. Nothing a bridge keeps past the frame should be this number. */
+    uint32_t slot;
+    cf_access access;
+    cf_string name;
+    cf_string description;
+    cf_string value;
+    /* Offsets into `value`, low first, so a bridge announces what is held rather than which end the
+     * typing started from. Absent for a box that lays no caret - a label, a picture, a wrapper. */
+    cf_opt_u32 selection_start;
+    cf_opt_u32 selection_end;
+    cf_id labelled_by;
+    cf_rect rect;
+    uint32_t states;
+    uint32_t actions;
+} cf_semantic;
+
+/*
+ * Every box the frame declared that carries a meaning, in paint order and depth first: the walk
+ * a bridge starts from. Boxes with no meaning of their own - the wrappers a build groups a page
+ * with - are passed through rather than announced, so their controls are still reached, and a
+ * hidden box is skipped with everything under it, the way paint and the hit test skip it, so a
+ * closed dialog announces nothing. `visit` is called once per box with borrowed data and returns
+ * nothing: a bridge that must refuse a box does that in its own book.
+ *
+ * The walk is how a bridge learns what changed: an untouched box keeps its id from frame to frame,
+ * so a re-walk after a repaint reports the same boxes with new words, states or rects rather than
+ * a tree that looks new every time, and a box that no longer appears is one the page retired.
+ *
+ * A context with no view calls nothing. The walk allocates nothing, so an announcement can be fed
+ * from a frame that has no room left for one more command.
+ */
+void cf_semantic_visit(const cf_ctx *ctx, void (*visit)(const cf_semantic *node, void *user_data),
+                       void *user_data);
 
 /*
  * The topmost node whose rect holds the position - later siblings above

@@ -94,6 +94,9 @@ cf_node cf_scroller(cf_ctx *ctx, const char *name, const cf_node *children, uint
     node.style =
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
+    /* A plain scroller announces as the region it is: what is worth saying about it is what it
+     * holds, and a bridge that says "scroll area" at least tells a person where they are. */
+    node.access = CF_ACCESS_SCROLL_AREA;
     /* The node carries the name its offset lives under, so the tree can read
      * this scroller's own block back from the record: a stable identity for the
      * diff, and the handle a keyboard reveal moves. */

@@ -132,6 +132,7 @@ static char list_bytes[64];
 static char motion_bytes[96];
 static char keyboard_bytes[96];
 static char leaving_bytes[96];
+static char spoken_bytes[64];
 
 /*
  * The eight rules a chip picks. The names are what the chips read and the
@@ -550,6 +551,11 @@ static cf_node make_buttons_demo(cf_ctx *ctx) {
 /* Chapter two: the field, and the same buffer read straight back. */
 static cf_node make_field_demo(cf_ctx *ctx) {
     cf_node entry = cf_field(ctx, "entry", &typed, &body, CF_FIELD_SINGLE);
+    /* The words a bridge says for this box. The caption below it is what an eye reads, and a walk
+     * cannot pair a field with its sibling, so the build states the name beside the control. */
+    entry.name = (cf_string){"Display name", sizeof("Display name") - 1u};
+    entry.description =
+        (cf_string){"Saved when Enter is pressed", sizeof("Saved when Enter is pressed") - 1u};
     /* The door cf_field leaves its caller: the keys a field cannot serve for itself are
      * asked of the node, which is where a page puts what to do with the value. */
     entry.handlers.activate = submit_entry;
@@ -582,6 +588,7 @@ static cf_node make_field_demo(cf_ctx *ctx) {
      * page hears no save out of a memo that is still being written. The height is stated
      * because the mode is, and not because a box measured two rows of bytes. */
     cf_node block = cf_field(ctx, "memo", &memo, &body, CF_FIELD_MULTILINE);
+    block.name = (cf_string){"Notes", sizeof("Notes") - 1u};
     block.style.width = CF_PERCENT(100.0f);
     block.style.height = CF_PX(2.0f * FIELD_HEIGHT);
     block.style.align_items = CF_ALIGN_START;
@@ -823,6 +830,9 @@ static cf_node make_row(cf_ctx *ctx, uint32_t index, void *user_data) {
 
     cf_node box = cf_col(ctx, row, &label, 1u);
     box.role = CF_ROLE_LIST;
+    /* One row of the run: the words written in it are what a person hears for it, so the box says
+     * it is an item rather than leaving the row to read as a box of nothing. */
+    box.access = CF_ACCESS_ITEM;
     return box;
 }
 
@@ -853,6 +863,9 @@ static cf_node make_list_demo(cf_ctx *ctx) {
 /* Chapter seven: a texture, and the badge that leaves the flow to hang off it. */
 static cf_node make_badge_demo(cf_ctx *ctx) {
     cf_node image = cf_image(ctx, "logo", &logo);
+    /* A picture is named by the build or by nothing, and the name is not the key above: this is the
+     * sentence a person who cannot see the mark is told instead of it. */
+    image.name = (cf_string){"The cform mark", sizeof("The cform mark") - 1u};
     image.style.width = CF_PX(64.0f);
     image.style.height = CF_PX(64.0f);
 
@@ -1166,13 +1179,73 @@ static cf_node make_leaving_demo(cf_ctx *ctx) {
                        2u);
 }
 
+/* Which of the announced controls the page last heard from, so the line under the row can say
+ * that a box with no name anywhere is still a working control. */
+static uint32_t *spoken_control(cf_ctx *ctx) {
+    return cf_state(ctx, cf_intern_text(&ctx->names, "spoken"), sizeof(uint32_t));
+}
+
+static const char *spoken_names[] = {"the one named on its face", "the one named by the build",
+                                     "the one nobody named"};
+
+static void a_control_answers(cf_ctx *ctx, uint32_t slot, void *user_data) {
+    (void)slot, (void)ctx;
+    uint32_t *held = spoken_control(ctx);
+
+    /* One above the index: the keyed block starts zeroed, and a page that has heard from nothing
+     * must not read as a press on the first control. */
+    if (held != NULL) {
+        *held = (uint32_t)(uintptr_t)user_data + 1u;
+    }
+}
+
+/* Chapter twelve: the words a box is announced by. Three controls that sit in one row and are
+ * handed to a bridge three different ways - words on the face of it, words the build stated beside
+ * it, and no words at all. */
+static cf_node make_words_demo(cf_ctx *ctx) {
+    /* Nothing names this box but the label inside it, which is the common case and the one a walk
+     * can work out for itself. */
+    const cf_node labelled = make_button(ctx, "ring the bell", a_control_answers, NULL);
+
+    /* The second carries words on its face as well, and states its own name besides: the stated
+     * name is what a bridge is handed, because a caption a person placed beside a control is a
+     * better answer than whatever the control happens to draw. */
+    const cf_node inner = cf_label(ctx, cf_string_of("save"), &body, theme->on_ink);
+    cf_node stated = cf_button(ctx, "stated", a_control_answers, (void *)(uintptr_t)1u, &inner, 1u);
+    stated.name = cf_string_of("the one named by the build");
+    stated.description = cf_string_of("its name was written beside it, not on it");
+
+    /* And the mistake this chapter exists to show: a control with no words anywhere. It paints as a
+     * button, the keyboard walks onto it and a press works, so only a reader who cannot see the
+     * page loses out - which is why the panel prints what was announced rather than a count. */
+    cf_node unnamed = cf_button(ctx, "unnamed", a_control_answers, (void *)(uintptr_t)2u, NULL, 0u);
+    unnamed.style.width = CF_PX(120.0f);
+    unnamed.style.height = CF_PX(FIELD_HEIGHT);
+
+    const uint32_t *held = spoken_control(ctx);
+    const uint32_t answered = held != NULL ? *held : 0u;
+    const int length = snprintf(
+        spoken_bytes, sizeof spoken_bytes, "the page heard: %s",
+        answered >= 1u && answered <= (uint32_t)(sizeof spoken_names / sizeof spoken_names[0])
+            ? spoken_names[answered - 1u]
+            : "nothing yet");
+
+    const cf_style row = wrap_row(8.0f);
+
+    return demo_column(ctx, 8.0f,
+                       (cf_node[]){cf_row(ctx, row, (cf_node[]){labelled, stated, unnamed}, 3u),
+                                   cf_label(ctx, (cf_string){spoken_bytes, (uint32_t)length}, &body,
+                                            theme->muted)},
+                       2u);
+}
+
 static cf_node make_note(cf_ctx *ctx, const char *chars) {
     return CF_COL(ctx, inset_style(theme->bar, 12.0f, 0.0f), make_prose(ctx, chars, theme->muted));
 }
 
 static cf_node make_header(cf_ctx *ctx) {
     const cf_node name = cf_label(ctx, cf_string_of("cform gallery"), &title, theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("eleven rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("twelve rules, each with something to try"),
                                   &body, theme->muted);
 
     cf_style row = cf_style_default();
@@ -1357,10 +1430,33 @@ static cf_node build(cf_ctx *ctx) {
             "decides what it is worth - this window leaves, a dialog would be dismissed, and "
             "nothing in the framework closes a window a page has no handle on.",
             make_leaving_demo(ctx)),
+        make_chapter(
+            ctx, "12", "The words a box is announced by",
+            "A box can say more than it shows: what it is, what it is called, what it holds. The "
+            "family the theme paints with and the role a bridge reads are two declarations, so a "
+            "box "
+            "painted as a plain bar can still be announced as a button - and a box that declares "
+            "no "
+            "role at all is passed through rather than announced, which is what keeps the wrappers "
+            "a "
+            "layout needs out of the way a person hears the page. The words come from wherever the "
+            "build put them: a name the build stated first, and failing that the label the box "
+            "carries, which the walk pairs and hands back as the label's own identity so a bridge "
+            "can "
+            "follow it. Press F12 to lay the panel over the page, then Tab across the three boxes "
+            "below: the panel's last line prints the words the walk handed back for the box the "
+            "keyboard stands on. The first is announced by its own face, the second by the longer "
+            "name written beside it rather than the word drawn on it, and the third - a control no "
+            "one named - by nothing at all. A box keeps its identity across frames rather than its "
+            "place in the tree, so a page that rebuilds around a control leaves a bridge looking "
+            "at "
+            "the same box instead of a different one in the same slot.",
+            make_words_demo(ctx)),
         make_note(ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
-                  "were dirty, the commands it painted, the offer it laid out against and the "
-                  "microseconds the frame took."),
+                  "were dirty, the commands it painted, the offer it laid out against, the "
+                  "microseconds the frame took, and the words the box holding the keyboard is "
+                  "announced by."),
     };
 
     return make_page(ctx, chapters, (uint32_t)(sizeof chapters / sizeof chapters[0]));

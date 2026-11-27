@@ -950,6 +950,10 @@ cf_node cf_field(cf_ctx *ctx, const char *name, cf_text_edit *text, const cf_tex
     (void)undo_open(data, &history);
 
     node.role = CF_ROLE_FIELD;
+    /* A field is a text box to a bridge, and the bytes it lays are its value rather than its
+     * name: the words to announce are the ones the build put in `name`, since the caption a
+     * person reads beside a field is a sibling no walk could pair with it. */
+    node.access = CF_ACCESS_TEXT_BOX;
     /* A field is the control a keyboard exists for, so it has to be reachable by
      * one: the handler answers the keys, and taking the focus is what gets them
      * here in the first place. */

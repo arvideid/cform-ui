@@ -125,6 +125,10 @@ cf_node cf_list(cf_ctx *ctx, const char *name, float viewport_height, float row_
     node.style =
         ctx->theme != NULL ? ctx->theme->variants[CF_ROLE_SCROLL].base : cf_style_default();
     node.role = CF_ROLE_SCROLL;
+    /* A list is more than a scroller to a bridge: it is a run of items a person steps through, so
+     * the boxes the row factory returns are worth declaring CF_ACCESS_ITEM on. Only the rows this
+     * frame built are in the tree, which is exactly what a bridge should be told. */
+    node.access = CF_ACCESS_LIST;
     /* The list is a scroller: it carries the name its offset lives under so the
      * tree reads the block back from the record, the same handle a keyboard
      * reveal moves. */

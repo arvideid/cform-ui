@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "cf/app.h"
 
 #include "cform_test.h"
@@ -55,6 +57,26 @@ static void noting_pointer(cf_event *event, void *user_data) {
 static cf_node clickable_box(cf_ctx *ctx) {
     cf_node root = counting_box(ctx);
     root.handlers.pointer = noting_pointer;
+
+    return root;
+}
+
+/* A control the build named: the box a bridge would announce, and the one the panel
+ * has words to print once the keyboard stands on it. */
+static cf_node named_button(cf_ctx *ctx) {
+    cf_node root = counting_box(ctx);
+    cf_node box = {0};
+
+    box.style = cf_style_default();
+    box.style.width = CF_PX(20.0f);
+    box.style.height = CF_PX(20.0f);
+    box.focusable = true;
+    box.access = CF_ACCESS_BUTTON;
+    box.name = (cf_string){"Send", 4u};
+
+    const cf_node children[] = {box};
+    root.children = children;
+    root.child_count = 1u;
 
     return root;
 }
@@ -388,7 +410,7 @@ static void the_inspector_toggles_on_f12(void) {
         .build = counting_box, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
 
     CF_CHECK(frames_built == 1u, "the toggle builds the frame it lands in");
-    CF_CHECK(recorder.count == 8u, "the page's fill and the panel's seven commands arrived");
+    CF_CHECK(recorder.count == 9u, "the page's fill and the panel's eight commands arrived");
 
     bool text_seen = false;
 
@@ -399,6 +421,51 @@ static void the_inspector_toggles_on_f12(void) {
     }
 
     CF_CHECK(text_seen, "the panel's numbers ride the stream as text");
+}
+
+/*
+ * The panel's last line is the bridge walk read back rather than a second, weaker rule: the box
+ * the keyboard stands on, named by the build, printed as the words a person would hear. A developer
+ * catches a control nobody named by seeing the difference between the dash and the name, so both
+ * ends are worth a case. The key that opens the panel is handed after a frame has laid the page
+ * out, because Tab walks the tree the last frame built and the first press has no rect to answer
+ * from.
+ */
+static void the_inspector_prints_the_words_a_bridge_would_say(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {30.0f, 20.0f}}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_TAB}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_F12}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 7u);
+
+    cf_app_run(&(cf_app_config){
+        .build = named_button, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
+
+    CF_CHECK(frames_built == 3u, "the frame, the key and the toggle each earned one");
+
+    const char *said = NULL;
+    uint32_t spoken = 0u;
+
+    for (uint32_t i = 0u; i < recorder.count; ++i) {
+        const cf_command *command = &recorder.commands[i];
+
+        if (command->kind == CF_COMMAND_TEXT && command->text.length >= 5u &&
+            memcmp(command->text.chars, "says ", 5u) == 0) {
+            said = command->text.chars + 5u;
+            spoken = command->text.length - 5u;
+        }
+    }
+
+    CF_CHECK(said != NULL, "the open panel prints an announced line");
+    CF_CHECK(spoken == 4u && said != NULL && memcmp(said, "Send", 4u) == 0,
+             "and it prints the name the walk gave the box holding the keyboard");
 }
 
 static void the_shell_leaves_the_backend_to_its_host(void) {
@@ -626,6 +693,7 @@ int main(void) {
     CF_RUN(the_shell_skips_undamaged_frames);
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
+    CF_RUN(the_inspector_prints_the_words_a_bridge_would_say);
     CF_RUN(the_shell_leaves_the_backend_to_its_host);
     CF_RUN(the_shell_hands_the_page_the_clipboard_the_host_named);
     CF_RUN(the_shell_asks_for_the_shape_only_when_it_moves);

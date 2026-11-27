@@ -8,8 +8,12 @@
  * the edges and the width holds the longest labeled line. */
 #define PANEL_WIDTH 168.0f
 #define PANEL_PADDING 8.0f
-#define PANEL_LINES 5u
+#define PANEL_LINES 6u
 #define LINE_BYTES 32u
+
+/* "says " plus the widest word the line can carry: the panel prints through the same buffer every
+ * line gets, and a name longer than what is left draws nothing at all. */
+#define SAYS_BYTES 26u
 
 /* The list the page painted through grows the same way the panel's own
  * commands do, out of the frame arena. */
@@ -136,6 +140,44 @@ static uint32_t round_points(float value) {
     return value > 0.0f ? (uint32_t)(value + 0.5f) : 0u;
 }
 
+/*
+ * What a bridge would say about the box the keyboard stands on. Reading it off the panel is how a
+ * developer catches a control nobody named: the page looks right and a person hears nothing, so
+ * the words have to be written somewhere a sighted person can see them.
+ *
+ * The walk is the one a bridge is handed, so a name the frame derived from a label reads derived
+ * here too rather than being reconstructed by a second, weaker rule. It costs a pass over the
+ * tree, and only on the frames a developer asked for with F12.
+ */
+typedef struct focus_words {
+    char bytes[SAYS_BYTES + 1u];
+    bool focused;
+    bool spoken;
+} focus_words;
+
+static void copy_focus_words(const cf_semantic *node, void *user_data) {
+    focus_words *words = user_data;
+
+    if ((node->states & (uint32_t)CF_SEMANTIC_FOCUSED) == 0u) {
+        return;
+    }
+
+    words->focused = true;
+    /* A focused box with no name still has its value to read, which is what a field is for: the
+     * caret moves and the announced bytes are what was typed. */
+    const cf_string text = node->name.length != 0u ? node->name : node->value;
+
+    if (text.chars == NULL || text.length == 0u) {
+        return;
+    }
+
+    words->spoken = true;
+    words->bytes[0] = '\0';
+    const uint32_t length = text.length < SAYS_BYTES ? text.length : SAYS_BYTES;
+    memcpy(words->bytes, text.chars, length);
+    words->bytes[length] = '\0';
+}
+
 void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t painted,
                           uint32_t frame_us, cf_command_list *out) {
     if (ctx == NULL || out == NULL) {
@@ -171,4 +213,11 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
     append_line(ctx, out, fonts, panel, 3u, height, "page %ux%u", round_points(page.width),
                 round_points(page.height));
     append_line(ctx, out, fonts, panel, 4u, height, "frame %uus", frame_us);
+
+    /* Read last: the walk wants the rects cf_frame_layout wrote, and a page with no focused box is
+     * the common case rather than a failure, so it prints as an empty ask. */
+    focus_words words = {0};
+    cf_semantic_visit(ctx, copy_focus_words, &words);
+    append_line(ctx, out, fonts, panel, 5u, height, "says %s",
+                !words.focused ? "-" : (words.spoken ? words.bytes : "nothing"));
 }

@@ -55,6 +55,7 @@ static uint32_t signature_of(const cf_node *decl) {
         cf_handlers handlers;
         uint32_t child_count;
         cf_role role;
+        cf_access access;
         bool disabled;
         bool focusable;
     } declared;
@@ -67,6 +68,7 @@ static uint32_t signature_of(const cf_node *decl) {
     declared.child_count = decl->child_count;
     declared.role = decl->role;
     declared.disabled = decl->disabled;
+    declared.access = decl->access;
     declared.focusable = decl->focusable;
 
     /* The grid tracks are a borrowed array, so the struct hash above carries
@@ -75,6 +77,11 @@ static uint32_t signature_of(const cf_node *decl) {
      * bytes in too, at the counts the layout reads, so a changed track reads
      * changed here as well. */
     uint32_t signature = cf_hash_bytes(&declared, sizeof declared);
+
+    /* A name is content, not an address: a build that assembles one into the same buffer every
+     * frame would ride a steady pointer and stay clean, so the bytes are folded in whole. */
+    signature = cf_hash_fold(signature, decl->name.chars, decl->name.length);
+    signature = cf_hash_fold(signature, decl->description.chars, decl->description.length);
 
     signature = cf_hash_fold(signature, decl->style.column_tracks,
                              (size_t)decl->style.column_count * sizeof *decl->style.column_tracks);
@@ -283,6 +290,9 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
     root_record->handlers = root->handlers;
     root_record->role = root->role;
     root_record->disabled = root->disabled;
+    root_record->access = root->access;
+    root_record->name = root->name;
+    root_record->description = root->description;
     root_record->focusable = root->focusable;
 
     const uint32_t root_signature = signature_of(root);
@@ -332,6 +342,9 @@ uint32_t cf_diff(cf_ctx *ctx, const cf_node *root) {
         record->handlers = decl->handlers;
         record->role = decl->role;
         record->disabled = decl->disabled;
+        record->access = decl->access;
+        record->name = decl->name;
+        record->description = decl->description;
         record->focusable = decl->focusable;
 
         const uint32_t signature = signature_of(decl);
