@@ -188,6 +188,18 @@ target_include_directories(site_headless PRIVATE "${CMAKE_SOURCE_DIR}/examples/s
 set_source_files_properties(unit/site_headless.c PROPERTIES
     OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/examples/site/nav.h;${CMAKE_SOURCE_DIR}/examples/site/pages.h;${CMAKE_SOURCE_DIR}/examples/site/blocks.h;${CMAKE_SOURCE_DIR}/examples/site/tokens.h")
 
+# The route a host with its own loop takes, asserted over the header the example runs: the page
+# links no cf_app and no backend library, because the whole claim of the route is that frames come
+# from cf_frame_run and the answers come from the host's own cf_backend. The tier is named the way
+# the gallery and site ones are, so the program a person runs keeps the plain name.
+cf_add_layer_test(host_loop_headless unit/host_loop.c cf_widget cf_theme)
+
+target_include_directories(host_loop_headless PRIVATE "${CMAKE_SOURCE_DIR}/examples")
+
+# The loop is header-only, so the tier's source has to name it for a change there to rebuild it.
+set_source_files_properties(unit/host_loop.c PROPERTIES
+    OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/examples/host_loop.h")
+
 # The golden tier snapshots the command stream the recorder backend receives:
 # each scene lays out, paints and submits, and the text one command per line is
 # the diff surface a paint change is judged on. A plain run compares against
