@@ -126,7 +126,7 @@ Read this list before planning an application around it. None of it is silently
 accepted and ignored — there is no field that pretends to take these things.
 
 - **Not production-ready.** Version 1.0 is in development, and the API numbers
-  still move: the backend contract is at ABI 11 and has been broken on purpose.
+  still move: the backend contract is at ABI 12 and has been broken on purpose.
 - **Six widgets**: label, button, field, list, scroller, image. No checkbox,
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
