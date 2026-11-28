@@ -1,0 +1,649 @@
+enum|cf_access|
+enum|cf_align_content|
+enum|cf_align|
+enum|cf_announce|
+enum|cf_box_sizing|
+enum|cf_command_kind|
+enum|cf_cursor|
+enum|cf_direction|
+enum|cf_display|
+enum|cf_ease|
+enum|cf_event_type|
+enum|cf_field_mode|
+enum|cf_interact|
+enum|cf_intrinsic|
+enum|cf_justify|
+enum|cf_key|
+enum|cf_length_kind|
+enum|cf_log_channel|
+enum|cf_mod|
+enum|cf_overflow|
+enum|cf_position|
+enum|cf_role|
+enum|cf_semantic_action|
+enum|cf_semantic_state|
+enum|cf_wrap|
+field|cf_app_config.backend|2 cf_backend
+field|cf_app_config.build_user_data|1 void *
+field|cf_app_config.build|0 cf_build_fn
+field|cf_app_config.clipboard|5 const cf_clipboard *
+field|cf_app_config.fonts|4 const cf_text_stack *
+field|cf_app_config.frame_bytes|6 size_t
+field|cf_app_config.theme|3 const cf_theme *
+field|cf_arena.capacity|1 size_t
+field|cf_arena.exhausted|4 bool
+field|cf_arena.memory|0 uint8_t *
+field|cf_arena.peak|3 size_t
+field|cf_arena.used|2 size_t
+field|cf_available.height|1 cf_length
+field|cf_available.width|0 cf_length
+field|cf_backend.abi_version|0 uint32_t
+field|cf_backend.create_texture|5 uint32_t (*)(void *, uint32_t, uint32_t, const void *)
+field|cf_backend.destroy|10 void (*)(void *)
+field|cf_backend.load_image|8 bool (*)(void *, const char *, cf_image_content *)
+field|cf_backend.poll_event|6 bool (*)(void *, cf_event *)
+field|cf_backend.present|4 void (*)(void *)
+field|cf_backend.release_texture|9 void (*)(void *, uint32_t)
+field|cf_backend.set_candidate_rect|13 void (*)(void *, cf_rect)
+field|cf_backend.set_cursor|11 void (*)(void *, cf_cursor)
+field|cf_backend.set_text_input|12 void (*)(void *, bool)
+field|cf_backend.size|1 uint32_t
+field|cf_backend.submit|3 void (*)(void *, const cf_command *, uint32_t)
+field|cf_backend.surface|7 cf_size (*)(void *)
+field|cf_backend.user_data|2 void *
+field|cf_box.bottom|3 cf_length
+field|cf_box.left|0 cf_length
+field|cf_box.right|2 cf_length
+field|cf_box.top|1 cf_length
+field|cf_clipboard.read|0 cf_string (*)(void *, char *, uint32_t)
+field|cf_clipboard.user_data|2 void *
+field|cf_clipboard.write|1 bool (*)(void *, cf_string)
+field|cf_color.alpha|3 uint8_t
+field|cf_color.blue|2 uint8_t
+field|cf_color.green|1 uint8_t
+field|cf_color.red|0 uint8_t
+field|cf_command.clip|2 cf_rect
+field|cf_command.color|3 cf_color
+field|cf_command.ellipsis|8 bool
+field|cf_command.font|7 cf_font
+field|cf_command.kind|0 cf_command_kind
+field|cf_command.radius|5 float
+field|cf_command.rect|1 cf_rect
+field|cf_command.texture|9 uint32_t
+field|cf_command.text|6 cf_string
+field|cf_command.widths|4 cf_edges
+field|cf_command_list.capacity|2 uint32_t
+field|cf_command_list.commands|0 cf_command *
+field|cf_command_list.count|1 uint32_t
+field|cf_ctx.capture_id|9 cf_id
+field|cf_ctx.clipboard|5 const cf_clipboard *
+field|cf_ctx.composing|17 cf_name
+field|cf_ctx.composition_box|18 cf_rect
+field|cf_ctx.composition_id|19 cf_id
+field|cf_ctx.focus_id|10 cf_id
+field|cf_ctx.frame_id|13 uint32_t
+field|cf_ctx.frame_requested|15 bool
+field|cf_ctx.frame_seconds|14 float
+field|cf_ctx.frame|0 cf_arena
+field|cf_ctx.hover_id|7 cf_id
+field|cf_ctx.layout_ready|21 bool
+field|cf_ctx.layout|6 cf_tree
+field|cf_ctx.names|1 cf_interner
+field|cf_ctx.nodes|2 cf_store
+field|cf_ctx.press_id|8 cf_id
+field|cf_ctx.prior_id|11 cf_id
+field|cf_ctx.quit_requested|16 bool
+field|cf_ctx.rects|22 cf_rect *
+field|cf_ctx.rejection|20 const char *
+field|cf_ctx.reveal_key|23 cf_name
+field|cf_ctx.root_slot|12 uint32_t
+field|cf_ctx.states|3 cf_store
+field|cf_ctx.theme|4 const cf_theme *
+field|cf_edges.bottom|3 float
+field|cf_edges.left|0 float
+field|cf_edges.right|2 float
+field|cf_edges.top|1 float
+field|cf_event.button|3 uint32_t
+field|cf_event.captured|9 bool
+field|cf_event.key|4 uint32_t
+field|cf_event.mods|6 uint32_t
+field|cf_event.position|1 cf_point
+field|cf_event.stopped|8 bool
+field|cf_event.target|7 uint32_t
+field|cf_event.text|5 cf_string
+field|cf_event.type|0 cf_event_type
+field|cf_event.wheel|2 cf_point
+field|cf_font.handle|0 void *
+field|cf_font.ops|1 const cf_text_ops *
+field|cf_handlers.activate_data|5 void *
+field|cf_handlers.activate|4 cf_event_fn
+field|cf_handlers.change_data|7 void *
+field|cf_handlers.change|6 cf_event_fn
+field|cf_handlers.key_data|3 void *
+field|cf_handlers.key|2 cf_event_fn
+field|cf_handlers.pointer_data|1 void *
+field|cf_handlers.pointer|0 cf_event_fn
+field|cf_id.generation|1 uint32_t
+field|cf_id.index|0 uint32_t
+field|cf_image_content.height|2 float
+field|cf_image_content.texture|0 uint32_t
+field|cf_image_content.width|1 float
+field|cf_interner.bucket_count|5 size_t
+field|cf_interner.buckets|1 uint32_t *
+field|cf_interner.capacity|4 size_t
+field|cf_interner.chains|2 uint32_t *
+field|cf_interner.count|3 size_t
+field|cf_interner.texts|0 cf_string *
+field|cf_length.kind|0 cf_length_kind
+field|cf_length.value|1 float
+field|cf_node.access|7 cf_access
+field|cf_node.announce|10 cf_announce
+field|cf_node.checked|14 bool
+field|cf_node.child_count|16 uint32_t
+field|cf_node.children|15 const struct cf_node *
+field|cf_node.controls|12 cf_name
+field|cf_node.described_by|11 cf_name
+field|cf_node.description|9 cf_string
+field|cf_node.disabled|6 bool
+field|cf_node.focusable|13 bool
+field|cf_node.handlers|4 cf_handlers
+field|cf_node.key|0 cf_name
+field|cf_node.measure_data|3 void *
+field|cf_node.measure|2 cf_measure_fn
+field|cf_node.name|8 cf_string
+field|cf_node.role|5 cf_role
+field|cf_node.style|1 cf_style
+field|cf_opt_color.present|0 bool
+field|cf_opt_color.value|1 cf_color
+field|cf_opt_u32.present|0 bool
+field|cf_opt_u32.value|1 uint32_t
+field|cf_point.x|0 float
+field|cf_point.y|1 float
+field|cf_recorder.arena|0 cf_arena *
+field|cf_recorder.candidate|6 cf_rect
+field|cf_recorder.capacity|3 uint32_t
+field|cf_recorder.commands|1 cf_command *
+field|cf_recorder.count|2 uint32_t
+field|cf_recorder.cursor|4 cf_cursor
+field|cf_recorder.text_input|5 bool
+field|cf_rect.height|3 float
+field|cf_rect.width|2 float
+field|cf_rect.x|0 float
+field|cf_rect.y|1 float
+field|cf_scroll.offset|0 float
+field|cf_scrollbar.content|1 float
+field|cf_scrollbar.track|2 cf_rect
+field|cf_scrollbar.viewport|0 float
+field|cf_sdl_config.height|2 uint32_t
+field|cf_sdl_config.min_height|4 uint32_t
+field|cf_sdl_config.min_width|3 uint32_t
+field|cf_sdl_config.title|0 const char *
+field|cf_sdl_config.width|1 uint32_t
+field|cf_semantic.access|2 cf_access
+field|cf_semantic.actions|14 uint32_t
+field|cf_semantic.announce|9 cf_announce
+field|cf_semantic.controls|11 cf_id
+field|cf_semantic.described_by|10 cf_id
+field|cf_semantic.description|4 cf_string
+field|cf_semantic.id|0 cf_id
+field|cf_semantic.labelled_by|8 cf_id
+field|cf_semantic.name|3 cf_string
+field|cf_semantic.rect|12 cf_rect
+field|cf_semantic.selection_end|7 cf_opt_u32
+field|cf_semantic.selection_start|6 cf_opt_u32
+field|cf_semantic.slot|1 uint32_t
+field|cf_semantic.states|13 uint32_t
+field|cf_semantic.value|5 cf_string
+field|cf_size.height|1 float
+field|cf_size.width|0 float
+field|cf_store.alive|3 size_t
+field|cf_store.capacity|1 size_t
+field|cf_store.element_size|0 size_t
+field|cf_store.elements|5 uint8_t *
+field|cf_store.extent|2 size_t
+field|cf_store.free_head|4 uint32_t
+field|cf_store.generations|6 uint32_t *
+field|cf_store.live|8 bool *
+field|cf_store.next_free|7 uint32_t *
+field|cf_string.chars|0 const char *
+field|cf_string.length|1 uint32_t
+field|cf_style.align_content|31 cf_align_content
+field|cf_style.align_items|29 cf_align
+field|cf_style.align_self|30 cf_align
+field|cf_style.aspect_ratio|36 float
+field|cf_style.background|33 cf_opt_color
+field|cf_style.border_color|34 cf_opt_color
+field|cf_style.border|9 cf_box
+field|cf_style.box_sizing|25 cf_box_sizing
+field|cf_style.caret|41 cf_opt_color
+field|cf_style.clips_content|40 bool
+field|cf_style.color|37 cf_opt_color
+field|cf_style.column_count|13 uint32_t
+field|cf_style.column_gap|19 cf_length
+field|cf_style.column_span|16 uint32_t
+field|cf_style.column_start|15 uint32_t
+field|cf_style.column_tracks|11 const cf_track *
+field|cf_style.direction|26 cf_direction
+field|cf_style.display|24 cf_display
+field|cf_style.flex_basis|6 cf_length
+field|cf_style.flex_grow|21 float
+field|cf_style.flex_shrink|22 float
+field|cf_style.height|1 cf_length
+field|cf_style.inset|10 cf_box
+field|cf_style.justify_content|28 cf_justify
+field|cf_style.margin|7 cf_box
+field|cf_style.marked|43 cf_opt_color
+field|cf_style.max_height|5 cf_length
+field|cf_style.max_width|3 cf_length
+field|cf_style.min_height|4 cf_length
+field|cf_style.min_width|2 cf_length
+field|cf_style.order|32 int32_t
+field|cf_style.overflow_x|38 cf_overflow
+field|cf_style.overflow_y|39 cf_overflow
+field|cf_style.padding|8 cf_box
+field|cf_style.position|23 cf_position
+field|cf_style.radius|35 float
+field|cf_style.row_count|14 uint32_t
+field|cf_style.row_gap|20 cf_length
+field|cf_style.row_span|18 uint32_t
+field|cf_style.row_start|17 uint32_t
+field|cf_style.row_tracks|12 const cf_track *
+field|cf_style.selection|42 cf_opt_color
+field|cf_style.width|0 cf_length
+field|cf_style.wrap|27 cf_wrap
+field|cf_text_content.caret|4 cf_opt_u32
+field|cf_text_content.ellipsis|3 bool
+field|cf_text_content.marked_from|6 cf_opt_u32
+field|cf_text_content.marked_to|7 cf_opt_u32
+field|cf_text_content.mark|5 cf_opt_u32
+field|cf_text_content.max_lines|2 cf_opt_u32
+field|cf_text_content.nowrap|8 bool
+field|cf_text_content.stack|0 cf_text_stack
+field|cf_text_content.text|1 cf_string
+field|cf_text_edit.capacity|2 uint32_t
+field|cf_text_edit.caret|3 uint32_t
+field|cf_text_edit.chars|0 char *
+field|cf_text_edit.length|1 uint32_t
+field|cf_text_edit.mark|4 uint32_t
+field|cf_text_edit.refusals|5 uint32_t
+field|cf_text_line.ellipsis|2 bool
+field|cf_text_line.text|0 cf_string
+field|cf_text_line.width|1 float
+field|cf_text_metrics.line_height|0 float
+field|cf_text_ops.advance|1 float (*)(void *, uint32_t, uint32_t)
+field|cf_text_ops.has_glyph|2 bool (*)(void *, uint32_t)
+field|cf_text_ops.metrics|0 cf_text_metrics (*)(void *)
+field|cf_text_run.ellipsis|4 bool
+field|cf_text_run.font|0 cf_font
+field|cf_text_run.text|1 cf_string
+field|cf_text_run.width|3 float
+field|cf_text_run.x|2 float
+field|cf_text_stack.count|1 uint32_t
+field|cf_text_stack.fonts|0 const cf_font *
+field|cf_theme.bar|1 cf_style
+field|cf_theme.body|2 cf_style
+field|cf_theme.ink|3 cf_color
+field|cf_theme.muted|4 cf_color
+field|cf_theme.on_ink|5 cf_color
+field|cf_theme.page|0 cf_style
+field|cf_theme.variants|6 cf_variants [CF_ROLE_LIMIT]
+field|cf_track.max|1 cf_length
+field|cf_track.min|0 cf_length
+field|cf_tree.child_slots|4 const uint32_t *
+field|cf_tree.child_start|3 const uint32_t *
+field|cf_tree.measure_data|2 void **
+field|cf_tree.measures|1 const cf_measure_fn *
+field|cf_tree.node_count|5 uint32_t
+field|cf_tree.styles|0 const cf_style *
+field|cf_tween.duration|3 float
+field|cf_tween.ease|4 cf_ease
+field|cf_tween.elapsed|2 float
+field|cf_tween.from|0 float
+field|cf_tween.to|1 float
+field|cf_variant.background|0 cf_opt_color
+field|cf_variant.border_color|1 cf_opt_color
+field|cf_variant.caret|2 cf_opt_color
+field|cf_variant.marked|4 cf_opt_color
+field|cf_variant.selection|3 cf_opt_color
+field|cf_variants.base|0 cf_style
+field|cf_variants.checked|1 cf_variant
+field|cf_variants.disabled|5 cf_variant
+field|cf_variants.focused|4 cf_variant
+field|cf_variants.hovered|2 cf_variant
+field|cf_variants.pressed|3 cf_variant
+func|cf_alloc_block|void * cf_alloc_block(size_t)
+func|cf_alloc|void * cf_alloc(cf_arena *, size_t)
+func|cf_app_run|void cf_app_run(const cf_app_config *)
+func|cf_arena_clear|void cf_arena_clear(cf_arena *)
+func|cf_arena_free|void cf_arena_free(cf_arena *)
+func|cf_arena_init|bool cf_arena_init(cf_arena *, size_t)
+func|cf_arena_mark|size_t cf_arena_mark(const cf_arena *)
+func|cf_arena_rewind|void cf_arena_rewind(cf_arena *, size_t)
+func|cf_backend_recorder|cf_backend cf_backend_recorder(cf_recorder *)
+func|cf_backend_sdl|cf_backend cf_backend_sdl(const cf_sdl_config *)
+func|cf_box_resolve|cf_edges cf_box_resolve(cf_box, float)
+func|cf_button|cf_node cf_button(cf_ctx *, const char *, cf_on_press, void *, const cf_node *, uint32_t)
+func|cf_capture|void cf_capture(cf_event *)
+func|cf_checkbox|cf_node cf_checkbox(cf_ctx *, const char *, bool *, cf_on_press, void *)
+func|cf_children|const cf_node * cf_children(cf_ctx *, const cf_node *, uint32_t)
+func|cf_clipboard_of|const cf_clipboard * cf_clipboard_of(const cf_ctx *)
+func|cf_clipboard_sdl|cf_clipboard cf_clipboard_sdl(void)
+func|cf_col|cf_node cf_col(cf_ctx *, cf_style, const cf_node *, uint32_t)
+func|cf_composing|cf_name cf_composing(const cf_ctx *)
+func|cf_composition_run|cf_rect cf_composition_run(const cf_ctx *)
+func|cf_contrast|float cf_contrast(cf_color, cf_color)
+func|cf_ctx_free|void cf_ctx_free(cf_ctx *)
+func|cf_ctx_init|bool cf_ctx_init(cf_ctx *, size_t)
+func|cf_ctx_key|cf_name cf_ctx_key(cf_ctx *, const char *)
+func|cf_diff|uint32_t cf_diff(cf_ctx *, const cf_node *)
+func|cf_direction_is_reverse|bool cf_direction_is_reverse(cf_direction)
+func|cf_direction_is_row|bool cf_direction_is_row(cf_direction)
+func|cf_dirty_subtree|void cf_dirty_subtree(cf_ctx *, uint32_t)
+func|cf_dirty|bool cf_dirty(const cf_ctx *, uint32_t)
+func|cf_error_message|const char * cf_error_message(const cf_ctx *)
+func|cf_field|cf_node cf_field(cf_ctx *, const char *, cf_text_edit *, const cf_text_stack *, cf_field_mode)
+func|cf_focused|bool cf_focused(const cf_ctx *, cf_id)
+func|cf_focus|void cf_focus(cf_ctx *, cf_id)
+func|cf_font_sdl_close|void cf_font_sdl_close(cf_font *)
+func|cf_font_sdl|cf_font cf_font_sdl(const char *, float)
+func|cf_frame_alloc|void * cf_frame_alloc(cf_ctx *, size_t)
+func|cf_frame_begin|void cf_frame_begin(cf_ctx *)
+func|cf_frame_composition_rect|cf_rect cf_frame_composition_rect(const cf_ctx *)
+func|cf_frame_cursor|cf_cursor cf_frame_cursor(const cf_ctx *)
+func|cf_frame_layout|void cf_frame_layout(cf_ctx *, cf_available, cf_point)
+func|cf_frame_rect|const cf_rect * cf_frame_rect(const cf_ctx *, uint32_t)
+func|cf_frame_requested|bool cf_frame_requested(const cf_ctx *)
+func|cf_frame_resolve|void cf_frame_resolve(cf_ctx *)
+func|cf_frame_root|uint32_t cf_frame_root(const cf_ctx *)
+func|cf_frame_run|void cf_frame_run(cf_ctx *, cf_build_fn, void *, cf_size, float, cf_command_list *)
+func|cf_frame_seconds|float cf_frame_seconds(const cf_ctx *)
+func|cf_frame_takes_text|bool cf_frame_takes_text(const cf_ctx *)
+func|cf_frame_tree|const cf_tree * cf_frame_tree(const cf_ctx *)
+func|cf_free_block|void cf_free_block(void *)
+func|cf_hash_bytes|uint32_t cf_hash_bytes(const void *, size_t)
+func|cf_hash_fold|uint32_t cf_hash_fold(uint32_t, const void *, size_t)
+func|cf_hit_test|cf_id cf_hit_test(const cf_ctx *, cf_point)
+func|cf_hovered|bool cf_hovered(const cf_ctx *, cf_id)
+func|cf_image_measure|cf_size cf_image_measure(void *, cf_available, cf_intrinsic)
+func|cf_image|cf_node cf_image(cf_ctx *, const char *, const cf_image_content *)
+func|cf_input|void cf_input(cf_ctx *, cf_event)
+func|cf_intern_text|cf_name cf_intern_text(cf_interner *, const char *)
+func|cf_interned|cf_string cf_interned(const cf_interner *, cf_name)
+func|cf_interner_bytes|size_t cf_interner_bytes(const cf_interner *)
+func|cf_interner_free|void cf_interner_free(cf_interner *)
+func|cf_interner_init|bool cf_interner_init(cf_interner *, size_t)
+func|cf_intern|cf_name cf_intern(cf_interner *, cf_string)
+func|cf_label|cf_node cf_label(cf_ctx *, cf_string, const cf_text_stack *, cf_color)
+func|cf_layout|void cf_layout(cf_arena *, const cf_tree *, uint32_t, cf_available, cf_point, cf_rect *)
+func|cf_length_is_auto|bool cf_length_is_auto(cf_length)
+func|cf_length_of|bool cf_length_of(cf_length, cf_length, float *)
+func|cf_length_resolve|float cf_length_resolve(cf_length, float)
+func|cf_list|cf_node cf_list(cf_ctx *, const char *, float, float, uint32_t, cf_row_fn, void *)
+func|cf_log_install|void cf_log_install(cf_log_sink, void *)
+func|cf_logf|void cf_logf(cf_log_channel, const char *, ...)
+func|cf_mark_composition|void cf_mark_composition(cf_ctx *, cf_name, cf_id, cf_rect)
+func|cf_node_id|cf_id cf_node_id(const cf_ctx *, uint32_t)
+func|cf_node_slot|uint32_t cf_node_slot(const cf_ctx *, cf_id)
+func|cf_paint|void cf_paint(cf_arena *, const cf_tree *, const cf_rect *, uint32_t, cf_rect, cf_command_list *)
+func|cf_pressed|bool cf_pressed(const cf_ctx *, cf_id)
+func|cf_quit_requested|bool cf_quit_requested(const cf_ctx *)
+func|cf_release_composition|void cf_release_composition(cf_ctx *, cf_name)
+func|cf_report_change|void cf_report_change(cf_ctx *, cf_event *)
+func|cf_request_frame|void cf_request_frame(cf_ctx *)
+func|cf_request_quit|void cf_request_quit(cf_ctx *)
+func|cf_resize_block|void * cf_resize_block(void *, size_t, size_t)
+func|cf_reveal|bool cf_reveal(cf_ctx *, uint32_t)
+func|cf_row|cf_node cf_row(cf_ctx *, cf_style, const cf_node *, uint32_t)
+func|cf_scroll_clamp|float cf_scroll_clamp(float, float, float)
+func|cf_scroll_drag|float cf_scroll_drag(cf_scrollbar, cf_point, cf_point, float)
+func|cf_scroll_of|cf_scroll * cf_scroll_of(cf_ctx *, cf_name)
+func|cf_scrollbar_thumb|cf_rect cf_scrollbar_thumb(cf_scrollbar, float)
+func|cf_scroller|cf_node cf_scroller(cf_ctx *, const char *, const cf_node *, uint32_t)
+func|cf_sdl_install_log_sink|void cf_sdl_install_log_sink(void)
+func|cf_semantic_export|bool cf_semantic_export(const cf_ctx *, char *, size_t)
+func|cf_semantic_visit|void cf_semantic_visit(const cf_ctx *, void (*)(const cf_semantic *, void *), void *)
+func|cf_size_clamp|float cf_size_clamp(float, cf_length, cf_length, cf_length)
+func|cf_slot_named|uint32_t cf_slot_named(const cf_ctx *, cf_name)
+func|cf_state_bytes|size_t cf_state_bytes(const cf_ctx *)
+func|cf_state|void * cf_state(cf_ctx *, cf_name, size_t)
+func|cf_stop|void cf_stop(cf_event *)
+func|cf_store_add|void * cf_store_add(cf_store *, cf_id *)
+func|cf_store_at|void * cf_store_at(const cf_store *, size_t)
+func|cf_store_bytes|size_t cf_store_bytes(const cf_store *)
+func|cf_store_free|void cf_store_free(cf_store *)
+func|cf_store_get|void * cf_store_get(const cf_store *, cf_id)
+func|cf_store_id|cf_id cf_store_id(const cf_store *, size_t)
+func|cf_store_init|bool cf_store_init(cf_store *, size_t, size_t)
+func|cf_store_remove|void cf_store_remove(cf_store *, cf_id)
+func|cf_string_of|cf_string cf_string_of(const char *)
+func|cf_style_clips_content|static inline bool cf_style_clips_content(const cf_style *)
+func|cf_style_default|cf_style cf_style_default(void)
+func|cf_style_varied|cf_style cf_style_varied(cf_style, const cf_variants *, uint32_t)
+func|cf_text_caret_x|float cf_text_caret_x(const cf_text_content *, const cf_text_line *, uint32_t)
+func|cf_text_each_run|void cf_text_each_run(const cf_text_content *, const cf_text_line *, void (*)(void *, const cf_text_run *), void *)
+func|cf_text_line_of|uint32_t cf_text_line_of(const cf_text_content *, const cf_text_line *, uint32_t, uint32_t)
+func|cf_text_lines|uint32_t cf_text_lines(const cf_text_content *, float, cf_text_line *, uint32_t)
+func|cf_text_measure|cf_size cf_text_measure(void *, cf_available, cf_intrinsic)
+func|cf_text_next_cluster|uint32_t cf_text_next_cluster(cf_string, uint32_t)
+func|cf_text_offset_at|uint32_t cf_text_offset_at(const cf_text_content *, const cf_text_line *, float)
+func|cf_text_prev_cluster|uint32_t cf_text_prev_cluster(cf_string, uint32_t)
+func|cf_text_scroll|cf_point cf_text_scroll(const cf_text_content *, const cf_text_line *, uint32_t, cf_size)
+func|cf_theme_default|const cf_theme * cf_theme_default(void)
+func|cf_theme_of|const cf_theme * cf_theme_of(const cf_ctx *)
+func|cf_tracks_repeat|uint32_t cf_tracks_repeat(cf_track *, uint32_t, const cf_track *, uint32_t, uint32_t)
+func|cf_tween_of|cf_tween * cf_tween_of(cf_ctx *, cf_name)
+func|cf_tween_step|float cf_tween_step(cf_tween *, float)
+func|cf_tween_to|void cf_tween_to(cf_tween *, float, float, cf_ease)
+func|cf_use_clipboard|void cf_use_clipboard(cf_ctx *, const cf_clipboard *)
+func|cf_use_theme|void cf_use_theme(cf_ctx *, const cf_theme *)
+func|cf_version_string|const char * cf_version_string(void)
+func|cf_web_open_url|void cf_web_open_url(const char *)
+func|cf_web_read_hash|bool cf_web_read_hash(char *, uint32_t)
+func|cf_web_write_hash|void cf_web_write_hash(const char *)
+macro-fn|CF_CHILDREN|(...) (cf_node[]){__VA_ARGS__}, CF_CHILD_COUNT(__VA_ARGS__)
+macro-fn|CF_CHILD_COUNT|(...) (uint32_t)(sizeof((cf_node[]){__VA_ARGS__}) / sizeof(cf_node))
+macro-fn|CF_COLOR|(red, green, blue) ((cf_color){(uint8_t)(red), (uint8_t)(green), (uint8_t)(blue), 255u})
+macro-fn|CF_COL|(ctx, style, ...) cf_col((ctx), (style), CF_CHILDREN(__VA_ARGS__))
+macro-fn|CF_FR|(shares) ((cf_length){.kind = CF_LENGTH_FR, .value = (shares)})
+macro-fn|CF_PERCENT|(portion) ((cf_length){.kind = CF_LENGTH_PERCENT, .value = (portion)})
+macro-fn|CF_PT|(points) ((cf_length){.kind = CF_LENGTH_PX, .value = (points)})
+macro-fn|CF_PX|(pixels) CF_PT(pixels)
+macro-fn|CF_ROW|(ctx, style, ...) cf_row((ctx), (style), CF_CHILDREN(__VA_ARGS__))
+macro-fn|cf_id_equal|(first, second) ((first).index == (second).index && (first).generation == (second).generation)
+macro-fn|cf_id_is_none|(id) ((id).index == UINT32_MAX)
+macro|CF_AUTO|((cf_length){.kind = CF_LENGTH_AUTO, .value = 0.0f})
+macro|CF_BACKEND_ABI_VERSION|12u
+macro|CF_DEPRECATED|__declspec(deprecated) || __attribute__((deprecated)) || <empty>
+macro|CF_ELLIPSIS|0x2026u
+macro|CF_MAX_CONTENT|((cf_length){.kind = CF_LENGTH_MAX_CONTENT, .value = 0.0f})
+macro|CF_NO_ID|((cf_id){.index = UINT32_MAX, .generation = 0u})
+macro|CF_NO_LINK|UINT32_MAX
+macro|CF_NO_NAME|0u
+macro|CF_STRETCH|((cf_length){.kind = CF_LENGTH_STRETCH, .value = 0.0f})
+macro|CF_VERSION_MAJOR|0
+macro|CF_VERSION_MINOR|2
+macro|CF_VERSION_PATCH|0
+macro|CF_VERSION_STRING|"0.2.0"
+struct|cf_app_config|
+struct|cf_arena|
+struct|cf_available|
+struct|cf_backend|
+struct|cf_box|
+struct|cf_clipboard|
+struct|cf_color|
+struct|cf_command_list|
+struct|cf_command|
+struct|cf_ctx|
+struct|cf_edges|
+struct|cf_event|
+struct|cf_font|
+struct|cf_handlers|
+struct|cf_id|
+struct|cf_image_content|
+struct|cf_interner|
+struct|cf_length|
+struct|cf_node|
+struct|cf_opt_color|
+struct|cf_opt_u32|
+struct|cf_point|
+struct|cf_recorder|
+struct|cf_rect|
+struct|cf_scrollbar|
+struct|cf_scroll|
+struct|cf_sdl_config|
+struct|cf_semantic|
+struct|cf_size|
+struct|cf_store|
+struct|cf_string|
+struct|cf_style|
+struct|cf_text_content|
+struct|cf_text_edit|
+struct|cf_text_line|
+struct|cf_text_metrics|
+struct|cf_text_ops|
+struct|cf_text_run|
+struct|cf_text_stack|
+struct|cf_theme|
+struct|cf_track|
+struct|cf_tree|
+struct|cf_tween|
+struct|cf_variants|
+struct|cf_variant|
+typedef|cf_build_fn|cf_node (*)(cf_ctx *, void *)
+typedef|cf_event_fn|void (*)(cf_event *, void *)
+typedef|cf_log_sink|void (*)(cf_log_channel, const char *, void *)
+typedef|cf_measure_fn|cf_size (*)(void *, cf_available, cf_intrinsic)
+typedef|cf_name|uint32_t
+typedef|cf_on_press|void (*)(cf_ctx *, cf_id, void *)
+typedef|cf_row_fn|cf_node (*)(cf_ctx *, uint32_t, void *)
+value|cf_access.CF_ACCESS_BUTTON|2
+value|cf_access.CF_ACCESS_CHECKBOX|9
+value|cf_access.CF_ACCESS_GROUP|1
+value|cf_access.CF_ACCESS_IMAGE|5
+value|cf_access.CF_ACCESS_ITEM|7
+value|cf_access.CF_ACCESS_LABEL|4
+value|cf_access.CF_ACCESS_LIST|6
+value|cf_access.CF_ACCESS_NONE|0
+value|cf_access.CF_ACCESS_SCROLL_AREA|8
+value|cf_access.CF_ACCESS_TEXT_BOX|3
+value|cf_align.CF_ALIGN_AUTO|0
+value|cf_align.CF_ALIGN_BASELINE|5
+value|cf_align.CF_ALIGN_CENTER|3
+value|cf_align.CF_ALIGN_END|2
+value|cf_align.CF_ALIGN_START|1
+value|cf_align.CF_ALIGN_STRETCH|4
+value|cf_align_content.CF_ALIGN_CONTENT_AUTO|0
+value|cf_align_content.CF_ALIGN_CONTENT_CENTER|3
+value|cf_align_content.CF_ALIGN_CONTENT_END|2
+value|cf_align_content.CF_ALIGN_CONTENT_SPACE_AROUND|6
+value|cf_align_content.CF_ALIGN_CONTENT_SPACE_BETWEEN|5
+value|cf_align_content.CF_ALIGN_CONTENT_SPACE_EVENLY|7
+value|cf_align_content.CF_ALIGN_CONTENT_START|1
+value|cf_align_content.CF_ALIGN_CONTENT_STRETCH|4
+value|cf_announce.CF_ANNOUNCE_ASSERTIVE|2
+value|cf_announce.CF_ANNOUNCE_NONE|0
+value|cf_announce.CF_ANNOUNCE_POLITE|1
+value|cf_box_sizing.CF_BOX_BORDER|0
+value|cf_box_sizing.CF_BOX_CONTENT|1
+value|cf_command_kind.CF_COMMAND_BORDER|1
+value|cf_command_kind.CF_COMMAND_FILL|0
+value|cf_command_kind.CF_COMMAND_IMAGE|3
+value|cf_command_kind.CF_COMMAND_TEXT|2
+value|cf_cursor.CF_CURSOR_DEFAULT|0
+value|cf_cursor.CF_CURSOR_POINTER|1
+value|cf_cursor.CF_CURSOR_TEXT|2
+value|cf_direction.CF_DIRECTION_COLUMN_REVERSE|3
+value|cf_direction.CF_DIRECTION_COLUMN|2
+value|cf_direction.CF_DIRECTION_ROW_REVERSE|1
+value|cf_direction.CF_DIRECTION_ROW|0
+value|cf_display.CF_DISPLAY_FLEX|0
+value|cf_display.CF_DISPLAY_GRID|1
+value|cf_display.CF_DISPLAY_NONE|2
+value|cf_ease.CF_EASE_IN_OUT|2
+value|cf_ease.CF_EASE_LINEAR|0
+value|cf_ease.CF_EASE_OUT|1
+value|cf_event_type.CF_EVENT_COMPOSITION|9
+value|cf_event_type.CF_EVENT_KEY_DOWN|4
+value|cf_event_type.CF_EVENT_KEY_UP|5
+value|cf_event_type.CF_EVENT_POINTER_CANCEL|8
+value|cf_event_type.CF_EVENT_POINTER_DOWN|1
+value|cf_event_type.CF_EVENT_POINTER_MOVE|0
+value|cf_event_type.CF_EVENT_POINTER_UP|2
+value|cf_event_type.CF_EVENT_QUIT|6
+value|cf_event_type.CF_EVENT_SCROLL|3
+value|cf_event_type.CF_EVENT_TEXT|7
+value|cf_field_mode.CF_FIELD_MULTILINE|1
+value|cf_field_mode.CF_FIELD_SINGLE|0
+value|cf_interact.CF_INTERACT_CHECKED|16
+value|cf_interact.CF_INTERACT_DISABLED|8
+value|cf_interact.CF_INTERACT_FOCUSED|4
+value|cf_interact.CF_INTERACT_HOVERED|1
+value|cf_interact.CF_INTERACT_NONE|0
+value|cf_interact.CF_INTERACT_PRESSED|2
+value|cf_intrinsic.CF_INTRINSIC_MAX_CONTENT|1
+value|cf_intrinsic.CF_INTRINSIC_MIN_CONTENT|0
+value|cf_justify.CF_JUSTIFY_CENTER|1
+value|cf_justify.CF_JUSTIFY_END|2
+value|cf_justify.CF_JUSTIFY_SPACE_AROUND|4
+value|cf_justify.CF_JUSTIFY_SPACE_BETWEEN|3
+value|cf_justify.CF_JUSTIFY_SPACE_EVENLY|5
+value|cf_justify.CF_JUSTIFY_START|0
+value|cf_key.CF_KEY_BACKSPACE|1
+value|cf_key.CF_KEY_DELETE|9
+value|cf_key.CF_KEY_DOWN|6
+value|cf_key.CF_KEY_END|8
+value|cf_key.CF_KEY_ENTER|2
+value|cf_key.CF_KEY_ESCAPE|10
+value|cf_key.CF_KEY_F12|12
+value|cf_key.CF_KEY_HOME|7
+value|cf_key.CF_KEY_LEFT|3
+value|cf_key.CF_KEY_NONE|0
+value|cf_key.CF_KEY_RIGHT|4
+value|cf_key.CF_KEY_SPACE|13
+value|cf_key.CF_KEY_TAB|11
+value|cf_key.CF_KEY_UP|5
+value|cf_length_kind.CF_LENGTH_AUTO|0
+value|cf_length_kind.CF_LENGTH_FR|3
+value|cf_length_kind.CF_LENGTH_MAX_CONTENT|4
+value|cf_length_kind.CF_LENGTH_PERCENT|2
+value|cf_length_kind.CF_LENGTH_PX|1
+value|cf_length_kind.CF_LENGTH_STRETCH|5
+value|cf_log_channel.CF_LOG_ASSET|4
+value|cf_log_channel.CF_LOG_BACKEND|5
+value|cf_log_channel.CF_LOG_CORE|0
+value|cf_log_channel.CF_LOG_LAYOUT|1
+value|cf_log_channel.CF_LOG_PAINT|3
+value|cf_log_channel.CF_LOG_TEXT|2
+value|cf_mod.CF_MOD_ALT|4
+value|cf_mod.CF_MOD_CONTROL|2
+value|cf_mod.CF_MOD_META|8
+value|cf_mod.CF_MOD_NONE|0
+value|cf_mod.CF_MOD_SHIFT|1
+value|cf_overflow.CF_OVERFLOW_CLIP|3
+value|cf_overflow.CF_OVERFLOW_HIDDEN|1
+value|cf_overflow.CF_OVERFLOW_SCROLL|2
+value|cf_overflow.CF_OVERFLOW_VISIBLE|0
+value|cf_position.CF_POSITION_ABSOLUTE|1
+value|cf_position.CF_POSITION_RELATIVE|2
+value|cf_position.CF_POSITION_STATIC|0
+value|cf_role.CF_ROLE_BUTTON|1
+value|cf_role.CF_ROLE_CHECKBOX|6
+value|cf_role.CF_ROLE_FIELD|2
+value|cf_role.CF_ROLE_IMAGE|5
+value|cf_role.CF_ROLE_LIMIT|7
+value|cf_role.CF_ROLE_LIST|3
+value|cf_role.CF_ROLE_NONE|0
+value|cf_role.CF_ROLE_SCROLL|4
+value|cf_semantic_action.CF_SEMANTIC_ACTIVATE|1
+value|cf_semantic_action.CF_SEMANTIC_SET_FOCUS|4
+value|cf_semantic_action.CF_SEMANTIC_SET_VALUE|2
+value|cf_semantic_state.CF_SEMANTIC_CHECKED|64
+value|cf_semantic_state.CF_SEMANTIC_DISABLED|1
+value|cf_semantic_state.CF_SEMANTIC_EDITABLE|32
+value|cf_semantic_state.CF_SEMANTIC_FOCUSABLE|2
+value|cf_semantic_state.CF_SEMANTIC_FOCUSED|4
+value|cf_semantic_state.CF_SEMANTIC_HOVERED|16
+value|cf_semantic_state.CF_SEMANTIC_PRESSED|8
+value|cf_wrap.CF_NO_WRAP|0
+value|cf_wrap.CF_WRAP_REVERSE|2
+value|cf_wrap.CF_WRAP|1
