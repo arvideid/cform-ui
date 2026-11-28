@@ -1,5 +1,7 @@
 #include "cf/style.h"
 
+#include <math.h>
+
 cf_style cf_style_default(void) {
     return (cf_style){
         .margin = {.left = CF_PX(0.0f),
@@ -166,4 +168,62 @@ cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t st
     }
 
     return base;
+}
+
+/*
+ * WCAG's relative luminance, one channel at a time: the byte is normalised, taken
+ * off the sRGB transfer curve and then weighted by how much the eye reads each
+ * primary. The threshold, the linear segment's divisor, the exponent and the three
+ * weights are the specification's numbers - the curve is why the answer cannot be a
+ * blend of the bytes, and why 0x808080 is nowhere near half as bright as white.
+ */
+static float channel_luminance(uint8_t byte) {
+    const float channel = (float)byte / 255.0f;
+
+    if (channel <= 0.04045f) {
+        return channel / 12.92f;
+    }
+
+    return powf((channel + 0.055f) / 1.055f, 2.4f);
+}
+
+static float color_luminance(cf_color color) {
+    return 0.2126f * channel_luminance(color.red) + 0.7152f * channel_luminance(color.green) +
+           0.0722f * channel_luminance(color.blue);
+}
+
+/* Source-over at the byte a painter would blend with: a theme is free to state a
+ * translucent tone, and the ratio that matters is the one after it is laid. The
+ * background's alpha is not consulted, because a caller has no tone below it to
+ * name - the page it rests on is a second question. */
+static cf_color composite_over(cf_color top, cf_color bottom) {
+    if (top.alpha == 255u) {
+        return top;
+    }
+
+    const float cover = (float)top.alpha / 255.0f;
+    const float show = 1.0f - cover;
+
+    return (cf_color){(uint8_t)((float)top.red * cover + (float)bottom.red * show + 0.5f),
+                      (uint8_t)((float)top.green * cover + (float)bottom.green * show + 0.5f),
+                      (uint8_t)((float)top.blue * cover + (float)bottom.blue * show + 0.5f), 255u};
+}
+
+/* The definition puts the lighter luminance on top, so the ratio does not depend on
+ * which tone the caller names first: a page asks about ink on a fill and about the
+ * same fill under other ink, and both questions want one answer. */
+float cf_contrast(cf_color foreground, cf_color background) {
+    float lighter = color_luminance(composite_over(foreground, background));
+    float darker = color_luminance(background);
+
+    if (lighter < darker) {
+        const float between = lighter;
+        lighter = darker;
+        darker = between;
+    }
+
+    /* The 0.05 is the specification's allowance for a viewing surround, and it is
+     * what keeps the ratio finite: a tone against itself answers 1, black against
+     * white the 21 the definition is anchored on. */
+    return (lighter + 0.05f) / (darker + 0.05f);
 }

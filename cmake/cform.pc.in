@@ -11,5 +11,6 @@ Description: @PROJECT_DESCRIPTION@
 Version: @PROJECT_VERSION@
 Cflags: -I${includedir}
 # Deepest layer last: static archives resolve left to right, so a consumer
-# that wants one floor drops the layers above the one it calls.
-Libs: -L${libdir} -lcf_app -lcf_widget -lcf_node -lcf_paint -lcf_text -lcf_layout -lcf_theme -lcf_style -lcf_base
+# that wants one floor drops the layers above the one it calls. The math
+# library rides at the end because it is the layer below every one of them.
+Libs: -L${libdir} -lcf_app -lcf_widget -lcf_node -lcf_paint -lcf_text -lcf_layout -lcf_theme -lcf_style -lcf_base@CFORM_PC_MATH@

@@ -129,6 +129,9 @@ static const api_symbol style_symbols[] = {
     {"cf_theme_default", "const cf_theme *cf_theme_default(void);",
      "The neutral scale the gallery reads and this site is themed with: near-whites and one dark "
      "accent."},
+    {"cf_contrast", "float cf_contrast(cf_color foreground, cf_color background);",
+     "The WCAG ratio between two tones, counted from the lighter one: 4.5 for text a person reads, "
+     "3 for a mark that only has to show."},
     {"cf_length_resolve", "float cf_length_resolve(cf_length length, float reference);",
      "A length as a plain measurement; auto and fr hold nothing and read as zero."},
     {"cf_length_of", "bool cf_length_of(cf_length declaration, cf_length offer, float *out);",

@@ -55,6 +55,19 @@ add_library(cf_style STATIC
 
 target_link_libraries(cf_style PUBLIC cf_base)
 
+# The contrast arithmetic takes a channel off the sRGB curve with powf, which glibc
+# keeps in a library of its own. MSVC's CRT and Apple's libSystem already carry it,
+# so the layer's interface only grows where the library exists to be found - and the
+# name rather than the path is what gets exported, so a consumer on another machine
+# resolves it with its own toolchain.
+find_library(CFORM_MATH_LIBRARY m)
+if(CFORM_MATH_LIBRARY)
+    target_link_libraries(cf_style PUBLIC m)
+    set(CFORM_PC_MATH " -lm")
+else()
+    set(CFORM_PC_MATH "")
+endif()
+
 # cf_theme is the design system over the style vocabulary: the neutral scale
 # a build reads its surfaces from, and the per-state paint each widget family
 # resolves by. It is data, and the layers above it are its only readers.

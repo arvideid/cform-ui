@@ -419,6 +419,19 @@ typedef struct cf_theme {
 cf_style cf_style_varied(cf_style base, const cf_variants *variants, uint32_t states);
 
 /*
+ * The contrast ratio WCAG 1.4.3 defines between two tones: 21 between black and
+ * white, 1 between a tone and itself, and the number in between read off the
+ * relative luminance of the bytes. A translucent foreground is answered as the
+ * tone a painter would blend it into over the background rather than as its own
+ * RGB, because that is what a person sees.
+ *
+ * The floor is the caller's to state, and the two worth stating are the
+ * specification's: 4.5 for text a person reads, 3 for a mark that only has to be
+ * noticeable - a focus edge, a selection band, a switch's fill.
+ */
+float cf_contrast(cf_color foreground, cf_color background);
+
+/*
  * The neutral scale the gallery reads: a 60-30-10 field of near-whites with
  * one dark accent reserved for the primary action, every fill clearing
  * WCAG-AA against the text tone it carries.

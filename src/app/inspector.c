@@ -10,7 +10,7 @@
  * the edges and the width holds the longest labeled line. */
 #define PANEL_WIDTH 168.0f
 #define PANEL_PADDING 8.0f
-#define PANEL_LINES 7u
+#define PANEL_LINES 8u
 #define LINE_BYTES 32u
 
 /* "says " plus the widest word the line can carry: the panel prints through the same buffer every
@@ -146,6 +146,43 @@ static uint32_t round_points(float value) {
 }
 
 /*
+ * The hardest pair a reader has on this page: each text tone against each surface
+ * the theme says it paints. A surface that states no fill is passed over - nothing
+ * is laid there, so no text is read over it - and a context with no design system
+ * at all answers a negative, which the line prints as an empty reading rather than
+ * a ratio of 1 that would read as a failure of the page's own choosing.
+ *
+ * The number is on the panel because a contrast rule is invisible in exactly the
+ * way it matters: a page at 3.2:1 looks like a page, and only the arithmetic says a
+ * person with low vision cannot read it. This is the same reading a tier asserts.
+ */
+static float weakest_text_contrast(const cf_theme *theme) {
+    if (theme == NULL) {
+        return -1.0f;
+    }
+
+    const cf_style *const surfaces[] = {&theme->page, &theme->bar, &theme->body};
+    const cf_color tones[] = {theme->ink, theme->muted};
+    float weakest = -1.0f;
+
+    for (uint32_t s = 0u; s < sizeof surfaces / sizeof *surfaces; ++s) {
+        if (!surfaces[s]->background.present) {
+            continue;
+        }
+
+        for (uint32_t t = 0u; t < sizeof tones / sizeof *tones; ++t) {
+            const float pair = cf_contrast(tones[t], surfaces[s]->background.value);
+
+            if (weakest < 0.0f || pair < weakest) {
+                weakest = pair;
+            }
+        }
+    }
+
+    return weakest;
+}
+
+/*
  * What a bridge would say about the box the keyboard stands on. Reading it off the panel is how a
  * developer catches a control nobody named: the page looks right and a person hears nothing, so
  * the words have to be written somewhere a sighted person can see them.
@@ -226,10 +263,20 @@ void app_inspector_append(cf_ctx *ctx, const cf_text_stack *fonts, uint32_t pain
                 round_points(canvas.height));
     append_line(ctx, out, fonts, panel, 5u, height, "frame %uus", frame_us);
 
+    /* The reading of the table the frame styled from, not of the panel's own fixed
+     * tones: the numbers a page is checked against are the ones it chose. */
+    const float weakest = weakest_text_contrast(cf_theme_of(ctx));
+
+    if (weakest >= 0.0f) {
+        append_line(ctx, out, fonts, panel, 6u, height, "contrast %.1f", weakest);
+    } else {
+        append_line(ctx, out, fonts, panel, 6u, height, "contrast -");
+    }
+
     /* Read last: the walk wants the rects cf_frame_layout wrote, and a page with no focused box is
      * the common case rather than a failure, so it prints as an empty ask. */
     focus_words words = {0};
     cf_semantic_visit(ctx, copy_focus_words, &words);
-    append_line(ctx, out, fonts, panel, 6u, height, "says %s",
+    append_line(ctx, out, fonts, panel, 7u, height, "says %s",
                 !words.focused ? "-" : (words.spoken ? words.bytes : "nothing"));
 }
