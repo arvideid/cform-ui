@@ -60,6 +60,11 @@ BREAK_FOOTER = re.compile(r"^BREAKING(?:[ -]CHANGE)?(?::|\s*!\s*:?)[ \t]*(?P<tex
 ABI_DEFINE = re.compile(r"#define\s+CF_BACKEND_ABI_VERSION\s+(\d+)")
 VERSION_TAG = re.compile(r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 
+# What a `--date=short` answer looks like. git prints a placeholder it does not know as
+# its own text, so a format string that outlives the version of git running it would
+# otherwise publish "%cF" where a reader expects the day a version was cut.
+DATE_STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 FIELD, RECORD = "\x1e", "\x1f"
 
 
@@ -214,7 +219,7 @@ def index(url_base):
     entries = []
 
     for tag in [one for one in listed.splitlines() if VERSION_TAG.match(one)]:
-        stamp = git("log", "-1", "--format=%cF", tag)
+        stamp = (git("log", "-1", "--date=short", "--format=%cd", tag) or "").strip()
         # Highlights are what the release brought, which means the range since the
         # tag before it. A release's own commit is one commit on purpose, and a
         # page built from it would show one line for a whole minor.
@@ -224,7 +229,7 @@ def index(url_base):
         entries.append({
             "version": tag.lstrip("v").split("-")[0],
             "tag": tag,
-            "date": stamp.strip() if stamp else None,
+            "date": stamp if DATE_STAMP.match(stamp) else None,
             "url": (url_base.rstrip("/") + "/releases/tag/" + tag) if url_base else None,
             "abi": abi_at(tag),
             "prerelease": "-" in tag.lstrip("v"),
