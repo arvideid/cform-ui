@@ -80,10 +80,16 @@ jobs:
       # the bump between the previous release's baseline and this tag's number. A
       # first release has no previous tag to describe, so 0.1.0 - the committed
       # baseline from before the versioning contract - is where the count starts.
+      # Described from the tag's parent, because git describe names the tag it is
+      # shown: asked about the tagged commit it answers with the release being cut,
+      # and a gate measuring a tree against its own baseline passes by construction.
+      # A suffixed tag is excluded for the reason docs/releases.md gives - an -rc is
+      # not a version anyone depends on - and no step commits the baseline named
+      # 0.3.0-rc1.txt that describing across a candidate would otherwise ask for.
       - name: The surface matches the bump the tag took
         run: |
-          previous="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^@" 2>/dev/null \
-            || echo v0.1.0)"
+          previous="$(git describe --tags --abbrev=0 --exclude '*-*' "${GITHUB_REF_NAME}^" \
+            2>/dev/null || echo v0.1.0)"
           echo "release: gating against tests/api/${previous#v}.txt"
           python3 tools/check_api.py --baseline "tests/api/${previous#v}.txt"
 

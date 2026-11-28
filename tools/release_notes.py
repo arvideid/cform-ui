@@ -81,8 +81,16 @@ def resolves(revision):
 
 
 def range_of(tag):
-    """The commits this release adds, as (previous, revision range)."""
-    described = git("describe", "--tags", "--abbrev=0", tag + "^@")
+    """The commits this release adds, as (previous, revision range).
+
+    Described from the tag's parent: `git describe` names the tag whose commit it is shown,
+    so asked about the release itself it answers with that release and the range would run
+    from the tag to itself. The parent is the first commit the release adds, and the tag
+    cannot be reached from it. A suffixed tag is skipped for the reason docs/releases.md
+    gives: a candidate is not a version anyone depends on, so the commits it added still
+    belong to the release that follows.
+    """
+    described = git("describe", "--tags", "--abbrev=0", "--exclude", "*-*", tag + "^")
 
     if described and described.strip():
         previous = described.strip()
