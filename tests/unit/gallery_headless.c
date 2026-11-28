@@ -2883,6 +2883,24 @@ static void the_page_that_changes_its_mind_turns_whole_in_one_frame(void) {
     CF_CHECK(page_reads("built for a dark page on 16-point squares"),
              "while the line written in that same frame reads the new numbers with it");
 
+    /* The other system is held to the same arithmetic as the shipped one, because a page that
+     * changes its mind must not change it into a page nobody can read. The reading is taken off the
+     * table the frame styled from rather than off the page's own paints: a swap that carries a
+     * fill without carrying the tone that reads on it is the mistake the rule exists to catch. */
+    const cf_theme *const other = cf_theme_of(&session);
+    CF_CHECK(other != NULL && cf_contrast(other->ink, other->body.background.value) >= 4.5f,
+             "the other system's ink reads on its card");
+    CF_CHECK(other != NULL && cf_contrast(other->muted, other->page.background.value) >= 4.5f,
+             "and its secondary tone reads on its field");
+    CF_CHECK(other != NULL &&
+                 cf_contrast(other->variants[CF_ROLE_BUTTON].focused.border_color.value,
+                             other->variants[CF_ROLE_BUTTON].base.background.value) >= 3.0f,
+             "the ring a focused button wears stands off the fill it borders");
+    CF_CHECK(other != NULL &&
+                 cf_contrast(other->variants[CF_ROLE_FIELD].focused.caret.value,
+                             other->variants[CF_ROLE_FIELD].base.background.value) >= 3.0f,
+             "and the caret a focused field books stands out in its own well");
+
     /* The bit belongs to the page and not to the theme, so the box that changed its own paint is
      * still on when a bridge is asked in the frame it changed in. */
     ask_the_page();

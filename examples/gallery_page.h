@@ -212,14 +212,20 @@ static cf_theme other_system(void) {
 
     /* The accent turns over: what was a dark button on a light page is a light button on a dark
      * one, and the hand's marks stay a step off the fill in either direction. #fafafa on #0a0a0a
-     * is 19:1 - the same reading the default theme's ink gives on its light card. */
+     * is 19:1 - the same reading the default theme's ink gives on its light card.
+     *
+     * The focus ring is the one mark carried across untouched rather than inverted with everything
+     * else. It is a mid grey chosen to clear 3:1 on both sides of an edge, which is the property a
+     * ring needs on a page that has turned itself over: against the light fill it now borders it
+     * reads 3.7:1 and against the black field 5.5:1, while the grey this chapter first stated - the
+     * hover's own 163 - sat 2.4:1 on the light fill and vanished into it. A tier checks the number;
+     * a swap that repaints every tone is how a mark like that gets lost. */
     dark.variants[CF_ROLE_BUTTON].base.background = stated(250, 250, 250);
     dark.variants[CF_ROLE_BUTTON].base.border_color = stated(250, 250, 250);
     dark.variants[CF_ROLE_BUTTON].base.padding =
         (cf_box){CF_PT(10.0f), CF_PT(6.0f), CF_PT(10.0f), CF_PT(6.0f)};
     dark.variants[CF_ROLE_BUTTON].hovered.background = stated(212, 212, 212);
     dark.variants[CF_ROLE_BUTTON].pressed.background = stated(163, 163, 163);
-    dark.variants[CF_ROLE_BUTTON].focused.border_color = stated(163, 163, 163);
     dark.variants[CF_ROLE_BUTTON].disabled.background = stated(38, 38, 38);
     dark.variants[CF_ROLE_BUTTON].disabled.border_color = stated(64, 64, 64);
 
