@@ -56,8 +56,12 @@ jobs:
       - name: API surface classifier
         run: python3 tools/check_api.py --probe
 
+      # No baseline is named here on purpose. The tool takes the newest committed surface
+      # under tests/api/, which is the last release because a baseline is committed only when
+      # a tag goes out. A hard-coded path would keep passing after the next tag while gating a
+      # two-release-old diff, and a step that gates the wrong diff cannot say so.
       - name: API surface against the last release
-        run: python3 tools/check_api.py --baseline tests/api/0.1.0.txt
+        run: python3 tools/check_api.py
 
       # A document that disagrees with the header it describes is the bug, so the
       # documents are read against the source every run: the count of slots a backend

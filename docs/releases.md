@@ -225,3 +225,9 @@ cmake --build --preset web --target cf_amalgamate
 
 The `--range` form is for the first release and for dry runs: with no previous
 tag to describe, the commits a release adds are the ones you name.
+
+The `--baseline` is named here and left out everywhere else. Without it the
+command reads the newest committed surface the header does not exceed, which is
+the last release for ordinary work; in a release branch that has already run
+step 3 it is the branch's own file, and measuring a tree against itself proves
+nothing. Name the tag that shipped.

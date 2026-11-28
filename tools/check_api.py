@@ -12,8 +12,8 @@ source that compiles and runs unchanged, source that compiles and runs changed,
 and source that keeps compiling and stores the wrong number.
 
 Run it
-    python tools/check_api.py                    # gate the tree
-    python tools/check_api.py --baseline tests/api/0.1.0.txt
+    python tools/check_api.py                   # gate the tree against the last release
+    python tools/check_api.py --baseline tests/api/0.1.0.txt   # against an older one
     python tools/check_api.py --probe           # check the classifier itself
 """
 
@@ -27,6 +27,7 @@ import api_surface
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 INCLUDE = ROOT / "include" / "cf"
 DOCS = ROOT / "docs"
+API = ROOT / "tests" / "api"
 
 # Ordered by what a caller owes, with RENUMBER past a MAJOR: a MAJOR is a break
 # someone can read about in release notes and migrate, and a renumbered member is
@@ -205,8 +206,38 @@ def abi_is_documented(new):
                      path.read_text(encoding="utf-8")) is not None
 
 
-def gate(baseline_path):
+def latest_baseline(stated):
+    """The committed surface this tree ships on top of, or None when there is none.
+
+    The newest baseline the header does not exceed. A higher one describes a version this
+    tree does not claim, and the newest at or below it is the last release that shipped -
+    docs/releases.md commits a release's own baseline in the same branch that prepares it,
+    which is why a release branch names the previous tag by hand instead.
+    """
+    shipped = [(version_of(path.stem), path) for path in API.glob("*.txt")]
+    at_or_below = [one for one in shipped if one[0] is not None and one[0] <= stated]
+
+    return max(at_or_below, default=(None, None))[1]
+
+
+def gate(baseline_path=None):
     """0 when the tree may ship under the version it states, 1 when it may not."""
+    stated = tuple(header_version())
+    if len(stated) != 3:
+        print(
+            "check api: include/cf/version.h does not state three numbers", file=sys.stderr)
+        return 1
+
+    if baseline_path is None:
+        baseline_path = latest_baseline(stated)
+        if baseline_path is None:
+            print("check api: no committed baseline at or below %d.%d.%d under tests/api/, so "
+                  "there is nothing to measure this surface against.\n"
+                  "    python tools/api_surface.py -o tests/api/<last-release>.txt\n"
+                  "docs/releases.md writes that file when it cuts a tag." % stated,
+                  file=sys.stderr)
+            return 1
+
     if not baseline_path.exists():
         print("check api: no baseline at %s. Refresh it with\n"
               "    python tools/api_surface.py -o tests/api/<last-release>.txt\n"
@@ -223,12 +254,6 @@ def gate(baseline_path):
         after = items_of(current)
     except ValueError as error:
         print("check api: " + str(error), file=sys.stderr)
-        return 1
-
-    stated = tuple(header_version())
-    if len(stated) != 3:
-        print(
-            "check api: include/cf/version.h does not state three numbers", file=sys.stderr)
         return 1
 
     moved = abi_change(before, after)
@@ -360,8 +385,9 @@ def probe():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--baseline", default=str(ROOT / "tests" / "api" / "0.1.0.txt"),
-                        help="the committed surface to compare against")
+    parser.add_argument("--baseline", default=None,
+                        help="the committed surface to compare against (default: the newest "
+                             "tests/api/<version>.txt the stated version does not exceed)")
     parser.add_argument("--probe", action="store_true",
                         help="check the classifier rather than the tree")
     arguments = parser.parse_args()
@@ -369,7 +395,7 @@ def main():
     if arguments.probe:
         return probe()
 
-    return gate(pathlib.Path(arguments.baseline))
+    return gate(pathlib.Path(arguments.baseline) if arguments.baseline else None)
 
 
 if __name__ == "__main__":
