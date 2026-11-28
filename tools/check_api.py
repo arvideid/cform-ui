@@ -173,6 +173,22 @@ def bump_between(before, after):
     return "NONE"
 
 
+def ceiling(before, after):
+    """The most severe diff the bump from `before` to `after` is allowed to carry.
+
+    docs/versioning.md: while the major number is `0`, the MINOR is where a break still
+    lives, so below 1.0 a MINOR bump carries what would need a MAJOR above it. A PATCH
+    carries fixes at either side of that line, and a version that did not move carries
+    nothing at all.
+    """
+    allowed = bump_between(before, after)
+
+    if allowed == "MINOR" and after[0] == 0:
+        return "MAJOR"
+
+    return allowed
+
+
 def abi_change(baseline, current):
     """(old, new) for the backend ABI number, when it moved at all."""
     old = baseline.get(("macro", ABI_MACRO))
@@ -224,6 +240,12 @@ def gate(baseline_path):
 
     level, notes = classify(before, after)
 
+    baseline_version = version_of(baseline_path.stem)
+    if baseline_version is None:
+        print("check api: %s does not name a version, so there is no bump to read the "
+              "diff against." % baseline_path.name, file=sys.stderr)
+        return 1
+
     if level == "RENUMBER":
         print("check api: the public surface renumbers something a caller has already "
               "stored.", file=sys.stderr)
@@ -233,7 +255,7 @@ def gate(baseline_path):
               "version bump buys this back.", file=sys.stderr)
         return 1
 
-    allowed = bump_between(version_of(baseline_path.stem), "%d.%d.%d" % stated)
+    allowed = ceiling(baseline_version, stated)
 
     if level != "NONE" and allowed == "NONE":
         print("check api: the surface moved by %s and include/cf/version.h still says the "
@@ -262,10 +284,11 @@ def gate(baseline_path):
 
 
 def probe():
-    """The classifier against the two diffs a reviewer cannot be asked to eyeball.
+    """The classifier and the bump rule against the diffs a reviewer cannot eyeball.
 
-    Both are built from the tree's own surface, so the probe is testing the
-    classifier rather than a fixture someone kept in step by hand.
+    The surface cases are built from the tree's own surface, so the probe is testing the
+    classifier rather than a fixture someone kept in step by hand. The bump cases are
+    plain version triples, because what they check is which bump may carry which break.
     """
     text = read_surface()
     if text is None:
@@ -313,6 +336,24 @@ def probe():
     inserted[("value", "cf_length_kind.CF_LENGTH_EARLY")] = "1"
     expect("a number taken from below the last is refused",
            base, inserted, "RENUMBER")
+
+    def expect_ceiling(name, before, after, wanted):
+        nonlocal failures
+        got = ceiling(before, after)
+        if got != wanted:
+            print("probe %s: wanted %s, got %s" % (name, wanted, got), file=sys.stderr)
+            failures += 1
+        else:
+            print("probe %s: %s, as the rule says" % (name, got))
+
+    # The rule docs/versioning.md states and the gate has to enforce: below 1.0 the MINOR
+    # is where a break lives, a PATCH never carries one, and a number that did not move
+    # carries nothing.
+    expect_ceiling("a 0.MINOR bump carries a break", (0, 1, 0), (0, 2, 0), "MAJOR")
+    expect_ceiling("a 0.PATCH bump carries fixes only", (0, 2, 0), (0, 2, 1), "PATCH")
+    expect_ceiling("a version that did not move carries nothing", (0, 2, 0), (0, 2, 0), "NONE")
+    expect_ceiling("crossing into 1.0 is a MAJOR bump", (0, 2, 0), (1, 0, 0), "MAJOR")
+    expect_ceiling("above 1.0 a break needs the major", (1, 2, 3), (1, 3, 0), "MINOR")
 
     return 1 if failures else 0
 
