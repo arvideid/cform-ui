@@ -141,10 +141,13 @@ static void route_key(cf_event *event, void *user_data) {
  * Where the address bar says the reader is.
  *
  * A press writes a route and this reads one back, so the bar is the record rather than
- * the receipt: typing an address, pasting a link, and the back and forward buttons all
- * arrive here instead of needing a listener the frame driver knows nothing about. The
- * test is against what this shell already holds, which is what stops a write and a read
- * of the same route from turning one navigation into two rebuilds.
+ * the receipt. Typing an address and pasting a link arrive here because they bring a new
+ * page with them. A route the tab changed under a page already running arrives on the next
+ * frame this builds, and the idle rule can leave that frame a while away: pressing Back
+ * without touching the canvas keeps the page that was there, which is the gap the
+ * back-button row in docs/backlog.md keeps. The test is against what this shell already
+ * holds, which is what stops a write and a read of the same route from turning one
+ * navigation into two rebuilds.
  *
  * A build with no browser reads nothing and keeps what it has, so a native window stays
  * on the keyboard route and this line costs it a call that answers false. It is handed
