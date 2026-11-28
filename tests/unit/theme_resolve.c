@@ -368,6 +368,69 @@ static void a_theme_named_between_frames_styles_the_frame_after(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The other direction a host changes its design system: not a table named where there was none, but
+ * one replaced by a second that says less. A resolve kept across frames would answer with the first
+ * table's numbers whatever the second one stated, so the second leaves the very field the first
+ * overrode unset - the frame after the naming has to fall back to the declaration, and the frame
+ * after that has to pick the first table up again.
+ */
+static void a_second_theme_replaces_the_first_whole(void) {
+    cf_ctx ctx;
+
+    if (!context_of(&ctx)) {
+        return;
+    }
+
+    const cf_theme *const first = cf_theme_default();
+
+    /* Built from the shipped table rather than from nothing: a theme is read field by field, and
+     * the only difference this case needs is one state said and the same state left alone. */
+    cf_theme sparse = *first;
+    sparse.variants[CF_ROLE_BUTTON].disabled = (cf_variant){0};
+
+    cf_node root = node_of(CF_NO_NAME);
+    root.style = cf_style_default();
+    root.style.width = CF_PX(200.0f);
+    root.style.height = CF_PX(60.0f);
+
+    /* styled_of declares the box it fills when no state overrides it, so the answer the second
+     * table has to give is a number this file wrote rather than one it inherited. */
+    cf_node button = styled_of(CF_NO_NAME, CF_ROLE_BUTTON);
+    button.disabled = true;
+
+    const cf_node children[] = {button};
+    root.children = children;
+    root.child_count = 1u;
+
+    cf_use_theme(&ctx, first);
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the first frame claims the declaration");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(color_is(frame_style(&ctx, 1u).background, 229),
+             "the first table drops a switched-off box to its own well");
+
+    cf_use_theme(&ctx, &sparse);
+    CF_CHECK(cf_theme_of(&ctx) == &sparse, "the context reads the table it was just named");
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "the frame after the naming keeps the slot");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(color_is(frame_style(&ctx, 1u).background, 20),
+             "and a table silent about that state leaves the declaration standing");
+
+    cf_use_theme(&ctx, first);
+
+    cf_frame_begin(&ctx);
+    CF_CHECK(cf_diff(&ctx, &root) != CF_NO_LINK, "and the frame after that keeps it");
+    cf_frame_resolve(&ctx);
+    CF_CHECK(color_is(frame_style(&ctx, 1u).background, 229),
+             "naming the first table back brings its numbers with it");
+
+    cf_ctx_free(&ctx);
+}
+
 static void a_state_change_between_frames_changes_the_variant(void) {
     cf_ctx ctx;
 
@@ -470,6 +533,7 @@ int main(void) {
     CF_RUN(a_node_without_a_role_keeps_its_declared_style);
     CF_RUN(resolve_without_a_theme_or_a_view_is_a_no_op);
     CF_RUN(a_theme_named_between_frames_styles_the_frame_after);
+    CF_RUN(a_second_theme_replaces_the_first_whole);
     CF_RUN(a_state_change_between_frames_changes_the_variant);
     CF_RUN(flipping_the_disabled_switch_marks_the_node_dirty);
 
