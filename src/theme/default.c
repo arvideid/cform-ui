@@ -13,9 +13,11 @@
  * cards that lift off it, #e5e5e5 the wells that sit below them. #171717 is
  * the single accent, reserved for the primary action, and #d4d4d4 the
  * hairline every box edges with. Text tones are chosen so every fill clears
- * WCAG-AA against its label: #0a0a0a on #fafafa is 19:1, #fafafa on #171717
- * is 16:1, #525252 on #fafafa is 7.9:1, and the selection band #bfdbfe under
- * the same ink is 12:1.
+ * WCAG-AA against its label: #0a0a0a on #fafafa is 19.0:1, #fafafa on #171717
+ * is 17.2:1, #525252 on #fafafa is 7.5:1, and the selection band #bfdbfe under
+ * the same ink is 13.9:1. Those four numbers are the theme's own claim and the
+ * `theme_resolve` tier computes each one, because a ratio quoted in a comment is
+ * read as a checked number and only the arithmetic can keep it true.
  */
 
 /*
@@ -70,9 +72,10 @@ static const cf_theme
                          .pressed =
                              {.background = {.present = true, .value = RGBA(10, 10, 10)}},
                          /* The ring a keyboard hand leaves behind: a mid grey that clears
-                          * roughly 3:1 against both the button's own dark fill and the light
-                          * surface it rests on, so the edge reads on either side instead of
-                          * vanishing into the fill the way a darker or lighter line would. */
+                          * 3:1 on every side of the edge it draws - 4.7:1 on the accent it
+                          * borders, 3.1:1 at its weakest against the well - so the mark reads
+                          * whichever surface a focused box rests on instead of vanishing into
+                          * the fill the way a darker or lighter line would. */
                          .focused =
                              {.border_color = {.present = true, .value = RGBA(130, 130, 130)}},
                          .disabled = {.background = {.present = true, .value = RGBA(229, 229, 229)},
@@ -112,7 +115,7 @@ static const cf_theme
                           * The mark is the edge rather than the fill: a row already
                           * wears the hover's well under a hand, and a focus the eye
                           * cannot tell from a mouse would say nothing about where
-                          * Enter lands. Ink on the page's own tone is 19:1. */
+                          * Enter lands. Ink on the page's own tone is 18.2:1. */
                          .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)}}},
                     /* The role styles the scrollable container, not the thumb. A pane that
                      * darkens wherever the pointer happens to rest is not a control, and the
@@ -149,7 +152,7 @@ static const cf_theme
                              {.border_color = {.present = true, .value = RGBA(163, 163, 163)}},
                          .pressed = {.background = {.present = true, .value = RGBA(10, 10, 10)}},
                          /* The same ring the field's focus edge wears: ink on the page's own
-                          * tone is 19:1, and the box has no fill of its own to hide behind
+                          * tone is 18.2:1, and the box has no fill of its own to hide behind
                           * when it is off. */
                          .focused = {.border_color = {.present = true, .value = RGBA(10, 10, 10)}},
                          .disabled =
