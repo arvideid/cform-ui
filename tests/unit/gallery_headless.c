@@ -1959,19 +1959,26 @@ static void the_keyboard_walks_the_page_and_asks_where_it_stands(void) {
              "reverse Tab walks back and the space bar asks the same way Enter does");
 
     /* Onward from the second chip the ring runs out the rest of the page and comes back round to
-     * its start. Stepping until the count moves is what keeps this about the wrap rather than about
-     * how many controls happen to sit below the chips - a chapter added at the end of the document
-     * lengthens the run without changing the rule. */
+     * its start. Stepping until the keyboard stands on the first control again is what keeps this
+     * about the wrap rather than about how many controls were written below the chips: a chapter
+     * added at either end lengthens the run without changing the rule, and asking every box on the
+     * way would only prove that something down there answers a key. */
+    const uint32_t opener = cf_slot_named(&session, cf_ctx_key(&session, "count"));
+    CF_CHECK(opener != CF_NO_LINK, "the control the walk started on is a box this frame laid");
+
     uint32_t around = 0u;
 
-    while (*click_count(&session) == 1u && around < 24u) {
+    do {
         step(tab_key(false));
-        step(key_down(CF_KEY_ENTER));
         around++;
-    }
+    } while (around < 24u && !cf_focused(&session, cf_node_id(&session, opener)));
 
-    CF_CHECK(around < 24u, "the walk reached a control whose ask the first chapter counts");
-    CF_CHECK(*click_count(&session) == 2u, "a walk off the end of the page returns to its start");
+    CF_CHECK(around < 24u, "a walk off the end of the page returns to its start");
+
+    step(key_down(CF_KEY_ENTER));
+
+    CF_CHECK(*click_count(&session) == 2u,
+             "and the box it came back to is the one the first chapter counts");
     CF_CHECK(!cf_frame_takes_text(&session),
              "and the box it stopped on takes the keyboard without asking for one to show");
 
@@ -2660,11 +2667,11 @@ static void a_relation_names_the_box_the_page_carries(void) {
 }
 
 /*
- * Where this frame laid the box a chapter keyed. A switch is found by the name its build interned
- * rather than by the size the theme's family states, so a design that moves the square drives the
- * same control here instead of reporting a hunt that no longer holds.
+ * Where this frame laid the box a chapter keyed. A box is found by the key its build was given
+ * rather than by the size or the tone the theme's family states, so a design that moves the square
+ * drives the same control here instead of reporting a hunt that no longer holds.
  */
-static cf_rect switch_square(const char *name, bool *found) {
+static cf_rect box_keyed(const char *name, bool *found) {
     *found = false;
 
     const uint32_t slot = cf_slot_named(&session, cf_ctx_key(&session, name));
@@ -2721,7 +2728,7 @@ static void the_switch_the_page_holds_moves_under_both_hands(void) {
     }
 
     bool found = false;
-    const cf_rect mail = switch_square("mail me", &found);
+    const cf_rect mail = box_keyed("mail me", &found);
     CF_CHECK(found, "the box the build keyed is laid out on the chapter");
 
     cf_color tone = {0};
@@ -2734,7 +2741,7 @@ static void the_switch_the_page_holds_moves_under_both_hands(void) {
 
     CF_CHECK(*switch_held(&session),
              "a release that started and ended inside moved the page's bit");
-    const cf_rect lit = switch_square("mail me", &found);
+    const cf_rect lit = box_keyed("mail me", &found);
     CF_CHECK(painted_tone(lit, &tone), "and the frame that read the bit back filled the square");
     CF_CHECK(grey_is(tone, 23u), "and it filled it with the accent the theme has for on");
     CF_CHECK(page_reads("the page heard 1 ask"), "and the box told the page it had moved");
@@ -2761,7 +2768,7 @@ static void the_switch_the_page_holds_moves_under_both_hands(void) {
     CF_CHECK(page_reads("the page heard 2 asks"),
              "and told the page the same way it tells a click");
 
-    const cf_rect quiet = switch_square("quiet", &found);
+    const cf_rect quiet = box_keyed("quiet", &found);
     CF_CHECK(found, "the box declared with nobody to tell is laid out among the others");
 
     step(press_at(quiet.x + quiet.width / 2.0f, quiet.y + quiet.height / 2.0f));
@@ -2773,7 +2780,7 @@ static void the_switch_the_page_holds_moves_under_both_hands(void) {
     CF_CHECK(page_reads("the page heard 2 asks"),
              "while the count the page keeps stays where it is");
 
-    const cf_rect closed = switch_square("closed", &found);
+    const cf_rect closed = box_keyed("closed", &found);
     CF_CHECK(found, "the box the build switched off is laid out with the others");
     CF_CHECK(painted_tone(closed, &tone), "the switched-off box is painted too");
     CF_CHECK(grey_is(tone, 229u),
@@ -2785,15 +2792,114 @@ static void the_switch_the_page_holds_moves_under_both_hands(void) {
     CF_CHECK(!*switch_shut(&session), "the pointer asks the switched-off box and moves nothing");
     CF_CHECK(page_reads("the page heard 2 asks"), "and the ask is not counted as one it heard");
 
-    /* The keyboard's side of the same refusal: a box that answers no hand is left out of the ring,
-     * so the walk from the second square comes round to the page's first control rather than
-     * stopping on the third. */
+    /* The keyboard's side of the same refusal: a box that answers no hand is out of the ring, so
+     * the Tab that leaves the second square does not stand on it. The walk is then run on until it
+     * comes back round to the control the first chapter counts - stepping until the count moves
+     * keeps this about the skip and the wrap rather than about how many controls sit below this
+     * chapter. */
     step(tab_key(false));
-    step(key_down(CF_KEY_ENTER));
 
-    CF_CHECK(*click_count(&session) == 1u,
-             "Tab passed the switched-off box and the key asked the one the walk reached");
-    CF_CHECK(!*switch_shut(&session), "and the box that was switched off holds no bit for it");
+    const uint32_t shut_slot = cf_slot_named(&session, cf_ctx_key(&session, "closed"));
+    CF_CHECK(shut_slot != CF_NO_LINK, "the switched-off box is laid where the walk would find it");
+    CF_CHECK(!cf_focused(&session, cf_node_id(&session, shut_slot)),
+             "and the ring stepped past a box that answers no hand");
+
+    uint32_t around = 0u;
+
+    while (*click_count(&session) == 0u && around < 24u) {
+        step(key_down(CF_KEY_ENTER));
+        step(tab_key(false));
+        around++;
+    }
+
+    CF_CHECK(around < 24u, "the walk comes round the page instead of stopping on the way");
+    CF_CHECK(*click_count(&session) == 1u, "and the key asked the box the wrapped walk reached");
+    CF_CHECK(!*switch_shut(&session), "while the box that was switched off holds no bit for it");
+
+    end_session();
+}
+
+/*
+ * Chapter seventeen on the page a person would look at. One press moves a bit the build reads, and
+ * the frame that reads it is drawn out of the other table throughout: the square the family states,
+ * the button that family pads, the words the build writes under them and the state a bridge is
+ * handed all change in the one submitted frame, and change back in another. Nothing is reopened
+ * between them, so there is no half-swapped frame for a person to explain.
+ */
+static void the_page_that_changes_its_mind_turns_whole_in_one_frame(void) {
+    start_session((cf_size){WINDOW_WIDTH, WINDOW_HEIGHT});
+
+    /* The line under the boxes is what the walk scrolls to: a painted box the viewport has no room
+     * for is culled, so reaching the last row of the chapter is what puts all three of them where a
+     * pointer can be laid and a tone can be read. */
+    if (!reveal_to("built for a light page", REVEAL_MAX_STEPS)) {
+        end_session();
+        return;
+    }
+
+    /* The pointer goes somewhere that answers nothing before the tones are read: a button wears a
+     * different fill under a hand in either system, and which one is being checked should not
+     * depend on where a wheel happened to rest. */
+    step(move_to(current_viewport.x + 4.0f, current_viewport.y + 4.0f));
+
+    bool found = false;
+    const cf_rect swap = box_keyed("other system", &found);
+    CF_CHECK(found, "the box that swaps the page is laid out on its chapter");
+    CF_CHECK(fabsf(swap.width - 20.0f) < 0.5f, "and it is the size the light family states");
+
+    const cf_rect button = box_keyed("press me", &found);
+    CF_CHECK(found, "the button beside it is laid out as well");
+    const float roomy = button.height;
+    cf_color tone = {0};
+    CF_CHECK(painted_tone(button, &tone), "and the frame filled the button");
+    CF_CHECK(grey_is(tone, 23u), "with the accent the light system has for it");
+    CF_CHECK(page_reads("built for a light page on 20-point squares"),
+             "the line under them is written out of the table the frame built from");
+
+    step(press_at(swap.x + swap.width / 2.0f, swap.y + swap.height / 2.0f));
+    step(release_at(swap.x + swap.width / 2.0f, swap.y + swap.height / 2.0f));
+
+    /* Every number below comes off the one frame the release ran: the recorder holds only the last
+     * submitted stream, and the semantic walk reads the last laid frame.
+     * The pointer moves again because the swap reflows the page: a box that was under the hand is
+     * not necessarily the same box now, and a fill read under a press would say nothing about the
+     * theme. */
+    step(move_to(current_viewport.x + 4.0f, current_viewport.y + 4.0f));
+
+    const cf_rect dense = box_keyed("other system", &found);
+    CF_CHECK(found, "the box that was pressed is still the box the page keyed");
+    CF_CHECK(fabsf(dense.width - 16.0f) < 0.5f,
+             "and the frame that heard the press laid it smaller");
+
+    const cf_rect turned = box_keyed("press me", &found);
+    CF_CHECK(found, "and the button is still the button");
+    CF_CHECK(painted_tone(turned, &tone), "which the same frame filled out of the new table");
+    CF_CHECK(grey_is(tone, 250u), "the other way round about the accent");
+    /* The height rather than the width is where a denser pad is visible: the button stands in a
+     * column, so its width is the card's cross axis stretched to and only its main axis is the
+     * label plus the insets the theme stated. */
+    CF_CHECK(fabsf((roomy - turned.height) - 4.0f) < 0.5f,
+             "and four points of padding it never asked to lose");
+    CF_CHECK(page_reads("built for a dark page on 16-point squares"),
+             "while the line written in that same frame reads the new numbers with it");
+
+    /* The bit belongs to the page and not to the theme, so the box that changed its own paint is
+     * still on when a bridge is asked in the frame it changed in. */
+    ask_the_page();
+
+    const announced *swapped = heard_as(CF_ACCESS_CHECKBOX, "Read the page in the other system");
+    CF_CHECK(swapped != NULL, "a bridge hears the box that changed the page's look");
+    CF_CHECK(swapped != NULL && (swapped->states & (uint32_t)CF_SEMANTIC_CHECKED) != 0u,
+             "and that it is still on, across the change of its own paint");
+
+    step(press_at(dense.x + dense.width / 2.0f, dense.y + dense.height / 2.0f));
+    step(release_at(dense.x + dense.width / 2.0f, dense.y + dense.height / 2.0f));
+
+    const cf_rect back = box_keyed("other system", &found);
+    CF_CHECK(found, "the box is a box on the way back too");
+    CF_CHECK(fabsf(back.width - 20.0f) < 0.5f, "and it wears the first size again");
+    CF_CHECK(page_reads("built for a light page on 20-point squares"),
+             "the line reads whichever table the frame is building from, both ways round");
 
     end_session();
 }
@@ -2866,6 +2972,7 @@ int main(void) {
     CF_RUN(the_boxes_inside_a_live_region_are_reheard_under_their_own_ids);
     CF_RUN(a_relation_names_the_box_the_page_carries);
     CF_RUN(the_switch_the_page_holds_moves_under_both_hands);
+    CF_RUN(the_page_that_changes_its_mind_turns_whole_in_one_frame);
     CF_RUN(a_page_handed_no_host_states_nothing);
 
     end_sessions();

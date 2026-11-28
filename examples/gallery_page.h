@@ -118,6 +118,11 @@ typedef struct gallery_host {
     cf_ctx *ctx;
 
     const cf_theme *theme;
+    /* The second design system chapter seventeen swaps to. It lives in the block the driver
+     * keeps rather than in a keyed one because a context borrows the table it is named: the
+     * theme has to stand for every frame after the swap, and a cf_state block is free to move
+     * when it grows. */
+    cf_theme dense;
     cf_font body_font;
     cf_font title_font;
     cf_text_stack body;
@@ -172,7 +177,86 @@ typedef struct gallery_host {
     /* The switch chapter's line: what its boxes hold and how often one of them was
      * asked for. */
     char switch_bytes[128];
+    /* The theme chapter's line: which table the frame was built from, read back out of that
+     * table rather than from the bit that chose it. */
+    char theme_bytes[64];
 } gallery_host;
+
+/* An optional colour is a stated flag and a value; a design system names the value and means
+ * it, which is the whole of what this helper says. */
+static cf_opt_color stated(uint8_t red, uint8_t green, uint8_t blue) {
+    return (cf_opt_color){.present = true, .value = CF_COLOR(red, green, blue)};
+}
+
+/*
+ * The same page in another set of numbers.
+ *
+ * A theme is one struct: three surfaces, three text tones and a variant set per widget family, so
+ * a page that reads a different table changes wholly rather than box by box. This one starts from
+ * the default and is then moved - dark surfaces, inks pushed to black and white, rings that clear
+ * 3:1 on whichever side of the edge they draw, and controls a step denser. Only the two readings
+ * quoted below are stated as ratios; the rest are named so a person can see the page rather than a
+ * colour that nearly matches it.
+ */
+static cf_theme other_system(void) {
+    cf_theme dark = *cf_theme_default();
+
+    dark.page.background = stated(0, 0, 0);
+    dark.bar.background = stated(23, 23, 23);
+    dark.bar.border_color = stated(82, 82, 82);
+    dark.body.background = stated(23, 23, 23);
+    dark.body.border_color = stated(82, 82, 82);
+    dark.ink = CF_COLOR(250, 250, 250);
+    dark.muted = CF_COLOR(163, 163, 163);
+    dark.on_ink = CF_COLOR(23, 23, 23);
+
+    /* The accent turns over: what was a dark button on a light page is a light button on a dark
+     * one, and the hand's marks stay a step off the fill in either direction. #fafafa on #0a0a0a
+     * is 19:1 - the same reading the default theme's ink gives on its light card. */
+    dark.variants[CF_ROLE_BUTTON].base.background = stated(250, 250, 250);
+    dark.variants[CF_ROLE_BUTTON].base.border_color = stated(250, 250, 250);
+    dark.variants[CF_ROLE_BUTTON].base.padding =
+        (cf_box){CF_PT(10.0f), CF_PT(6.0f), CF_PT(10.0f), CF_PT(6.0f)};
+    dark.variants[CF_ROLE_BUTTON].hovered.background = stated(212, 212, 212);
+    dark.variants[CF_ROLE_BUTTON].pressed.background = stated(163, 163, 163);
+    dark.variants[CF_ROLE_BUTTON].focused.border_color = stated(163, 163, 163);
+    dark.variants[CF_ROLE_BUTTON].disabled.background = stated(38, 38, 38);
+    dark.variants[CF_ROLE_BUTTON].disabled.border_color = stated(64, 64, 64);
+
+    /* The typed box is the one place where 3:1 is not enough: its letters sit on its own fill, so
+     * #fafafa on #0a0a0a carries them and the ring states its edge against both. */
+    dark.variants[CF_ROLE_FIELD].base.background = stated(10, 10, 10);
+    dark.variants[CF_ROLE_FIELD].base.border_color = stated(82, 82, 82);
+    dark.variants[CF_ROLE_FIELD].base.padding =
+        (cf_box){CF_PT(6.0f), CF_PT(4.0f), CF_PT(6.0f), CF_PT(4.0f)};
+    dark.variants[CF_ROLE_FIELD].hovered.border_color = stated(115, 115, 115);
+    dark.variants[CF_ROLE_FIELD].focused.border_color = stated(250, 250, 250);
+    dark.variants[CF_ROLE_FIELD].focused.caret = stated(250, 250, 250);
+    dark.variants[CF_ROLE_FIELD].focused.selection = stated(30, 64, 175);
+    dark.variants[CF_ROLE_FIELD].focused.marked = stated(147, 197, 253);
+    dark.variants[CF_ROLE_FIELD].disabled.background = stated(38, 38, 38);
+
+    dark.variants[CF_ROLE_LIST].hovered.background = stated(38, 38, 38);
+    dark.variants[CF_ROLE_LIST].focused.border_color = stated(250, 250, 250);
+    dark.variants[CF_ROLE_SCROLL].base.background = stated(64, 64, 64);
+    dark.variants[CF_ROLE_IMAGE].base.background = stated(38, 38, 38);
+
+    /* And the switch: a step smaller, on the well's own tone, filled with the same light the
+     * button wears when it is the page's accent. */
+    dark.variants[CF_ROLE_CHECKBOX].base.width = CF_PT(16.0f);
+    dark.variants[CF_ROLE_CHECKBOX].base.height = CF_PT(16.0f);
+    dark.variants[CF_ROLE_CHECKBOX].base.background = stated(10, 10, 10);
+    dark.variants[CF_ROLE_CHECKBOX].base.border_color = stated(82, 82, 82);
+    dark.variants[CF_ROLE_CHECKBOX].checked.background = stated(250, 250, 250);
+    dark.variants[CF_ROLE_CHECKBOX].checked.border_color = stated(250, 250, 250);
+    dark.variants[CF_ROLE_CHECKBOX].hovered.border_color = stated(163, 163, 163);
+    dark.variants[CF_ROLE_CHECKBOX].pressed.background = stated(163, 163, 163);
+    dark.variants[CF_ROLE_CHECKBOX].focused.border_color = stated(250, 250, 250);
+    dark.variants[CF_ROLE_CHECKBOX].disabled.background = stated(38, 38, 38);
+    dark.variants[CF_ROLE_CHECKBOX].disabled.border_color = stated(64, 64, 64);
+
+    return dark;
+}
 
 /*
  * The faces become the stacks, and the fallback pixels get drawn.
@@ -201,6 +285,8 @@ static void gallery_host_open(gallery_host *host, cf_font body_font, cf_font tit
         pixel[0] = pixel[1] = pixel[2] = ((i / 8u + i % 8u) & 1u) != 0u ? 150u : 60u;
         pixel[3] = 255u;
     }
+
+    host->dense = other_system();
 }
 
 /*
@@ -235,6 +321,12 @@ static bool *switch_off(cf_ctx *ctx) {
 
 static bool *narrow_text(cf_ctx *ctx) {
     return cf_state(ctx, cf_ctx_key(ctx, "narrow"), sizeof(bool));
+}
+
+/* Which of the two design systems the page is reading: a bit chapter seventeen's switch holds,
+ * read by the build that names the theme rather than written by a handler. */
+static bool *dark_page(cf_ctx *ctx) {
+    return cf_state(ctx, cf_ctx_key(ctx, "dark"), sizeof(bool));
 }
 
 static bool *badge_in_flow(cf_ctx *ctx) {
@@ -1586,10 +1678,45 @@ static cf_node make_switch_demo(gallery_host *host, cf_ctx *ctx) {
                        4u);
 }
 
+/*
+ * Chapter seventeen: the page reading another set of numbers.
+ *
+ * One bit, read by the build before it declares anything, is the whole of a swap. Nothing is
+ * reopened, re-measured or cleared: the boxes below come from the other table in the same frame the
+ * switch moved in, which is what the line under them says - its words and its number are read out
+ * of the theme the frame is building with, so the line cannot disagree with the page it sits on.
+ */
+static cf_node make_theme_demo(gallery_host *host, cf_ctx *ctx) {
+    bool *const dark = dark_page(ctx);
+    const cf_length square = host->theme->variants[CF_ROLE_CHECKBOX].base.width;
+    /* A dark page is one whose ink is nearer white than black, rather than a word the handler
+     * wrote down beside the bit: the table is the only place the difference is kept. */
+    const bool inverted = host->theme->ink.red > 127u;
+
+    /* The box that changes the page's own look is declared with nobody to tell, because the bit it
+     * writes is read by the build: a handler that also asked for a frame would be a second door to
+     * the same act. */
+    cf_node swap = cf_checkbox(ctx, "other system", dark, NULL, NULL);
+    swap.name = cf_string_of("Read the page in the other system");
+
+    const cf_node press = make_button(host, ctx, "press me", count_click, NULL);
+
+    const int length = snprintf(host->theme_bytes, sizeof host->theme_bytes,
+                                "built for a %s page on %d-point squares",
+                                inverted ? "dark" : "light", (int)square.value);
+
+    const cf_node report = cf_label(ctx, (cf_string){host->theme_bytes, (uint32_t)length},
+                                    &host->body, host->theme->muted);
+
+    return demo_column(
+        ctx, 8.0f, (cf_node[]){make_switch_pair(host, ctx, swap, "other system"), press, report},
+        3u);
+}
+
 static cf_node make_header(gallery_host *host, cf_ctx *ctx) {
     const cf_node name =
         cf_label(ctx, cf_string_of("cform gallery"), &host->title, host->theme->ink);
-    const cf_node note = cf_label(ctx, cf_string_of("sixteen rules, each with something to try"),
+    const cf_node note = cf_label(ctx, cf_string_of("seventeen rules, each with something to try"),
                                   &host->body, host->theme->muted);
 
     cf_style row = cf_style_default();
@@ -1641,6 +1768,15 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
     /* The handlers the page installs are handed this block and not the context, so the
      * frame that runs them is the one whose context they will find here. */
     host->ctx = ctx;
+
+    /* Chapter seventeen's swap, taken before a single box is declared: the widget reads the
+     * resting box of its family off the context, and the resolver reads the same table over every
+     * touched role after the build returns. Naming the theme here rather than in the handler is the
+     * whole of what changing one costs - no invalidation, because a resolved style lives in the
+     * frame that computed it, so the frame after the bit moved is drawn wholly in one system. */
+    const bool *const switched = dark_page(ctx);
+    host->theme = (switched != NULL && *switched) ? &host->dense : cf_theme_default();
+    cf_use_theme(ctx, host->theme);
 
     const cf_node chapters[] = {
         make_header(host, ctx),
@@ -1886,6 +2022,24 @@ static cf_node build(cf_ctx *ctx, void *user_data) {
             "the name the build stated rather than the label beside it, and is offered the ask and "
             "the state but never a value to write.",
             make_switch_demo(host, ctx)),
+        make_chapter(
+            host, ctx, "17", "The page that changes its mind",
+            "A design system is one struct, so a page that reads another table changes wholly "
+            "rather than box by box. Nothing has to be torn down first: a resolved style lives in "
+            "the frame that computed it, so the swap costs one line before the build and no "
+            "invalidation at all - and because the theme is named before a single box is declared, "
+            "the frame after the bit moved is drawn in one system or the other, never half in "
+            "each. Density rides in the same table: the resting box a widget starts from is its "
+            "family's, so the square below is twenty points on this page and sixteen on the other, "
+            "and the button beside it sheds the padding the denser system never states. What a "
+            "person sees is the page turn over at once - the ink, the cards, the ring a keyboard "
+            "leaves, the tone a switch wears when it is on. Press the box and the line under it "
+            "is written out of the new table rather than from the bit that chose it: its number is "
+            "the size that table says a square is. The bit belongs to the page and not to the "
+            "theme, which is why the box is still checked after its own paint changed, and why a "
+            "bridge handed the same box before and after hears the same name, the same state and a "
+            "different set of pixels.",
+            make_theme_demo(host, ctx)),
         make_note(host, ctx,
                   "F12 lays the frame's numbers over the page - the nodes it built, the slots that "
                   "were dirty, the commands it painted, the offer it laid out against, the "
