@@ -150,8 +150,10 @@ cf_add_layer_test(node_build unit/node_build.c cf_node)
 cf_add_layer_test(semantics unit/semantics.c cf_node)
 
 # The shell is the app layer's whole surface: this case plays a device that
-# hands an event, dries up, then quits, and counts the frames it got.
-cf_add_layer_test(app_run unit/app_run.c cf_app cf_backend_headless)
+# hands an event, dries up, then quits, and counts the frames it got. The panel
+# reads a design system to report on, so cf_theme is linked for the case that
+# names one.
+cf_add_layer_test(app_run unit/app_run.c cf_app cf_backend_headless cf_theme)
 
 # The gallery page drawn with no window: the same chapter builders examples/
 # ships, driven through cf_app_run against the recorder across surfaces and

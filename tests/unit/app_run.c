@@ -558,6 +558,27 @@ static void the_shell_keeps_frames_a_moving_page_asks_for(void) {
     CF_CHECK(frames_built == 3u, "an ask builds the frame it asks for, event or no event");
 }
 
+/*
+ * A panel line read back out of the stream, by the bytes it starts with. The panel prints through
+ * the same text command every label does, so this is the only way a caller outside src/app can ask
+ * what it said.
+ */
+static cf_string panel_line(const cf_recorder *recorder, const char *prefix) {
+    const size_t length = strlen(prefix);
+    cf_string found = {0};
+
+    for (uint32_t i = 0u; i < recorder->count; ++i) {
+        const cf_command command = recorder->commands[i];
+
+        if (command.kind == CF_COMMAND_TEXT && command.text.chars != NULL &&
+            command.text.length >= length && memcmp(command.text.chars, prefix, length) == 0) {
+            found = command.text;
+        }
+    }
+
+    return found;
+}
+
 static void the_inspector_toggles_on_f12(void) {
     cf_recorder recorder = {.arena = &store};
     const cf_backend backend = driven_backend(&recorder);
@@ -572,7 +593,7 @@ static void the_inspector_toggles_on_f12(void) {
         .build = counting_box, .backend = backend, .theme = NULL, .fonts = &fake_fonts});
 
     CF_CHECK(frames_built == 1u, "the toggle builds the frame it lands in");
-    CF_CHECK(recorder.count == 10u, "the page's fill and the panel's nine commands arrived");
+    CF_CHECK(recorder.count == 11u, "the page's fill and the panel's ten commands arrived");
 
     bool version_seen = false;
 
@@ -595,6 +616,45 @@ static void the_inspector_toggles_on_f12(void) {
     }
 
     CF_CHECK(text_seen, "the panel's numbers ride the stream as text");
+
+    /* A host that styles every box itself has no design system to read ratios from, and the line
+     * that says so is the honest answer: a 1.0 here would read as a page that failed rather than
+     * one that never chose. */
+    const cf_string unthemed = panel_line(&recorder, "contrast");
+    CF_CHECK(unthemed.length == 10u && unthemed.chars != NULL &&
+                 memcmp(unthemed.chars, "contrast -", 10u) == 0,
+             "a page with no theme named prints an empty reading");
+}
+
+/*
+ * The reading a developer sees is the reading the arithmetic gives: one number for the hardest of
+ * the six pairs the shipped table states, printed on the frames F12 asked for. The number is
+ * spelled out rather than parsed because a panel is bytes on a stream, and what it has to prove is
+ * that the right bytes arrive - muted on the well is the weakest pair the table hands out.
+ */
+static void the_inspector_reads_the_page_contrast(void) {
+    cf_recorder recorder = {.arena = &store};
+    const cf_backend backend = driven_backend(&recorder);
+
+    static const fake_hand hands[] = {
+        {{.type = CF_EVENT_KEY_DOWN, .key = CF_KEY_F12}, true},
+        {{.type = CF_EVENT_POINTER_MOVE, .position = {0.0f, 0.0f}}, false},
+        {{.type = CF_EVENT_QUIT}, true}};
+    reset(hands, 3u);
+
+    cf_app_run(&(cf_app_config){.build = counting_box,
+                                .backend = backend,
+                                .theme = cf_theme_default(),
+                                .fonts = &fake_fonts});
+
+    /* The dry poll is what ends the shell's drain: the key and the ask for a reading belong to the
+     * one frame that follows them. */
+    CF_CHECK(frames_built == 1u, "the key that opens the panel builds one frame");
+
+    const cf_string reading = panel_line(&recorder, "contrast");
+    CF_CHECK(reading.length == 12u && reading.chars != NULL &&
+                 memcmp(reading.chars, "contrast 6.2", 12u) == 0,
+             "the panel prints the weakest text pair of the table the frame styled from");
 }
 
 /*
@@ -1003,6 +1063,7 @@ int main(void) {
     CF_RUN(the_shell_skips_undamaged_frames);
     CF_RUN(the_shell_keeps_frames_a_moving_page_asks_for);
     CF_RUN(the_inspector_toggles_on_f12);
+    CF_RUN(the_inspector_reads_the_page_contrast);
     CF_RUN(the_stream_names_the_font_that_measured_each_run);
     CF_RUN(the_inspector_prints_the_words_a_bridge_would_say);
     CF_RUN(the_shell_leaves_the_backend_to_its_host);
