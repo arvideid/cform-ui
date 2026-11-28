@@ -132,6 +132,15 @@ accepted and ignored — there is no field that pretends to take these things.
 - **Seven widgets**: label, button, field, list, scroller, image, checkbox. No
   radio, slider, dropdown, tab, menu, tooltip, dialog or table. Building the one
   your app needs is expected and is a few dozen lines.
+- **One struct is the design system.** `cf_theme` holds a page's three surfaces,
+  its three text tones and one variant set per widget family, and `cf_use_theme`
+  names which table a context styles from. A resolved style lives in the frame
+  that computed it, so naming a second one costs no invalidation: the frame after
+  the naming is drawn wholly out of it, and a widget that started its declaration
+  from its family's resting box takes that family's density with it. Chapter
+  seventeen of the gallery swaps between the shipped system and a darker, denser
+  one held in one bit; `theme_resolve` checks the other edge — a table that says
+  *less* than the one it replaced has to leave the declaration standing.
 - **Text is Latin-shaped only.** Wrapping honours spaces, hyphens, ideographs and
   the text's own breaks, and a font stack falls back glyph by glyph — the line is
   drawn in the same faces it was measured in, one command per run of it. There is
