@@ -1,5 +1,7 @@
 #include "cf/node.h"
 
+#include <math.h>
+
 #include "cform_test.h"
 
 /* The variant system and the resolver are the frame's styling half: the pure
@@ -520,6 +522,181 @@ static void flipping_the_disabled_switch_marks_the_node_dirty(void) {
     cf_ctx_free(&ctx);
 }
 
+/*
+ * The arithmetic on the pairs the definition is anchored on: black against white is 21 by
+ * construction, a tone against itself is 1 rather than infinite, and a middle grey is the 3.95
+ * every WCAG table prints rather than the 5.0 a linear blend of the bytes would answer. The curve
+ * is the whole of that difference, which is why the rule is written against the specification's
+ * numbers and not a cheaper approximation of them.
+ */
+static void the_ratio_is_the_one_the_definition_gives(void) {
+    const float black_white = cf_contrast(CF_COLOR(0, 0, 0), CF_COLOR(255, 255, 255));
+    CF_CHECK(fabsf(black_white - 21.0f) < 0.05f, "black on white reads 21");
+    CF_CHECK(fabsf(cf_contrast(CF_COLOR(255, 255, 255), CF_COLOR(0, 0, 0)) - black_white) < 0.001f,
+             "and it reads the same whichever tone is named first");
+
+    const cf_color tone = CF_COLOR(123, 45, 67);
+    CF_CHECK(fabsf(cf_contrast(tone, tone) - 1.0f) < 0.001f, "a tone against itself reads 1");
+
+    const float mid_grey = cf_contrast(CF_COLOR(128, 128, 128), CF_COLOR(255, 255, 255));
+    CF_CHECK(fabsf(mid_grey - 3.95f) < 0.05f, "the middle grey of every contrast table reads 3.95");
+
+    /* Half cover over white is the grey a painter blends, byte for byte: the ratio is of what
+     * arrives on the screen, not of the tone a theme wrote down. */
+    const cf_color half_ink = {0u, 0u, 0u, 128u};
+    const float through = cf_contrast(half_ink, CF_COLOR(255, 255, 255));
+    CF_CHECK(fabsf(through - mid_grey) < 0.2f, "a half-covered black reads about as grey as it is");
+    CF_CHECK(fabsf(through - cf_contrast(CF_COLOR(127, 127, 127), CF_COLOR(255, 255, 255))) <
+                 0.001f,
+             "and reads the blended byte exactly");
+}
+
+/* The better of a system's two reading tones on one fill. */
+static float best_tone_contrast(const cf_theme *theme, cf_color fill) {
+    const float ink = cf_contrast(theme->ink, fill);
+    const float carried = cf_contrast(theme->on_ink, fill);
+
+    return ink > carried ? ink : carried;
+}
+
+/*
+ * Every fill the shipped table hands out carries readable text in at least one of the two tones the
+ * same table names. 4.5 is WCAG-AA for body text, and a design system that clears it on a button's
+ * resting state and not on its pressed one has a label that goes unread at exactly the moment a
+ * person commits to it. The walk runs over the table rather than over a list of pairs someone
+ * picked, so a tone a theme states later is checked the frame it arrives in.
+ */
+static void every_fill_the_table_states_carries_one_of_its_tones(void) {
+    const cf_theme *const theme = cf_theme_default();
+    const cf_style *const surfaces[] = {&theme->page, &theme->bar, &theme->body};
+
+    for (uint32_t i = 0u; i < sizeof surfaces / sizeof *surfaces; ++i) {
+        CF_CHECK(surfaces[i]->background.present, "the shipped system paints all three surfaces");
+        CF_CHECK(best_tone_contrast(theme, surfaces[i]->background.value) >= 4.5f,
+                 "and text reads on each of them");
+    }
+
+    const cf_role families[] = {CF_ROLE_BUTTON, CF_ROLE_FIELD, CF_ROLE_LIST,
+                                CF_ROLE_SCROLL, CF_ROLE_IMAGE, CF_ROLE_CHECKBOX};
+
+    for (uint32_t f = 0u; f < sizeof families / sizeof *families; ++f) {
+        const cf_variants *const variants = &theme->variants[families[f]];
+
+        if (variants->base.background.present) {
+            CF_CHECK(best_tone_contrast(theme, variants->base.background.value) >= 4.5f,
+                     "a family's resting fill carries one of the two tones");
+        }
+
+        /* The states in the order the resolver applies them, so the fill checked is the fill that
+         * would be painted: a pressed box reads as pressed. */
+        const cf_variant *const states[] = {&variants->checked, &variants->hovered,
+                                            &variants->pressed, &variants->focused,
+                                            &variants->disabled};
+
+        for (uint32_t s = 0u; s < sizeof states / sizeof *states; ++s) {
+            if (!states[s]->background.present) {
+                continue;
+            }
+
+            CF_CHECK(best_tone_contrast(theme, states[s]->background.value) >= 4.5f,
+                     "every fill a family can be painted in carries one of the two tones");
+        }
+    }
+
+    /* The refusal, on a table built to trip it. A walk that can only say yes is a fixture, so this
+     * is the shape the rule has to refuse: two reading tones that both sit near the field's own
+     * tone, which is the mistake a theme picks when its author reads a swatch rather than a number.
+     */
+    cf_theme dim = *theme;
+    dim.ink = CF_COLOR(120, 120, 120);
+    dim.on_ink = CF_COLOR(150, 150, 150);
+    CF_CHECK(best_tone_contrast(&dim, theme->page.background.value) < 4.5f,
+             "and a fill no tone can carry is refused by the same walk");
+
+    /* The other half of asking for the better tone: a table with one reading tone that clears and
+     * one that does not is a system the walk has to accept, since the two tones exist so that
+     * either side of a fill can be carried. Refusing this one would be the rule overreaching - and
+     * taking only the first tone would fail it the other way round. */
+    cf_theme one = dim;
+    one.on_ink = CF_COLOR(23, 23, 23);
+    CF_CHECK(cf_contrast(one.ink, theme->page.background.value) < 4.5f,
+             "its ink is the tone that cannot carry the field");
+    CF_CHECK(best_tone_contrast(&one, theme->page.background.value) >= 4.5f,
+             "and one tone that reads is enough for the page to pass");
+}
+
+/*
+ * A mark that only has to be noticeable - a focus edge, a caret, a band under a run - clears 3:1,
+ * and both sides of an edge count: a ring that reads against the box it borders and vanishes into
+ * the surface behind it says nothing about where the keyboard stands. The button's ring is the one
+ * tone in the table chosen to sit between two fills rather than on one, so it is the pair worth
+ * naming.
+ */
+static void the_marks_a_page_leaves_are_noticeable(void) {
+    const cf_theme *const theme = cf_theme_default();
+    const cf_variants *const button = &theme->variants[CF_ROLE_BUTTON];
+    const cf_variants *const field = &theme->variants[CF_ROLE_FIELD];
+    const cf_color ink = theme->ink;
+
+    CF_CHECK(button->focused.border_color.present, "the button states a focus ring");
+    CF_CHECK(cf_contrast(button->focused.border_color.value, button->base.background.value) >= 3.0f,
+             "the ring reads on the accent it borders");
+
+    const cf_style *const surfaces[] = {&theme->page, &theme->bar, &theme->body};
+
+    for (uint32_t i = 0u; i < sizeof surfaces / sizeof *surfaces; ++i) {
+        CF_CHECK(cf_contrast(button->focused.border_color.value, surfaces[i]->background.value) >=
+                     3.0f,
+                 "and on every surface a focused box can be resting on");
+    }
+
+    /* The field books three marks when it takes the keyboard, and each is a different kind of ask:
+     * the edge says where the box is, the caret where the next byte lands, the band which bytes are
+     * chosen - so each is checked against what a person reads beside it rather than against one
+     * tone. */
+    CF_CHECK(cf_contrast(field->focused.border_color.value, field->base.background.value) >= 3.0f,
+             "a focused field's edge reads on its own well");
+    CF_CHECK(cf_contrast(field->focused.caret.value, field->base.background.value) >= 3.0f,
+             "and its caret reads on the same well");
+    CF_CHECK(cf_contrast(ink, field->focused.selection.value) >= 4.5f,
+             "the bytes a selection band carries stay readable as text");
+    CF_CHECK(cf_contrast(field->focused.marked.value, field->base.background.value) >= 3.0f,
+             "and a run an input method is deciding is marked rather than hidden");
+    CF_CHECK(cf_contrast(ink, field->focused.marked.value) >= 3.0f,
+             "the same run's letters stay legible against the line under them");
+}
+
+/* Whether a computed ratio is the number a comment claims, to the tenth the note states. */
+static bool reads(float actual, float claimed) {
+    return fabsf(actual - claimed) < 0.05f;
+}
+
+/*
+ * The ratios src/theme/default.c quotes in its own comments, computed. A note that states a number
+ * is read as a checked number, so it either arrives from the arithmetic or it is not written: these
+ * are the claims, and the case is what keeps them true when a tone moves. Four of the five were
+ * wrong when the arithmetic arrived - the accents were understated and the secondary tone and the
+ * page's own pair overstated - which is the whole reason the claim is pinned to a number rather
+ * than left in prose.
+ */
+static void the_ratios_the_table_quotes_are_the_ones_it_computes(void) {
+    const cf_theme *const theme = cf_theme_default();
+
+    CF_CHECK(reads(cf_contrast(theme->ink, theme->body.background.value), 19.0f),
+             "the scale's note: ink on the card is 19.0:1");
+    CF_CHECK(
+        reads(cf_contrast(theme->on_ink, theme->variants[CF_ROLE_BUTTON].base.background.value),
+              17.2f),
+        "the scale's note: the card's tone on the accent is 17.2:1");
+    CF_CHECK(reads(cf_contrast(theme->muted, theme->body.background.value), 7.5f),
+             "the scale's note: secondary text on the card is 7.5:1");
+    CF_CHECK(reads(cf_contrast(theme->ink, theme->variants[CF_ROLE_FIELD].focused.selection.value),
+                   13.9f),
+             "the scale's note: ink on the selection band is 13.9:1");
+    CF_CHECK(reads(cf_contrast(theme->ink, theme->page.background.value), 18.2f),
+             "the list's note: ink on the page's own tone is 18.2:1");
+}
+
 int main(void) {
     printf("theme resolve\n");
     CF_RUN(a_variant_states_only_its_differences);
@@ -536,6 +713,10 @@ int main(void) {
     CF_RUN(a_second_theme_replaces_the_first_whole);
     CF_RUN(a_state_change_between_frames_changes_the_variant);
     CF_RUN(flipping_the_disabled_switch_marks_the_node_dirty);
+    CF_RUN(the_ratio_is_the_one_the_definition_gives);
+    CF_RUN(every_fill_the_table_states_carries_one_of_its_tones);
+    CF_RUN(the_marks_a_page_leaves_are_noticeable);
+    CF_RUN(the_ratios_the_table_quotes_are_the_ones_it_computes);
 
     return CF_REPORT();
 }
